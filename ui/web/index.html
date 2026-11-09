@@ -30,6 +30,10 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.5"/><path d="M5 19.5c1.2-3.2 3.8-5 7-5s5.8 1.8 7 5"/></svg>
       <span>Konto</span>
     </a>
+    <a href="#einstellungen" class="nav-btn" data-nav="einstellungen" aria-label="Einstellungen">
+      <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      <span>Einstellen</span>
+    </a>
   </nav>
 
   <main class="app">
@@ -101,6 +105,39 @@
           <span id="updated"></span>
           <button class="link" id="logout" type="button">Abmelden</button>
         </footer>
+      </section>
+
+      <section class="panel settings-panel" id="einstellungen">
+        <h2>Einstellungen</h2>
+        <p class="muted set-loading" id="set-loading">Lade Einstellungen …</p>
+        <div id="set-form" hidden>
+          <div class="set-block">
+            <div class="set-label">Coins</div>
+            <div class="set-hint">Mehr Coins heißt: öfter eine Chance auf einen Trend.</div>
+            <div class="coin-picks" id="set-coins"></div>
+          </div>
+          <div class="set-block">
+            <div class="set-label">Takt</div>
+            <div class="seg" id="set-tf" role="radiogroup" aria-label="Takt"></div>
+            <div class="set-hint" id="set-tf-hint"></div>
+          </div>
+          <div class="set-block">
+            <div class="set-label">Risiko pro Trade</div>
+            <div class="seg" id="set-risk" role="radiogroup" aria-label="Risiko pro Trade"></div>
+            <div class="set-hint" id="set-risk-hint"></div>
+          </div>
+          <div class="set-block">
+            <div class="set-label">Gleichzeitige Trades</div>
+            <div class="stepper">
+              <button type="button" id="set-mot-minus" aria-label="Weniger">−</button>
+              <span id="set-mot">3</span>
+              <button type="button" id="set-mot-plus" aria-label="Mehr">+</button>
+            </div>
+            <div class="set-hint" id="set-mot-hint"></div>
+          </div>
+          <button type="button" class="save" id="set-save" disabled>Speichern</button>
+          <p class="set-note">Immer an, egal was du einstellst: Stop-Loss, Tageslimit (−3 %) und Notbremse bei −15 %.</p>
+        </div>
       </section>
     </div>
   </main>

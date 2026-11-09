@@ -6,6 +6,7 @@ user_data/config-private.json
 
 # Laufzeitdaten
 user_data/*.sqlite*
+# Einstellungen aus der Biko-App (pro Server)
 user_data/logs/
 user_data/data/
 user_data/backtest_results/
@@ -18,3 +19,6 @@ __pycache__/
 
 # Zugangsdaten, die install.sh erzeugt
 ZUGANGSDATEN.txt
+
+# Einstellungen aus der Biko-App (gehören zum Server, nicht ins Repo)
+user_data/biko-settings.json

@@ -49,6 +49,7 @@
     SOL: ['Solana', '#9A5BF0'], EUR: ['Euro', '#2FB894'], USDC: ['USD Coin', '#2775CA'],
     USDT: ['Tether', '#26A17B'], XRP: ['XRP', '#3A4B5C'], ADA: ['Cardano', '#2A71D0'],
     DOT: ['Polkadot', '#E6007A'], LINK: ['Chainlink', '#2A5ADA'], BNB: ['BNB', '#E0A800'],
+    AVAX: ['Avalanche', '#E84142'], LTC: ['Litecoin', '#345D9D'], DOGE: ['Dogecoin', '#C2A633'],
   };
   const coinInfo = (sym) => COINS[sym] || [sym, '#8E86A8'];
   const baseOf = (pair) => String(pair).split('/')[0];
@@ -88,14 +89,17 @@
   async function request(path, opts = {}) {
     let res;
     try {
-      res = await fetch(API + path, { cache: 'no-store', ...opts });
+      const url = path.startsWith('/settings-api/') ? path : API + path;
+      res = await fetch(url, { cache: 'no-store', ...opts });
     } catch {
       throw new OfflineError('Netzwerk');
     }
     if (res.status === 401) throw new AuthError('401');
     if (res.status >= 502) throw new OfflineError(String(res.status));
     if (!res.ok) {
-      const err = new Error(`HTTP ${res.status}`);
+      let detail = '';
+      try { detail = (await res.json()).detail || ''; } catch { /* kein JSON */ }
+      const err = new Error(typeof detail === 'string' && detail ? detail : `HTTP ${res.status}`);
       err.status = res.status;
       throw err;
     }
@@ -318,6 +322,9 @@
     ];
     $('facts').innerHTML = facts.map(([k, v]) => `<span class="fact">${esc(k)}: <b>${esc(v)}</b></span>`).join('');
 
+    if (!settings.loaded && !settings.loading) loadSettings();
+    renderSettingsHints();
+
     $('updated').textContent = DEMO ? 'Demo mit Beispieldaten' : `Aktualisiert ${new Date().toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}`;
   }
 
@@ -372,6 +379,10 @@
   });
 
   $('logout').addEventListener('click', () => {
+    settings.loaded = false;
+    settings.saved = settings.draft = null;
+    $('set-form').hidden = true;
+    $('set-loading').hidden = false;
     store.del('biko.access');
     store.del('biko.refresh');
     clearTimeout(timer);
@@ -448,7 +459,135 @@
     }, `Mach ich! ${name} wird verkauft.`);
   });
 
+  // ---------- Einstellungen: Coins, Takt, Risiko, gleichzeitige Trades ----------
+  const settings = { loaded: false, loading: false, saved: null, draft: null, options: null };
+  const TF_INFO = {
+    '15m': ['15 Min', 'Sehr schnell: viele Trades, aber die Gebühren fressen viel vom Gewinn.'],
+    '1h': ['1 Std', 'Schneller: mehr Trades als mit 4 Std, etwas mehr Gebühren.'],
+    '4h': ['4 Std', 'Ruhig: wenige Trades, dafür größere Trends. So wurde die Strategie getestet.'],
+  };
+  const riskLabel = (r) => `${new Intl.NumberFormat(LOCALE).format(r * 100)} %`;
+  const COST = 0.06; // 5 % Stop + 1 % Kostenpuffer (wie in der Strategie)
+
+  async function loadSettings() {
+    settings.loading = true;
+    try {
+      const data = DEMO ? demoSettings() : await get('/settings-api/settings');
+      settings.options = data.options;
+      settings.saved = data.settings;
+      settings.draft = JSON.parse(JSON.stringify(data.settings));
+      settings.loaded = true;
+      $('set-loading').hidden = true;
+      $('set-form').hidden = false;
+      renderSettings();
+    } catch (e) {
+      if (e instanceof AuthError) return;
+      $('set-loading').textContent = 'Einstellungen gerade nicht erreichbar. Läuft der Dienst biko-settings?';
+    } finally {
+      settings.loading = false;
+    }
+  }
+
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+
+  function renderSettings() {
+    const { draft, options } = settings;
+    if (!draft) return;
+    $('set-coins').innerHTML = options.coins.map((c) => {
+      const on = draft.coins.includes(c);
+      return `<button type="button" class="pick ${on ? 'on' : ''}" data-coin="${esc(c)}" aria-pressed="${on}">
+        <span class="dot" data-color="${esc(coinInfo(c)[1])}"></span>${esc(c)}</button>`;
+    }).join('');
+    $('set-tf').innerHTML = options.timeframes.map((t) =>
+      `<button type="button" role="radio" aria-checked="${draft.timeframe === t}" class="${draft.timeframe === t ? 'on' : ''}" data-tf="${esc(t)}">${esc((TF_INFO[t] || [t])[0])}</button>`).join('');
+    $('set-risk').innerHTML = options.risks.map((r) =>
+      `<button type="button" role="radio" aria-checked="${draft.risk_per_trade === r}" class="${draft.risk_per_trade === r ? 'on' : ''}" data-risk="${r}">${riskLabel(r)}</button>`).join('');
+    $('set-mot').textContent = draft.max_open_trades;
+    $('set-mot-minus').disabled = draft.max_open_trades <= options.max_open_trades[0];
+    $('set-mot-plus').disabled = draft.max_open_trades >= options.max_open_trades[1];
+    document.querySelectorAll('#set-coins [data-color]').forEach((el) => el.style.setProperty('--coin', el.dataset.color));
+    renderSettingsHints();
+  }
+
+  function renderSettingsHints() {
+    const { draft } = settings;
+    if (!draft) return;
+    const total = lastData ? (lastData.balance.total_bot ?? lastData.balance.total ?? 0) : 0;
+    $('set-tf-hint').textContent = (TF_INFO[draft.timeframe] || ['', ''])[1];
+    const r = draft.risk_per_trade;
+    $('set-risk-hint').textContent = total
+      ? `Pro Trade ca. ${money(total * r / COST)} Einsatz. Greift der Stopp, sind ca. ${money(total * r)} weg.`
+      : `Greift der Stopp, ist ${riskLabel(r)} vom Konto weg.`;
+    const share = Math.min(100, Math.round(draft.max_open_trades * r / COST * 100));
+    $('set-mot-hint').textContent = share >= 100
+      ? `Bis zu ${draft.max_open_trades} Trades: dann kann fast das ganze Konto investiert sein.`
+      : `Bis zu ${draft.max_open_trades} Trades gleichzeitig, dann sind ca. ${share} % vom Konto investiert.`;
+    const btn = $('set-save');
+    const dirty = !same(draft, settings.saved);
+    btn.disabled = !dirty;
+    btn.textContent = dirty ? 'Speichern' : 'Gespeichert';
+  }
+
+  $('set-coins').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-coin]');
+    if (!b) return;
+    const c = b.dataset.coin;
+    const list = settings.draft.coins;
+    if (list.includes(c)) {
+      if (list.length === 1) { say('Mindestens ein Coin muss bleiben.'); return; }
+      settings.draft.coins = list.filter((x) => x !== c);
+    } else {
+      settings.draft.coins = settings.options.coins.filter((x) => x === c || list.includes(x));
+    }
+    renderSettings();
+  });
+  $('set-tf').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-tf]');
+    if (b) { settings.draft.timeframe = b.dataset.tf; renderSettings(); }
+  });
+  $('set-risk').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-risk]');
+    if (b) { settings.draft.risk_per_trade = Number(b.dataset.risk); renderSettings(); }
+  });
+  $('set-mot-minus').addEventListener('click', () => { settings.draft.max_open_trades -= 1; renderSettings(); });
+  $('set-mot-plus').addEventListener('click', () => { settings.draft.max_open_trades += 1; renderSettings(); });
+
+  $('set-save').addEventListener('click', async () => {
+    const d = settings.draft;
+    const text = `Coins: ${d.coins.join(', ')} · Takt: ${(TF_INFO[d.timeframe] || [d.timeframe])[0]} · `
+      + `Risiko: ${riskLabel(d.risk_per_trade)} pro Trade · bis zu ${d.max_open_trades} Trades. `
+      + 'Biko startet dafür kurz neu. Offene Trades bleiben offen.';
+    const ok = await ask('Einstellungen speichern?', text, 'Ja, speichern');
+    if (!ok) return;
+    const btn = $('set-save');
+    btn.disabled = true;
+    btn.textContent = 'Speichere …';
+    try {
+      if (DEMO) {
+        demoSettingsSaved = JSON.parse(JSON.stringify(d));
+      } else {
+        await post('/settings-api/settings', d);
+      }
+      settings.saved = JSON.parse(JSON.stringify(d));
+      Biko.setMood('laedt');
+      say('Gespeichert! Ich lade kurz neu …');
+      clearTimeout(timer);
+      timer = setTimeout(tick, DEMO ? 1500 : 8000);
+    } catch (e) {
+      if (e instanceof AuthError) { showLogin('Bitte neu anmelden.'); return; }
+      say(`Speichern hat nicht geklappt: ${e.message}`);
+    }
+    renderSettingsHints();
+  });
+
   // ---------- Demo (?demo oder ?demo=tippt): Beispieldaten ohne Bot ----------
+  let demoSettingsSaved = { coins: ['BTC', 'ETH', 'SOL'], timeframe: '4h', risk_per_trade: 0.01, max_open_trades: 3 };
+  function demoSettings() {
+    return {
+      settings: JSON.parse(JSON.stringify(demoSettingsSaved)),
+      options: { coins: ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'LINK', 'DOT', 'AVAX', 'LTC', 'DOGE'], timeframes: ['15m', '1h', '4h'], risks: [0.005, 0.01, 0.02, 0.03], max_open_trades: [1, 6] },
+    };
+  }
   let demoPaused = false;
   const demoSold = new Set();
   const DEMO_MOODS = ['tippt', 'schlaeft', 'jubelt', 'traurig', 'pause', 'offline'];

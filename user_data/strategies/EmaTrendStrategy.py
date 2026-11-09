@@ -7,6 +7,11 @@ Exit:   EMA20 < EMA50
 Stop:   -5 %, als Stop-Order direkt an der Börse (stoploss_on_exchange)
 Größe:  1 % Kontorisiko pro Trade, abgeleitet aus dem Stop-Abstand (custom_stake_amount)
 
+Über die Biko-App einstellbar (user_data/biko-settings.json, zweite --config):
+Coins (pair_whitelist), Takt (timeframe, überschreibt den Wert unten), max. Trades
+und Risiko pro Trade (biko.risk_per_trade, 0,25 bis 3 %). Die Protections rechnen
+in Stunden und passen sich dem Takt an. Stop-Loss und Kill-Switch bleiben fest.
+
 Risikoschranken, die unabhängig vom Signal greifen:
 - Protections: StoplossGuard, CooldownPeriod, MaxDrawdown (Tageslimit -3 %)
 - Kill-Switch: ab -15 % Konto-Drawdown (geschlossene Trades) keine neuen Entries mehr
@@ -20,6 +25,7 @@ from datetime import datetime
 import talib.abstract as ta
 from pandas import DataFrame
 
+from freqtrade.exchange import timeframe_to_minutes
 from freqtrade.persistence import Trade
 from freqtrade.strategy import IStrategy
 
@@ -68,37 +74,51 @@ class EmaTrendStrategy(IStrategy):
     ema_trend = 200
 
     # --- Risikoparameter ------------------------------------------------------
-    risk_per_trade = 0.01  # 1 % des Kontos pro Trade
+    default_risk_per_trade = 0.01  # 1 % des Kontos pro Trade (Biko-App kann bis 3 % setzen)
+    max_risk_per_trade = 0.03
     # Grober Aufschlag für Gebühren (Kauf + Verkauf) und Slippage des Market-Stops.
     # An die echten Kraken-Gebühren deiner Stufe anpassen.
     cost_buffer = 0.01
     max_account_drawdown = 0.15  # Kill-Switch
 
     @property
+    def risk_per_trade(self) -> float:
+        """Risiko pro Trade aus der Biko-App (biko.risk_per_trade), begrenzt auf 0,25 bis 3 %."""
+        try:
+            value = float(self.config.get("biko", {}).get("risk_per_trade", self.default_risk_per_trade))
+        except (TypeError, ValueError):
+            value = self.default_risk_per_trade
+        return min(max(value, 0.0025), self.max_risk_per_trade)
+
+    def _candles(self, hours: float) -> int:
+        """Stunden in Kerzen des aktuellen Takts umrechnen (mindestens 1)."""
+        return max(1, round(hours * 60 / timeframe_to_minutes(self.timeframe)))
+
+    @property
     def protections(self):
         # Protections stehen seit 2024.10 in der Strategie, nicht mehr in config.json.
-        # 1 Kerze = 4h
+        # In Stunden gedacht, damit sie bei jedem Takt (15m, 1h, 4h) gleich lange wirken.
         return [
             {
-                # Nach einem Exit 2 Kerzen (8h) kein Wiedereinstieg im selben Paar
+                # Nach einem Exit 8h kein Wiedereinstieg im selben Paar
                 "method": "CooldownPeriod",
-                "stop_duration_candles": 2,
+                "stop_duration_candles": self._candles(8),
             },
             {
                 # 2 Stop-Losses (alle Paare) innerhalb von 2 Tagen -> 1 Tag Pause
                 "method": "StoplossGuard",
-                "lookback_period_candles": 12,
+                "lookback_period_candles": self._candles(48),
                 "trade_limit": 2,
-                "stop_duration_candles": 6,
+                "stop_duration_candles": self._candles(24),
                 "only_per_pair": False,
             },
             {
                 # Tageslimit: mehr als 3 % Konto-Drawdown in 24h -> 24h Pause
                 "method": "MaxDrawdown",
                 "calculation_mode": "equity",
-                "lookback_period_candles": 6,
+                "lookback_period_candles": self._candles(24),
                 "trade_limit": 1,
-                "stop_duration_candles": 6,
+                "stop_duration_candles": self._candles(24),
                 "max_allowed_drawdown": 0.03,
             },
         ]

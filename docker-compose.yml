@@ -20,9 +20,25 @@ services:
       --logfile /freqtrade/user_data/logs/freqtrade.log
       --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
       --config /freqtrade/user_data/${BOT_CONFIG:-config.json}
+      --config /freqtrade/user_data/biko-settings.json
       --strategy EmaTrendStrategy
+    # biko-settings.json (Coins, Takt, Risiko, max. Trades) schreibt die Biko-App.
+    # Der Einstellungsdienst legt die Datei beim ersten Start mit Standardwerten an.
+    depends_on:
+      - biko-settings
 
-  # Biko App: einfache Handy-Oberfläche mit Maskottchen (liest nur die API oben)
+  # Einstellungsdienst für die Biko-App: schreibt user_data/biko-settings.json und lädt den Bot neu.
+  # Kein offener Port, erreichbar nur über die Biko-App (nginx). Prüft jede Anfrage mit dem Bot-Login.
+  biko-settings:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    container_name: biko-settings
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./ui/settings/server.py:/app/server.py:ro"
+    command: ["python", "-u", "/app/server.py"]
+
+  # Biko App: einfache Handy-Oberfläche mit Maskottchen
   # Öffnen: http://127.0.0.1:8081  (auf dem VPS per ssh -L 8081:127.0.0.1:8081 user@vps)
   biko-app:
     image: nginx:1.27-alpine
@@ -30,6 +46,7 @@ services:
     container_name: biko-app
     depends_on:
       - freqtrade
+      - biko-settings
     volumes:
       - "./ui/web:/usr/share/nginx/html:ro"
       - "./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
