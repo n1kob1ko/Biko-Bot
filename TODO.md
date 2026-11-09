@@ -38,6 +38,10 @@ Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du mach
 
 ### Phase A: jetzt, während der Testmodus läuft (ca. 1 Stunde)
 
+**Abkürzung:** `curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/scripts/live-vorbereiten.sh | sudo bash`
+erledigt am Server in einem Rutsch: Update, Server härten, Kursdaten, alle Backtests mit Prüfungen, Notaus-Test, und schreibt
+einen Bericht nach `user_data/backtest_results/BERICHT.txt`. Danach bleiben nur die 👉-Punkte mit deinen Konten.
+
 - [ ] 👉 **Update einspielen:** `curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/install.sh | sudo bash` (bleibt Testmodus, startet den neuen Wächter)
 - [ ] 👉 **Telegram einrichten:** Bot bei @BotFather anlegen, Chat-ID über @userinfobot, in `/opt/biko-bot/.env` eintragen (`FREQTRADE__TELEGRAM__ENABLED=true`, `TOKEN`, `CHAT_ID`), dann install.sh nochmal. Ohne Telegram kein Echtgeld (install.sh verweigert es).
 - [ ] 👉 **SSH-Schlüssel statt Passwort:** am PC `ssh-keygen -t ed25519`, dann `ssh-copy-id root@2.31.179.96`. Testen, ob der Login ohne Passwort geht.
