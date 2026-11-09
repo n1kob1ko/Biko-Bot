@@ -10,6 +10,7 @@ docker-compose.yml                    Freqtrade-Container (Image: freqtradeorg/f
 .env.example                          Vorlage für Secrets -> nach .env kopieren
 .gitignore / .cursorignore            .env, DB, Logs, Daten werden ignoriert
 user_data/config.json                 Kraken Spot, BTC/EUR ETH/EUR SOL/EUR, dry_run: true
+user_data/config.binance.json         dasselbe für Binance Spot
 user_data/strategies/EmaTrendStrategy.py
 ```
 
@@ -30,6 +31,27 @@ Hinweise:
 - Bei 3 offenen Trades sind ca. 50 % des Kontos investiert, der Rest bleibt in EUR.
 - Der Kill-Switch zählt nur realisierte Verluste. Offene Verluste sind durch den Stop auf ca. 1 % pro Trade begrenzt.
 - Manueller Notaus: Telegram `/stopentry` (keine neuen Trades), `/stop` (Bot stoppen), `/forceexit all`.
+
+## Börse wählen: Kraken oder Binance
+
+Die Strategie ist börsenunabhängig (CCXT). Welche Config läuft, steuert `BOT_CONFIG` in der `.env`:
+
+| | Kraken (`config.json`, Standard) | Binance (`config.binance.json`) |
+|---|---|---|
+| `.env` | `BOT_CONFIG=config.json` | `BOT_CONFIG=config.binance.json` |
+| Paare | BTC/EUR, ETH/EUR, SOL/EUR | BTC/EUR, ETH/EUR, SOL/EUR |
+| Gebühren (unterste Stufe) | laut meinem Stand ca. 0,25 % Maker / 0,40 % Taker, bitte prüfen | 0,1 % pro Seite, `--fee 0.001` passt |
+| Stop an der Börse | Stop-Market | nur Stop-Limit (Limit 1 % unter dem Stop, `stoploss_on_exchange_limit_ratio: 0.99`). Bei einem schnellen Crash kann er ungefüllt bleiben |
+| Historische Daten | API liefert nur 720 Kerzen, siehe unten | `download-data` lädt die volle Historie direkt |
+| MiCA / Österreich | lizenziert | **keine MiCA-Lizenz seit 1.7.2026**, Zugang läuft über die Einheit in Abu Dhabi, ESMA prüft das |
+
+**Empfehlung:** Binance ist für Backtests bequem (schnelle Daten, 0,1 % Gebühr). Für echtes Geld würde ich wegen der unklaren
+MiCA-Lage auf eine lizenzierte Börse gehen und vor dem Live-Gang den aktuellen Stand prüfen. Ein Wechsel ist nur eine Zeile in der `.env`
+plus ein neuer API-Key.
+
+Bei den Befehlen unten `config.json` durch `config.binance.json` ersetzen, wenn du mit Binance arbeitest.
+USDC statt EUR geht auch: `stake_currency` auf `USDC` und die Paare auf `BTC/USDC` usw. ändern. Für die Steuer ist EUR einfacher,
+weil jeder Exit direkt in Euro realisiert wird.
 
 ## Einrichten
 
