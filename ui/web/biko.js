@@ -4,7 +4,7 @@
 //
 // Alle Maskottchen teilen Gesicht, Laptop, Schild und Effekte, damit jede Stimmung gleich funktioniert.
 // Sie unterscheiden sich in Farben (CSS-Variablen, [data-maskottchen="..."] in style.css) und Form
-// (Antenne bzw. Ohren und Schwanz). Neues Maskottchen: unten in MASKOTTCHEN eintragen, Farben in style.css,
+// (Federschopf, Schnabel und Flügel bzw. Ohren und Schwanz). Neues Maskottchen: unten in MASKOTTCHEN eintragen, Farben in style.css,
 // ein icon-<id>.svg anlegen und in install.sh bei MASKOTTCHEN_LISTE ergänzen.
 (function () {
   // Effekte hinter/neben der Figur (für alle gleich)
@@ -28,7 +28,14 @@
   </g>`;
 
   // Gesicht: Augen, Brauen, Bäckchen, Münder, Träne. `extra` kommt davor (z. B. Schnurrhaare, Nase).
-  const face = ({ extra = '', smile = 'M111 127 q9 8 18 0' } = {}) => `
+  // `mouth` ersetzt die Münder (z. B. Schnabel beim Vogel).
+  const MOUTHS = (smile) => `
+      <path class="mouth mouth-smile line" d="${smile}"/>
+      <ellipse class="mouth mouth-o" cx="120" cy="131" rx="3.6" ry="3"/>
+      <path class="mouth mouth-sad line" d="M111 134 q9 -7 18 0"/>
+      <path class="mouth mouth-open" d="M108 126 q12 17 24 0z"/>
+      <path class="mouth mouth-wavy line" d="M109 131 q5.5 -4 11 0 q5.5 4 11 0"/>`;
+  const face = ({ extra = '', smile = 'M111 127 q9 8 18 0', mouth } = {}) => `
     <g class="face">
       ${extra}
       <g class="eyes eyes-open">
@@ -44,11 +51,7 @@
       <g class="brows-sad line"><path d="M90 100 L107 95"/><path d="M133 95 L150 100"/></g>
       <ellipse class="blush" cx="85" cy="128" rx="9" ry="5"/>
       <ellipse class="blush" cx="155" cy="128" rx="9" ry="5"/>
-      <path class="mouth mouth-smile line" d="${smile}"/>
-      <ellipse class="mouth mouth-o" cx="120" cy="131" rx="3.6" ry="3"/>
-      <path class="mouth mouth-sad line" d="M111 134 q9 -7 18 0"/>
-      <path class="mouth mouth-open" d="M108 126 q12 17 24 0z"/>
-      <path class="mouth mouth-wavy line" d="M109 131 q5.5 -4 11 0 q5.5 4 11 0"/>
+      ${mouth || MOUTHS(smile)}
       <path class="tear" d="M97 121 q-5 8 0 10 q5 -2 0 -10z"/>
     </g>`;
 
@@ -69,8 +72,15 @@
       <text class="sign-text" x="191" y="104">Pause</text>
     </g>`;
 
-  // Körper: `behind` liegt hinter dem Rumpf (Schwanz, Ohren), `top` darüber (Antenne)
-  const svg = ({ behind = '', top = '', faceOpts } = {}) => `
+  // Körper: `behind` liegt hinter dem Rumpf (Schwanz, Ohren, Schopf), `top` darüber.
+  // `body`, `belly`, `feet` und `arms` ändern die Grundform (Standard: rund mit Ärmchen).
+  const ARMS = `
+    <g class="arm arm-l"><ellipse cx="64" cy="132" rx="10" ry="16"/></g>
+    <g class="arm arm-r"><ellipse cx="176" cy="132" rx="10" ry="16"/></g>`;
+  const FEET = `
+    <ellipse class="foot" cx="96" cy="182" rx="17" ry="9"/>
+    <ellipse class="foot" cx="144" cy="182" rx="17" ry="9"/>`;
+  const svg = ({ behind = '', top = '', faceOpts, body = { rx: 60, ry: 57, cy: 124 }, belly = { rx: 38, ry: 27, cy: 146 }, feet = FEET, arms = ARMS } = {}) => `
 <svg class="biko" viewBox="0 0 240 210" role="img" aria-labelledby="biko-title">
   <title id="biko-title">__NAME__</title>
   <ellipse class="shadow" cx="120" cy="194" rx="56" ry="8"/>
@@ -78,12 +88,10 @@
   <g class="fidget-g">
   <g class="body-g">
     ${behind}
-    <ellipse class="foot" cx="96" cy="182" rx="17" ry="9"/>
-    <ellipse class="foot" cx="144" cy="182" rx="17" ry="9"/>
-    <g class="arm arm-l"><ellipse cx="64" cy="132" rx="10" ry="16"/></g>
-    <g class="arm arm-r"><ellipse cx="176" cy="132" rx="10" ry="16"/></g>
-    <ellipse class="torso" cx="120" cy="124" rx="60" ry="57"/>
-    <ellipse class="belly" cx="120" cy="146" rx="38" ry="27"/>
+    ${feet}
+    ${arms}
+    <ellipse class="torso" cx="120" cy="${body.cy}" rx="${body.rx}" ry="${body.ry}"/>
+    <ellipse class="belly" cx="120" cy="${belly.cy}" rx="${belly.rx}" ry="${belly.ry}"/>
     ${top}
     ${face(faceOpts)}
     ${PROPS}
@@ -92,17 +100,37 @@
 </svg>`;
 
   const MASKOTTCHEN = {
-    // Biko: rundes gelbes Wesen mit Antenne
+    // Biko: kugelrunder, dicker gelber Vogel mit Federschopf, Schnabel und Flügeln
     biko: {
       svg: svg({
+        body: { rx: 68, ry: 60, cy: 124 },
+        belly: { rx: 48, ry: 32, cy: 148 },
         behind: `
-    <g class="antenna">
-      <path class="antenna-stick" d="M120 70 Q118 52 122 40"/>
-      <circle class="antenna-ball" cx="122" cy="34" r="9"/>
-      <circle class="antenna-shine" cx="119" cy="31" r="2.6"/>
+    <g class="tail"><path class="tail-feathers" d="M162 182 Q194 186 212 166 Q204 162 197 168 Q208 154 200 147 Q191 157 189 166 Q193 151 183 147 Q174 165 162 182 Z"/></g>
+    <g class="tuft">
+      <path class="tuft-f" d="M118 70 Q104 52 108 40 Q118 50 121 66 Z"/>
+      <path class="tuft-f" d="M119 68 Q116 46 126 34 Q130 50 124 68 Z"/>
+      <path class="tuft-f" d="M122 68 Q132 52 144 48 Q140 62 126 70 Z"/>
     </g>`,
+        feet: `
+    <g class="bird-feet line">
+      <path d="M96 176 v8 M96 184 l-8 5 M96 184 v7 M96 184 l8 5"/>
+      <path d="M144 176 v8 M144 184 l-8 5 M144 184 v7 M144 184 l8 5"/>
+    </g>`,
+        arms: '',
+        // Flügel liegen vorne am Bauch an, damit der Vogel schön rund wirkt
+        top: `
+    <path class="chest-feathers" d="M106 134 q4 4 8 0 q4 4 8 0 q4 4 8 0 M112 142 q4 4 8 0 q4 4 8 0"/>
+    <g class="arm arm-l"><path class="wing" d="M62 112 Q42 122 44 150 Q47 158 54 152 Q56 160 63 153 Q68 158 72 150 Q78 130 62 112 Z"/></g>
+    <g class="arm arm-r"><path class="wing" d="M178 112 Q198 122 196 150 Q193 158 186 152 Q184 160 177 153 Q172 158 168 150 Q162 130 178 112 Z"/></g>`,
+        faceOpts: {
+          mouth: `
+      <g class="beak beak-open"><path class="beak-inside" d="M109.5 121 Q120 147 130.5 121 Z"/><path class="beak-low" d="M111 129 Q120 146 129 129 Q120 136 111 129 Z"/></g>
+      <path class="beak beak-top" d="M108.5 118.5 Q120 111 131.5 118.5 Q126 127 120 129 Q114 127 108.5 118.5 Z"/>
+      <path class="beak-shine" d="M114 117.5 q4 -2.5 8 -2"/>`,
+        },
       }),
-      fidgets: ['antenna'],
+      fidgets: ['tuft', 'flap', 'tail'],
     },
     // Yojji: runde Katze mit Ohren, Schnurrhaaren und Ringelschwanz
     yojji: {
@@ -133,19 +161,19 @@
   const CHOSEN = MASKOTTCHEN[id].svg.replace('__NAME__', safeName);
 
   // Kleine Zwischendurch-Bewegungen, damit das Maskottchen lebendig wirkt.
-  // Welche passen, hängt von der Stimmung ab (beim Jubeln hüpft es schon, beim Schlafen bewegt sich höchstens ein Ohr).
+  // Welche passen, hängt von der Stimmung ab (beim Jubeln hüpft es schon, beim Schlafen bewegt sich höchstens ein Ohr oder der Federschopf).
   const own = MASKOTTCHEN[id].fidgets;
   const FIDGETS = {
-    schlaeft: id === 'yojji' ? ['ear', 'tail'] : [],
+    schlaeft: id === 'yojji' ? ['ear', 'tail'] : ['tuft'],
     tippt: ['tilt', ...own],
     jubelt: [],
-    traurig: id === 'yojji' ? ['ear'] : [],
+    traurig: id === 'yojji' ? ['ear'] : ['tail'],
     pause: ['tilt', 'hop', ...own],
     offline: ['tilt', ...own],
     winkt: ['hop', 'tilt', 'wiggle', ...own],
     laedt: ['tilt', ...own],
   };
-  const FIDGET_MS = { hop: 650, tilt: 1400, wiggle: 700, boop: 520, antenna: 900, ear: 450, tail: 750 };
+  const FIDGET_MS = { hop: 650, tilt: 1400, wiggle: 700, boop: 520, tuft: 900, flap: 600, ear: 450, tail: 750 };
   const reduced = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Ein Maskottchen kann mehrfach auf der Seite stehen (groß in der Übersicht, klein oben in den
