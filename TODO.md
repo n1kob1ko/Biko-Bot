@@ -1,7 +1,7 @@
 # Biko Bot: Weg zum Echtgeld (To-do-Liste)
 
 Stand: 9.11.2026 abends. Der Bot läuft im **Testmodus** (Spielgeld) auf dem Hetzner-Server.
-**Zwischenstand Backtests:** keine der drei Strategien schlägt BTC halten (2021–2023). Details in Phase B. Live gehen ist damit vorerst **nicht** drin.
+**Zwischenstand Backtests (2021–2023):** Nur der Original-Trendfolger schlägt BTC halten, knapp (+8 Punkte nach Steuer) und mit 22 % Rückgang. Ausbruch und Rücksetzer verlieren. Nächster Schritt: Validierung 2024. Live gehen ist vorerst **nicht** drin.
 Ziel: mit 200–500 € echt handeln, aber nur, wenn er nachweislich **besser ist als BTC halten**, nach Gebühren und 27,5 % Steuer.
 
 Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du machen (braucht deine Konten, deinen Server oder deine Entscheidung)
@@ -58,9 +58,19 @@ Backtests laufen nicht in der Cloud-Sandbox (kommt nicht an Kraken), nur auf dei
 
 - [x] ✅ **Kursdaten geladen** (9.11.2026: Binance BTC/ETH/SOL in EUR, 4h und 1h, ab 2020, als Ersatz für Kraken-Kurse)
 - [x] ✅ **Trendfolger backgetestet** (9.11.2026, 2021–2023, 0,5 %): **+33 %** (nach Steuer +24 %) gegen **BTC halten +62 %** (+45 %). Schlechter als BTC, aber Rückgang 15 % statt 75 %. Mit 0,25 % Gebühr +35 %, Gebühr ist also nicht das Problem. `has_bias: No`, recursive-analysis bei 600 Kerzen 0,02 %. **Aber:** Kill-Switch hat im Sep 2022 ausgelöst, danach kein Trade mehr, 2023 komplett verpasst. Ergebnis gilt nur bis dahin.
-- [ ] 👉 Wenn der Trendfolger im Entwicklungs-Zeitraum passt: `scripts/backtest.sh EmaTrendStrategy valid` (2024, erst jetzt anschauen)
+- [ ] 👉 **Validierung 2024** (einmal, nichts geändert): `cd /opt/biko-bot && BOT_CONFIG=config.binance.json KILLSWITCH=aus bash scripts/backtest.sh EmaTrendStrategy valid`. Hält er mit BTC mit, ist er einen 8-Wochen-Testlauf wert, sonst Testmodus bleiben.
 - [x] ✅ **Ausbruch und Rücksetzer** getestet (9.11.2026): **−12 %** und **−16 %**, beide vom Kill-Switch abgeschaltet. Kein Lookahead. So nicht für Echtgeld geeignet.
-- [ ] 👉 **Zweiter Lauf ohne Kill-Switch** (volle 3 Jahre) plus die zwei vorher festgelegten Varianten `VersuchTrendAdx` (ADX > 20) und `VersuchTrendWeiterStop` (Stop −10 %, halbe Position): `curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/scripts/varianten-testen.sh | sudo bash`, dann `cat user_data/backtest_results/VARIANTEN.txt` an Claude.
+- [x] ✅ **Zweiter Lauf ohne Kill-Switch** (9.11.2026 abends, volle 3 Jahre, nach Steuer, BTC halten = +45 %):
+  | Strategie | Bot | Rückgang | Trades | Gewinnquote |
+  |---|---|---|---|---|
+  | **Trendfolger (Original)** | **+53 %, besser als BTC (+8 Punkte)** | 22 % | 156 | 23 % |
+  | VersuchTrendAdx (ADX > 20) | +34 % | 20 % | 145 | 25 % |
+  | VersuchTrendWeiterStop (−10 %) | +30 % | 16 % | 135 | 27 % |
+  | Ausbruch | −4,5 % | 27 % | 212 | 30 % |
+  | Rücksetzer | −17 % | 20 % | 60 | 30 % |
+
+  Pro Jahr Trendfolger: 2021 +218 €, 2022 −116 €, 2023 +265 €. Nur der Original-Trendfolger kommt in Frage. Varianten bleiben liegen (nicht weiter drehen). Ausbruch und Rücksetzer sind für Echtgeld ungeeignet.
+  **Offener Widerspruch:** Rückgang 22 % > Regel 15 %. Mit Kill-Switch 15 % hätte der Bot im Sep 2022 aufgehört und 2023 verpasst. Entscheidung Niko: Kill-Switch auf 25 % (bei 500 € = 125 € aushalten) oder bei 15 % lassen und nach einem Bärenmarkt von Hand freigeben.
 - [x] ✅ **Seitwärtsmarkt** angeschaut: ja, 50 von 85 Trades endeten im −5-%-Stop, 17 Verluste in Folge von Nov 2021 bis Sep 2022. Darum die zwei Varianten oben (ADX-Filter, weiter Stop). Mehr Varianten gibt es bewusst nicht (Überanpassung).
 - [ ] 👉 **Finaler Test** (`scripts/backtest.sh EmaTrendStrategy final`) **genau einmal**, wenn die Regeln fest sind. Danach nichts mehr an den Regeln drehen.
 - [ ] 👉 **Testmodus mindestens 8 Wochen** mit genau den Echtgeld-Einstellungen laufen lassen (Kraken, 4h, gleiche Coins, gleiches Risiko)
