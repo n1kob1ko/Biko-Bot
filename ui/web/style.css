@@ -245,6 +245,31 @@ section[id] { scroll-margin-top: 12px; }
   .nav-btn { padding: 12px 4px; }
 }
 
+
+/* Eingreifen: Knöpfe und Sicherheitsabfrage */
+.action {
+  display: block; width: 100%; margin-top: 12px; padding: 13px; border-radius: 14px;
+  font: inherit; font-weight: 800; font-size: 15px; cursor: pointer;
+  background: var(--warn-bg); color: var(--warn); border: 0;
+}
+.action.go { background: var(--up-bg); color: var(--up); }
+.action:disabled, .sell:disabled { opacity: .6; cursor: default; }
+.sell {
+  margin-top: 6px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--down);
+  background: var(--card); color: var(--down); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.confirm {
+  border: 0; border-radius: 22px; padding: 22px; width: min(360px, calc(100% - 32px));
+  background: var(--card); color: var(--ink); box-shadow: 0 20px 60px rgba(43, 33, 64, .3);
+}
+.confirm::backdrop { background: rgba(43, 33, 64, .45); }
+.confirm h3 { margin: 0 0 6px; font-size: 19px; }
+.confirm p { margin: 0; }
+.confirm-buttons { display: flex; gap: 10px; margin-top: 18px; }
+.confirm-buttons button { flex: 1; padding: 13px; border-radius: 14px; font: inherit; font-weight: 800; font-size: 15px; cursor: pointer; border: 0; }
+.btn-ghost { background: var(--bg); color: var(--ink); }
+.btn-main { background: var(--ink); color: var(--bg); }
+
 /* ===================== Biko ===================== */
 .biko .shadow { fill: rgba(43, 33, 64, 0.12); }
 .biko .torso, .biko .arm ellipse { fill: var(--biko-body); }

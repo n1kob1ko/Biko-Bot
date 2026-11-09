@@ -94,7 +94,11 @@
     }
     if (res.status === 401) throw new AuthError('401');
     if (res.status >= 502) throw new OfflineError(String(res.status));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   }
 
@@ -114,19 +118,25 @@
     store.set('biko.access', data.access_token);
   }
 
-  async function get(path, retry = true) {
+  async function call(path, opts = {}, retry = true) {
     const token = store.get('biko.access');
     if (!token) throw new AuthError('kein Token');
     try {
-      return await request(path, { headers: { Authorization: `Bearer ${token}` } });
+      return await request(path, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } });
     } catch (e) {
       if (e instanceof AuthError && retry) {
         await refreshToken();
-        return get(path, false);
+        return call(path, opts, false);
       }
       throw e;
     }
   }
+  const get = (path) => call(path);
+  const post = (path, body) => call(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
 
   async function loadAll() {
     const [config, balance, status, trades] = await Promise.all([
@@ -229,6 +239,11 @@
     $('t-risk').textContent = !sl ? '–' : sl <= 0.05 ? 'Niedrig' : sl <= 0.1 ? 'Mittel' : 'Hoch';
     $('t-risk-sub').textContent = sl ? `Stopp bei −${new Intl.NumberFormat(LOCALE).format(sl * 100)} %` : '';
     $('t-next').textContent = state === 'running' ? nextCheck(c.timeframe) : '–';
+    const tr = $('toggle-run');
+    tr.hidden = false;
+    tr.dataset.action = state === 'running' ? 'pause' : 'start';
+    tr.textContent = state === 'running' ? 'Pause: nichts Neues kaufen' : 'Weiter handeln';
+    tr.className = `action ${state === 'running' ? '' : 'go'}`;
     const tp = $('t-profit');
     if (typeof ratio === 'number' && b.starting_capital) {
       tp.textContent = pct(ratio);
@@ -262,7 +277,8 @@
             <div class="pair">${esc(base)}<span class="arrow"> → </span>${esc(quote)}</div>
             <div class="state ${stateCls}">${esc(stateText)}</div>
           </div>
-          <div class="val"><div class="amount ${open ? '' : r >= 0 ? 'up' : 'down'}">${amount}</div><div class="sub">${esc(since(ts))}</div></div>
+          <div class="val"><div class="amount ${open ? '' : r >= 0 ? 'up' : 'down'}">${amount}</div><div class="sub">${esc(since(ts))}</div>
+            ${open && t.trade_id != null ? `<button type="button" class="sell" data-trade="${esc(t.trade_id)}" data-name="${esc(coinInfo(base)[0])}" data-ratio="${r}">Verkaufen</button>` : ''}</div>
         </li>`;
       }).join('');
     }
@@ -368,7 +384,73 @@
     else clearTimeout(timer);
   });
 
+  // ---------- Eingreifen: Pause/Weiter und Trade verkaufen ----------
+  function ask(title, text, okLabel) {
+    const dlg = $('confirm');
+    $('confirm-title').textContent = title;
+    $('confirm-text').textContent = text;
+    $('confirm-ok').textContent = okLabel;
+    return new Promise((resolve) => {
+      dlg.addEventListener('close', () => resolve(dlg.returnValue === 'yes'), { once: true });
+      dlg.returnValue = '';
+      dlg.showModal();
+    });
+  }
+
+  function say(text) { $('bubble').textContent = text; }
+
+  async function act(fn, okText) {
+    try {
+      if (DEMO) { await fn(true); demoMood = null; } else await fn(false);
+      say(okText);
+      setTimeout(tick, 1200);
+    } catch (e) {
+      if (e instanceof AuthError) { showLogin('Bitte neu anmelden.'); return; }
+      say(`Hat nicht geklappt (${e.message}). Versuch es gleich nochmal.`);
+    }
+  }
+
+  $('toggle-run').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    if (btn.dataset.action === 'pause') {
+      const ok = await ask('Pause machen?', 'Biko kauft dann nichts Neues mehr. Offene Trades laufen normal weiter und werden wie gewohnt verkauft.', 'Ja, Pause');
+      if (!ok) return;
+      btn.disabled = true;
+      await act(async (demo) => {
+        if (demo) { demoPaused = true; return; }
+        try { await post('/stopentry'); } catch (e) { if (e.status === 404) await post('/pause'); else throw e; }
+      }, 'Okay, ich kaufe erst mal nichts Neues.');
+    } else {
+      const ok = await ask('Weiter handeln?', 'Biko kauft und verkauft dann wieder selbst nach seiner Strategie.', 'Ja, weiter');
+      if (!ok) return;
+      btn.disabled = true;
+      await act(async (demo) => {
+        if (demo) { demoPaused = false; return; }
+        await post('/start');
+      }, 'Los geht\'s, ich passe wieder auf!');
+    }
+    btn.disabled = false;
+  });
+
+  $('trades').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button.sell');
+    if (!btn) return;
+    const { trade, name } = btn.dataset;
+    const r = Number(btn.dataset.ratio) || 0;
+    const ok = await ask(`${name} jetzt verkaufen?`,
+      `Aktuell ${pct(r)}. Biko verkauft sofort zum aktuellen Preis, das lässt sich nicht rückgängig machen.`, 'Ja, verkaufen');
+    if (!ok) return;
+    btn.disabled = true;
+    btn.textContent = 'Verkaufe …';
+    await act(async (demo) => {
+      if (demo) { demoSold.add(Number(trade)); return; }
+      await post('/forceexit', { tradeid: String(trade) });
+    }, `Mach ich! ${name} wird verkauft.`);
+  });
+
   // ---------- Demo (?demo oder ?demo=tippt): Beispieldaten ohne Bot ----------
+  let demoPaused = false;
+  const demoSold = new Set();
   const DEMO_MOODS = ['tippt', 'schlaeft', 'jubelt', 'traurig', 'pause', 'offline'];
   let demoMood = DEMO_MOODS.includes(params.get('demo')) ? params.get('demo') : null;
 
@@ -377,9 +459,9 @@
     const h = 3600e3;
     const mood = demoMood || 'tippt';
     const open = mood === 'tippt' ? [
-      { pair: 'BTC/EUR', profit_ratio: 0.021, stake_amount: 83.2, open_timestamp: now - 26 * h },
-      { pair: 'SOL/EUR', profit_ratio: -0.008, stake_amount: 82.5, open_timestamp: now - 3 * h },
-    ] : [];
+      { trade_id: 7, pair: 'BTC/EUR', profit_ratio: 0.021, stake_amount: 83.2, open_timestamp: now - 26 * h },
+      { trade_id: 8, pair: 'SOL/EUR', profit_ratio: -0.008, stake_amount: 82.5, open_timestamp: now - 3 * h },
+    ].filter((t) => !demoSold.has(t.trade_id)) : [];
     const recent = ['jubelt', 'traurig'].includes(mood);
     const closed = [
       { pair: 'ETH/EUR', profit_ratio: mood === 'traurig' ? -0.031 : 0.064, profit_abs: mood === 'traurig' ? -2.58 : 5.31, close_timestamp: now - (recent ? 5 * 60e3 : 3 * 86400e3) },
@@ -389,7 +471,7 @@
     if (open.length) coins.push({ currency: 'BTC', balance: 0.00089, est_stake: 84.9 }, { currency: 'SOL', balance: 0.52, est_stake: 81.8 });
     const total = coins.reduce((s, x) => s + x.est_stake, 0);
     return {
-      config: { exchange: 'kraken', dry_run: true, strategy: 'EmaTrendStrategy', timeframe: '4h', stake_currency: 'EUR', stoploss: -0.05, max_open_trades: 3, state: mood === 'pause' ? 'paused' : 'running' },
+      config: { exchange: 'kraken', dry_run: true, strategy: 'EmaTrendStrategy', timeframe: '4h', stake_currency: 'EUR', stoploss: -0.05, max_open_trades: 3, state: mood === 'pause' || demoPaused ? 'paused' : 'running' },
       balance: { total, starting_capital: 500, starting_capital_ratio: total / 500 - 1, currencies: coins },
       status: open,
       trades: closed,
