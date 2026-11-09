@@ -1,6 +1,8 @@
 # Biko Bot: Weg zum Echtgeld (To-do-Liste)
 
 Stand: 9.11.2026 abends. Der Bot läuft im **Testmodus** (Spielgeld) auf dem Hetzner-Server.
+**Entscheidung 9.11.2026 abends: Bot stoppen, Server kündigen** (Niko). Phasen C und D entfallen. Was offen bleibt, ist nur noch das Löschen des Hetzner-Servers und des Tailscale-Geräts durch Niko.
+
 **Ergebnis der Backtests (9.11.2026):** Keine Strategie schlägt BTC halten. Der Trendfolger ist 2021–2023 knapp besser (+8 Punkte), fällt aber in der Validierung 2024 klar durch (+17 % gegen +95 % nach Steuer). Ausbruch und Rücksetzer verlieren Geld. **Nach den festen Regeln in Abschnitt 3: kein Echtgeld.** Was mit dem Bot weiter passiert (Testmodus behalten, neues Ziel, abschalten), entscheidet Niko.
 Ziel: mit 200–500 € echt handeln, aber nur, wenn er nachweislich **besser ist als BTC halten**, nach Gebühren und 27,5 % Steuer.
 

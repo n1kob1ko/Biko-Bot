@@ -1,5 +1,10 @@
 # Biko Bot: Freqtrade auf Kraken (Spot, Trendfolge 4h)
 
+> **Stand 9.11.2026: Projekt abgeschlossen, kein Echtgeld.** Die Backtests (2021–2024, realistische Kosten, ohne Lookahead) zeigen:
+> keine der drei Strategien schlägt "BTC kaufen und halten" nach Gebühren und Steuer. Der Trendfolger ist im Plus (ca. +110 % über vier Jahre),
+> BTC halten lag bei ca. +270 %. Ergebnisse und Begründung in [TODO.md](TODO.md). Niko hat entschieden, den Bot zu stoppen und den Server abzugeben.
+> Der Code bleibt als Lernprojekt und Vorlage hier liegen.
+
 Eigener Krypto-Trading-Bot auf Basis von [Freqtrade](https://www.freqtrade.io). Lernprojekt mit 200–500 € Kapital, nur Spot, kein Hebel. Ziel ist nicht "Gewinn > 0", sondern **besser als BTC halten**, nach Gebühren und Steuer.
 Geprüft gegen **Freqtrade 2026.10** (aktuelle stable, Python ≥ 3.12).
 
