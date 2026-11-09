@@ -133,7 +133,9 @@ chown -R 1000:1000 user_data
 schritt "Bot starten (der erste Download ist ca. 1 GB)"
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.testmodus.yml)
 "${COMPOSE[@]}" pull
-"${COMPOSE[@]}" up -d
+# --force-recreate: sonst behält die Biko-App nach einem Update die alte nginx.conf
+# (eingebundene Datei) und neue Bereiche wie /settings-api/ fehlen.
+"${COMPOSE[@]}" up -d --force-recreate --remove-orphans
 
 schritt "Warten, bis der Bot antwortet"
 for _ in $(seq 1 60); do
