@@ -451,8 +451,12 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 .biko .laptop, .biko .hands, .biko .sign, .biko .fx { display: none; }
 
 .biko .body-g, .biko .arm, .biko .eyes-open, .biko .antenna, .biko .hand, .biko .face,
-.biko .fx text, .biko .spark, .biko .tear { transform-box: fill-box; }
-.biko .body-g { transform-origin: 50% 100%; }
+.biko .fx text, .biko .spark, .biko .tear, .biko .fidget-g, .biko .tail, .biko .ear { transform-box: fill-box; }
+.biko .body-g { transform-origin: 50% 100%; animation: idle-breathe 3.6s ease-in-out infinite; }
+.biko .fidget-g { transform-origin: 50% 100%; }
+/* Lebendig: atmet immer leicht und schaut sich ab und zu um */
+.biko .face { animation: look 8s ease-in-out infinite; }
+.biko[data-mood="schlaeft"] .face, .biko[data-mood="traurig"] .face, .biko[data-mood="jubelt"] .face { animation: none; }
 .biko .eyes-open { transform-origin: 50% 50%; animation: blink 4.5s infinite; }
 .biko .antenna { transform-origin: 50% 100%; animation: wobble 3s ease-in-out infinite; }
 
@@ -499,7 +503,7 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 .biko[data-mood="traurig"] .brows-sad, .biko[data-mood="traurig"] .mouth-sad,
 .biko[data-mood="traurig"] .tear { display: inline; }
 .biko[data-mood="traurig"] .eyes-open { transform: translateY(3px); animation: none; }
-.biko[data-mood="traurig"] .body-g { transform: scaleY(.97); }
+.biko[data-mood="traurig"] .body-g { animation: sad-breathe 4s ease-in-out infinite; }
 .biko[data-mood="traurig"] .antenna { animation: none; transform: rotate(18deg); }
 .biko[data-mood="traurig"] .tear { animation: tear 2.4s ease-in infinite; }
 
@@ -510,7 +514,7 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 
 /* offline */
 .biko[data-mood="offline"] .mouth-wavy, .biko[data-mood="offline"] .fx-question { display: inline; }
-.biko[data-mood="offline"] .body-g { transform: rotate(-6deg); }
+.biko[data-mood="offline"] .body-g { animation: offline-sway 3.4s ease-in-out infinite; }
 .biko[data-mood="offline"] .antenna-ball { fill: #B9B2CC; animation: flicker 2s steps(1) infinite; }
 .biko[data-mood="offline"] .fx-question text { transform-box: fill-box; transform-origin: 50% 100%; animation: wobble 1.6s ease-in-out infinite; }
 
@@ -518,6 +522,53 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 .biko[data-mood="winkt"] .mouth-smile, .biko[data-mood="laedt"] .mouth-smile { display: inline; }
 .biko[data-mood="winkt"] .arm-r { transform-origin: 20% 20%; animation: wave 1.1s ease-in-out infinite; }
 .biko[data-mood="laedt"] .antenna-ball { animation: glow .6s ease-in-out infinite alternate; }
+
+/* ---------- Yojji (Katze) ---------- */
+.biko[data-maskottchen="yojji"] {
+  --biko-body: #CFC2F3; --biko-shade: #A796DE; --biko-belly: #F5F1FF; --cat-ear: #FFB8CB; --cat-stripe: #B4A3E8;
+}
+.biko .tail-path { fill: none; stroke: var(--biko-shade); stroke-width: 13; stroke-linecap: round; }
+.biko .ear-outer { fill: var(--biko-body); }
+.biko .ear-inner { fill: var(--cat-ear, #FFB8CB); }
+.biko .stripe { fill: none; stroke: var(--cat-stripe, #B4A3E8); stroke-width: 4; stroke-linecap: round; }
+.biko .whiskers path { stroke-width: 2.2; opacity: .5; }
+.biko .nose { fill: #FF8FA3; }
+.biko .tail { transform-origin: 0% 100%; animation: tail-sway 2.8s ease-in-out infinite; }
+.biko .ear { transform-origin: 50% 100%; transition: rotate .4s ease; }
+/* Posen über "rotate", Bewegungen über "transform": so laufen beide zusammen */
+.biko[data-mood="schlaeft"] .tail { animation-duration: 6s; }
+.biko[data-mood="schlaeft"] .ear-l { rotate: -8deg; }
+.biko[data-mood="schlaeft"] .ear-r { rotate: 8deg; }
+.biko[data-mood="tippt"] .tail { animation-duration: 1.8s; }
+.biko[data-mood="jubelt"] .tail { animation-duration: .5s; }
+.biko[data-mood="traurig"] .tail { rotate: 30deg; animation: none; }
+.biko[data-mood="traurig"] .ear-l { rotate: -26deg; }
+.biko[data-mood="traurig"] .ear-r { rotate: 26deg; }
+.biko[data-mood="offline"] .ear-r { rotate: 22deg; }
+.biko[data-mood="pause"] .tail { animation-duration: 4s; }
+
+/* ---------- Zwischendurch-Bewegungen (biko.js setzt data-fidget kurz) ---------- */
+.biko[data-fidget="hop"] .fidget-g { animation: hop .65s cubic-bezier(.3, .7, .4, 1); }
+.biko[data-fidget="tilt"] .fidget-g { animation: tilt 1.4s ease-in-out; }
+.biko[data-fidget="wiggle"] .fidget-g { animation: wiggle .7s ease-in-out; }
+.biko[data-fidget="boop"] .fidget-g { animation: boop .52s cubic-bezier(.3, .7, .4, 1); }
+.biko[data-fidget="antenna"] .antenna { animation: antenna-boing .9s ease-out; }
+.biko[data-fidget="ear"] .ear-r { animation: ear-twitch .45s ease-out; }
+.biko[data-fidget="tail"] .tail { animation: tail-flick .75s ease-in-out; }
+.biko-mini { cursor: pointer; }
+
+@keyframes idle-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.015, .985); } }
+@keyframes sad-breathe { 0%, 100% { transform: scaleY(.97); } 50% { transform: translateY(1px) scaleY(.955); } }
+@keyframes offline-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(-3deg); } }
+@keyframes look { 0%, 28%, 76%, 100% { transform: translate(0, 0); } 33%, 48% { transform: translate(-3px, 0); } 54%, 70% { transform: translate(3px, -1px); } }
+@keyframes tail-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
+@keyframes tail-flick { 0%, 100% { transform: rotate(0); } 40% { transform: rotate(22deg); } 70% { transform: rotate(-8deg); } }
+@keyframes ear-twitch { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(18deg); } 55% { transform: rotate(-4deg); } 75% { transform: rotate(10deg); } }
+@keyframes antenna-boing { 0% { transform: rotate(0); } 25% { transform: rotate(-22deg); } 50% { transform: rotate(16deg); } 75% { transform: rotate(-8deg); } 100% { transform: rotate(0); } }
+@keyframes hop { 0%, 100% { transform: none; } 20% { transform: scale(1.05, .94); } 50% { transform: translateY(-14px) scale(.97, 1.04); } 80% { transform: scale(1.04, .96); } }
+@keyframes tilt { 0%, 100% { transform: rotate(0); } 30%, 65% { transform: rotate(-7deg); } }
+@keyframes wiggle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(4deg); } 40% { transform: rotate(-4deg); } 60% { transform: rotate(3deg); } 80% { transform: rotate(-2deg); } }
+@keyframes boop { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08, .9); } 60% { transform: scale(.96, 1.05); } }
 
 @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 @keyframes wobble { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }

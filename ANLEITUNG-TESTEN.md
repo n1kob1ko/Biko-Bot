@@ -156,7 +156,8 @@ eigene Einstellungen und eigene Trades. Mit Nikos Bot ist nichts geteilt außer 
 curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/install.sh | BIKO_NAME=cousin bash
 ```
 
-- Das Skript legt `/opt/cousin-bot` an, sucht freie Ports (z. B. 8082/8083) und fragt nach Börse, Maskottchen und dessen Namen.
+- Das Skript legt `/opt/cousin-bot` an, sucht freie Ports (z. B. 8082/8083) und fragt nach Börse, Maskottchen (1 = Biko, 2 = Yojji, die Katze) und dessen Namen.
+  Ohne Fragen geht es auch: `… | BIKO_NAME=cousin BIKO_MASKOTTCHEN=yojji BIKO_MASKOTTCHEN_NAME=Yojji bash`.
 - Bei "App am Handy über Tailscale einrichten?" mit `j` antworten. Der zweite Bot bekommt eine eigene Adresse mit Port, z. B. `https://biko.tail1234.ts.net:8443`.
 - Am Ende stehen Adresse und Benutzer da, das Passwort in `/opt/cousin-bot/ZUGANGSDATEN.txt` (`cat /opt/cousin-bot/ZUGANGSDATEN.txt`).
 - Aktualisieren: dieselbe Zeile mit demselben `BIKO_NAME` nochmal. Nikos eigener Bot wird wie bisher ohne `BIKO_NAME` aktualisiert.

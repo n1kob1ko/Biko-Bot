@@ -1,12 +1,14 @@
-// Biko, das Maskottchen. Eigenes SVG, alle Animationen in style.css.
-// Biko.mount(el) hängt ein Exemplar ein, Biko.setMood(m) stellt die Stimmung für alle ein.
+// Die Maskottchen (Biko, Yojji). Eigene SVGs, alle Animationen in style.css.
+// Maskottchen.mount(el) hängt ein Exemplar ein, setMood(m) stellt die Stimmung für alle ein.
 // Stimmungen: schlaeft, tippt, jubelt, traurig, pause, offline, winkt, laedt
+//
+// Alle Maskottchen teilen Gesicht, Laptop, Schild und Effekte, damit jede Stimmung gleich funktioniert.
+// Sie unterscheiden sich in Farben (CSS-Variablen, [data-maskottchen="..."] in style.css) und Form
+// (Antenne bzw. Ohren und Schwanz). Neues Maskottchen: unten in MASKOTTCHEN eintragen, Farben in style.css,
+// ein icon-<id>.svg anlegen und in install.sh bei MASKOTTCHEN_LISTE ergänzen.
 (function () {
-  const SVG = `
-<svg class="biko" viewBox="0 0 240 210" role="img" aria-labelledby="biko-title">
-  <title id="biko-title">__NAME__</title>
-  <ellipse class="shadow" cx="120" cy="194" rx="56" ry="8"/>
-
+  // Effekte hinter/neben der Figur (für alle gleich)
+  const FX = `
   <g class="fx fx-zzz">
     <text class="z z1" x="160" y="66">z</text>
     <text class="z z2" x="174" y="48">z</text>
@@ -23,22 +25,12 @@
     <text class="fl f1" x="92" y="130">€</text>
     <text class="fl f2" x="118" y="130">↗</text>
     <text class="fl f3" x="142" y="130">+</text>
-  </g>
+  </g>`;
 
-  <g class="body-g">
-    <g class="antenna">
-      <path class="antenna-stick" d="M120 70 Q118 52 122 40"/>
-      <circle class="antenna-ball" cx="122" cy="34" r="9"/>
-      <circle class="antenna-shine" cx="119" cy="31" r="2.6"/>
-    </g>
-    <ellipse class="foot" cx="96" cy="182" rx="17" ry="9"/>
-    <ellipse class="foot" cx="144" cy="182" rx="17" ry="9"/>
-    <g class="arm arm-l"><ellipse cx="64" cy="132" rx="10" ry="16"/></g>
-    <g class="arm arm-r"><ellipse cx="176" cy="132" rx="10" ry="16"/></g>
-    <ellipse class="torso" cx="120" cy="124" rx="60" ry="57"/>
-    <ellipse class="belly" cx="120" cy="146" rx="38" ry="27"/>
-
+  // Gesicht: Augen, Brauen, Bäckchen, Münder, Träne. `extra` kommt davor (z. B. Schnurrhaare, Nase).
+  const face = ({ extra = '', smile = 'M111 127 q9 8 18 0' } = {}) => `
     <g class="face">
+      ${extra}
       <g class="eyes eyes-open">
         <g class="eye"><ellipse cx="100" cy="112" rx="7.5" ry="9.5"/><circle class="shine" cx="103" cy="108" r="2.6"/></g>
         <g class="eye"><ellipse cx="140" cy="112" rx="7.5" ry="9.5"/><circle class="shine" cx="143" cy="108" r="2.6"/></g>
@@ -52,14 +44,16 @@
       <g class="brows-sad line"><path d="M90 100 L107 95"/><path d="M133 95 L150 100"/></g>
       <ellipse class="blush" cx="85" cy="128" rx="9" ry="5"/>
       <ellipse class="blush" cx="155" cy="128" rx="9" ry="5"/>
-      <path class="mouth mouth-smile line" d="M111 127 q9 8 18 0"/>
+      <path class="mouth mouth-smile line" d="${smile}"/>
       <ellipse class="mouth mouth-o" cx="120" cy="131" rx="3.6" ry="3"/>
       <path class="mouth mouth-sad line" d="M111 134 q9 -7 18 0"/>
       <path class="mouth mouth-open" d="M108 126 q12 17 24 0z"/>
       <path class="mouth mouth-wavy line" d="M109 131 q5.5 -4 11 0 q5.5 4 11 0"/>
       <path class="tear" d="M97 121 q-5 8 0 10 q5 -2 0 -10z"/>
-    </g>
+    </g>`;
 
+  // Laptop, Hände und Pause-Schild (für alle gleich)
+  const PROPS = `
     <g class="laptop">
       <rect class="laptop-back" x="78" y="141" width="84" height="44" rx="6"/>
       <circle class="laptop-logo" cx="120" cy="163" r="6"/>
@@ -69,32 +63,94 @@
       <ellipse class="hand hand-l" cx="78" cy="180" rx="9" ry="7"/>
       <ellipse class="hand hand-r" cx="162" cy="180" rx="9" ry="7"/>
     </g>
-
     <g class="sign">
       <rect class="sign-stick" x="186" y="108" width="5" height="74" rx="2"/>
       <rect class="sign-board" x="158" y="82" width="66" height="32" rx="7"/>
       <text class="sign-text" x="191" y="104">Pause</text>
-    </g>
+    </g>`;
+
+  // Körper: `behind` liegt hinter dem Rumpf (Schwanz, Ohren), `top` darüber (Antenne)
+  const svg = ({ behind = '', top = '', faceOpts } = {}) => `
+<svg class="biko" viewBox="0 0 240 210" role="img" aria-labelledby="biko-title">
+  <title id="biko-title">__NAME__</title>
+  <ellipse class="shadow" cx="120" cy="194" rx="56" ry="8"/>
+  ${FX}
+  <g class="fidget-g">
+  <g class="body-g">
+    ${behind}
+    <ellipse class="foot" cx="96" cy="182" rx="17" ry="9"/>
+    <ellipse class="foot" cx="144" cy="182" rx="17" ry="9"/>
+    <g class="arm arm-l"><ellipse cx="64" cy="132" rx="10" ry="16"/></g>
+    <g class="arm arm-r"><ellipse cx="176" cy="132" rx="10" ry="16"/></g>
+    <ellipse class="torso" cx="120" cy="124" rx="60" ry="57"/>
+    <ellipse class="belly" cx="120" cy="146" rx="38" ry="27"/>
+    ${top}
+    ${face(faceOpts)}
+    ${PROPS}
+  </g>
   </g>
 </svg>`;
 
+  const MASKOTTCHEN = {
+    // Biko: rundes gelbes Wesen mit Antenne
+    biko: {
+      svg: svg({
+        behind: `
+    <g class="antenna">
+      <path class="antenna-stick" d="M120 70 Q118 52 122 40"/>
+      <circle class="antenna-ball" cx="122" cy="34" r="9"/>
+      <circle class="antenna-shine" cx="119" cy="31" r="2.6"/>
+    </g>`,
+      }),
+      fidgets: ['antenna'],
+    },
+    // Yojji: runde Katze mit Ohren, Schnurrhaaren und Ringelschwanz
+    yojji: {
+      svg: svg({
+        behind: `
+    <g class="tail"><path class="tail-path" d="M168 170 C 200 168 214 146 206 120 C 202 106 190 104 188 114"/></g>
+    <g class="ear ear-l"><path class="ear-outer" d="M70 104 Q62 58 80 48 Q92 46 114 70 Z"/><path class="ear-inner" d="M79 92 Q75 66 85 60 Q92 60 104 72 Z"/></g>
+    <g class="ear ear-r"><path class="ear-outer" d="M170 104 Q178 58 160 48 Q148 46 126 70 Z"/><path class="ear-inner" d="M161 92 Q165 66 155 60 Q148 60 136 72 Z"/></g>`,
+        top: `
+    <path class="stripe" d="M112 70 q8 -3 16 0 M108 80 q12 -4 24 0"/>`,
+        faceOpts: {
+          smile: 'M111 127 q4.5 6 9 0 q4.5 6 9 0',
+          extra: `
+      <g class="whiskers line"><path d="M82 122 L58 117"/><path d="M82 129 L57 131"/><path d="M158 122 L182 117"/><path d="M158 129 L183 131"/></g>
+      <path class="nose" d="M114.5 119.5 Q120 116.5 125.5 119.5 Q122 124.5 120 124.5 Q118 124.5 114.5 119.5 Z"/>`,
+        },
+      }),
+      fidgets: ['ear', 'tail'],
+    },
+  };
+
   const MOODS = ['schlaeft', 'tippt', 'jubelt', 'traurig', 'pause', 'offline', 'winkt', 'laedt'];
 
-  // Maskottchen: alle teilen Gesicht, Laptop, Schild und Effekte (damit alle Stimmungen gleich funktionieren),
-  // unterscheiden sich in Farben (CSS-Variablen in style.css, [data-maskottchen="..."]) und Form.
-  // Neues Maskottchen: hier eintragen, Farben in style.css, und in install.sh bei MASKOTTCHEN_LISTE.
-  const MASKOTTCHEN = {
-    biko: { svg: SVG },
-  };
   const inst = window.BIKO_INSTANZ || {};
   const id = Object.prototype.hasOwnProperty.call(MASKOTTCHEN, inst.maskottchen) ? inst.maskottchen : 'biko';
   const name = (typeof inst.name === 'string' && inst.name.trim()) ? inst.name.trim().slice(0, 20) : 'Biko';
   const safeName = name.replace(/[&<>"']/g, '');
   const CHOSEN = MASKOTTCHEN[id].svg.replace('__NAME__', safeName);
 
-  // Biko kann mehrfach auf der Seite stehen (groß in der Übersicht, klein oben in den anderen
-  // Ansichten). Alle Exemplare zeigen immer dieselbe Stimmung.
-  window.Biko = {
+  // Kleine Zwischendurch-Bewegungen, damit das Maskottchen lebendig wirkt.
+  // Welche passen, hängt von der Stimmung ab (beim Jubeln hüpft es schon, beim Schlafen bewegt sich höchstens ein Ohr).
+  const own = MASKOTTCHEN[id].fidgets;
+  const FIDGETS = {
+    schlaeft: id === 'yojji' ? ['ear', 'tail'] : [],
+    tippt: ['tilt', ...own],
+    jubelt: [],
+    traurig: id === 'yojji' ? ['ear'] : [],
+    pause: ['tilt', 'hop', ...own],
+    offline: ['tilt', ...own],
+    winkt: ['hop', 'tilt', 'wiggle', ...own],
+    laedt: ['tilt', ...own],
+  };
+  const FIDGET_MS = { hop: 650, tilt: 1400, wiggle: 700, boop: 520, antenna: 900, ear: 450, tail: 750 };
+  const reduced = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Ein Maskottchen kann mehrfach auf der Seite stehen (groß in der Übersicht, klein oben in den
+  // anderen Ansichten, beim Login). Alle Exemplare zeigen immer dieselbe Stimmung.
+  const M = {
     MOODS,
     id,
     name,
@@ -104,16 +160,44 @@
       el.innerHTML = decorative
         ? CHOSEN.replace('role="img" aria-labelledby="biko-title"', 'aria-hidden="true"').replace(/<title[^>]*>[^<]*<\/title>/, '')
         : CHOSEN;
-      const svg = el.querySelector('svg');
-      svg.dataset.maskottchen = id;
-      svg.dataset.mood = this.mood;
-      this.svgs.push(svg);
-      return svg;
+      const s = el.querySelector('svg');
+      s.dataset.maskottchen = id;
+      s.dataset.mood = this.mood;
+      this.svgs.push(s);
+      this.startFidgets();
+      return s;
     },
     setMood(mood) {
       if (!MOODS.includes(mood)) return;
+      if (mood === this.mood) return;
       this.mood = mood;
-      this.svgs.forEach((svg) => { svg.dataset.mood = mood; });
+      this.svgs.forEach((s) => { s.dataset.mood = mood; });
+    },
+    // Eine Zwischendurch-Bewegung abspielen (z. B. 'boop' beim Antippen)
+    fidget(kind) {
+      if (reduced() || !FIDGET_MS[kind]) return;
+      this.svgs.forEach((s) => {
+        delete s.dataset.fidget;
+        void s.getBoundingClientRect(); // Neustart, falls dieselbe Bewegung gerade lief
+        s.dataset.fidget = kind;
+        clearTimeout(s._fidgetTimer);
+        s._fidgetTimer = setTimeout(() => { if (s.dataset.fidget === kind) delete s.dataset.fidget; }, FIDGET_MS[kind]);
+      });
+    },
+    startFidgets() {
+      if (this._fidgetLoop) return;
+      const next = () => {
+        this._fidgetLoop = setTimeout(() => {
+          const options = FIDGETS[this.mood] || [];
+          if (options.length && document.visibilityState === 'visible') {
+            this.fidget(options[Math.floor(Math.random() * options.length)]);
+          }
+          next();
+        }, 4500 + Math.random() * 6000);
+      };
+      next();
     },
   };
+  window.Maskottchen = M;
+  window.Biko = M; // alter Name, bleibt für bestehenden Code
 })();

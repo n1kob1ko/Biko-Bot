@@ -895,6 +895,8 @@
   Biko.mount($('biko'));
   Biko.mount($('biko-mini'), { decorative: true });
   Biko.mount($('biko-login'), { decorative: true });
+  // Antippen: das Maskottchen freut sich kurz (im Demo-Modus wechselt es zusätzlich die Stimmung)
+  ['biko', 'biko-mini', 'biko-login'].forEach((elId) => $(elId).addEventListener('click', () => Biko.fidget('boop')));
   if (DEMO) {
     // Tippen auf Biko wechselt die Stimmung
     const cycle = () => {

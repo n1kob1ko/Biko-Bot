@@ -22,7 +22,7 @@ esac
 if [ "$INSTANZ" = "biko" ]; then ZIEL="${BIKO_DIR:-/opt/biko-bot}"; else ZIEL="${BIKO_DIR:-/opt/$INSTANZ-bot}"; fi
 
 # Maskottchen, die die App kennt (ui/web/biko.js): id:Standardname
-MASKOTTCHEN_LISTE="biko:Biko"
+MASKOTTCHEN_LISTE="biko:Biko yojji:Yojji"
 
 fehler() { echo; echo "FEHLER: $1" >&2; exit 1; }
 schritt() { echo; echo "==> $1"; }
@@ -165,6 +165,8 @@ env_set MASKOTTCHEN "$MASK"; env_set MASKOTTCHEN_NAME "$MASK_NAME"
 printf "// Von install.sh geschrieben (aus der .env). Nicht von Hand ändern.\nwindow.BIKO_INSTANZ = { instanz: '%s', maskottchen: '%s', name: '%s' };\n" \
   "$INSTANZ" "$MASK" "$MASK_NAME" > ui/web/instanz.js
 sed -i "s|\"name\": \"[^\"]*\"|\"name\": \"$MASK_NAME\"|; s|\"short_name\": \"[^\"]*\"|\"short_name\": \"$MASK_NAME\"|" ui/web/manifest.webmanifest
+# Symbol (Kopfzeile, Home-Bildschirm) passend zum Maskottchen
+[ -f "ui/web/icon-$MASK.svg" ] && cp "ui/web/icon-$MASK.svg" ui/web/icon.svg
 echo "[OK] Maskottchen: $MASK_NAME"
 
 # Zugangsdaten-Zettel (Passwort steht nur in der .env)
