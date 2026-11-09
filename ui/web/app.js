@@ -9,6 +9,11 @@
   const RECENT_CLOSE_MS = 20 * 60 * 1000; // so lange freut/ärgert sich Biko nach einem geschlossenen Trade
 
   const $ = (id) => document.getElementById(id);
+  // Welcher Bot/welches Maskottchen (ui/web/instanz.js, schreibt install.sh)
+  const INSTANZ = window.BIKO_INSTANZ || {};
+  const NAME = typeof INSTANZ.name === 'string' && INSTANZ.name.trim() ? INSTANZ.name.trim().slice(0, 20) : 'Biko';
+  document.title = NAME;
+  document.querySelectorAll('[data-name]').forEach((el) => { el.textContent = NAME; });
   const params = new URLSearchParams(location.search);
   const DEMO = params.has('demo');
 
@@ -429,7 +434,7 @@
     ];
     const tradesEl = $('trades');
     if (!rows.length) {
-      tradesEl.innerHTML = '<li class="empty">Noch keine Trades. Biko wartet auf ein gutes Signal.</li>';
+      tradesEl.innerHTML = `<li class="empty">Noch keine Trades. ${esc(NAME)} wartet auf ein gutes Signal.</li>`;
     } else {
       tradesEl.innerHTML = rows.map(({ t, open, ts }) => {
         const [base, quote = currency] = String(t.pair).split('/');
@@ -638,7 +643,7 @@
   $('toggle-run').addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
     if (btn.dataset.action === 'pause') {
-      const ok = await ask('Pause machen?', 'Biko kauft dann nichts Neues mehr. Offene Trades laufen normal weiter und werden wie gewohnt verkauft.', 'Ja, Pause');
+      const ok = await ask('Pause machen?', `${NAME} kauft dann nichts Neues mehr. Offene Trades laufen normal weiter und werden wie gewohnt verkauft.`, 'Ja, Pause');
       if (!ok) return;
       btn.disabled = true;
       await act(async (demo) => {
@@ -646,7 +651,7 @@
         try { await post('/stopentry'); } catch (e) { if (e.status === 404) await post('/pause'); else throw e; }
       }, 'Okay, ich kaufe erst mal nichts Neues.', btn);
     } else {
-      const ok = await ask('Weiter handeln?', 'Biko kauft und verkauft dann wieder selbst nach seiner Strategie.', 'Ja, weiter');
+      const ok = await ask('Weiter handeln?', `${NAME} kauft und verkauft dann wieder selbst nach seiner Strategie.`, 'Ja, weiter');
       if (!ok) return;
       btn.disabled = true;
       await act(async (demo) => {
@@ -663,7 +668,7 @@
     const { trade, name } = btn.dataset;
     const r = Number(btn.dataset.ratio) || 0;
     const ok = await ask(`${name} jetzt verkaufen?`,
-      `Aktuell ${pct(r)}. Biko verkauft sofort zum aktuellen Preis, das lässt sich nicht rückgängig machen.`, 'Ja, verkaufen');
+      `Aktuell ${pct(r)}. ${NAME} verkauft sofort zum aktuellen Preis, das lässt sich nicht rückgängig machen.`, 'Ja, verkaufen');
     if (!ok) return;
     btn.disabled = true;
     btn.textContent = 'Verkaufe …';
@@ -813,7 +818,7 @@
     const stratChanged = settings.saved && d.strategy !== settings.saved.strategy;
     const text = `${stratInfo(d.strategy).name} · Coins: ${d.coins.join(', ')} · Takt: ${(TF_INFO[d.timeframe] || [d.timeframe])[0]} · `
       + `Risiko: ${riskLabel(d.risk_per_trade)} pro Trade · bis zu ${d.max_open_trades} Trades. `
-      + 'Biko startet dafür kurz neu. Offene Trades bleiben offen'
+      + `${NAME} startet dafür kurz neu. Offene Trades bleiben offen`
       + (stratChanged ? ' und werden ab jetzt nach den Regeln der neuen Strategie verkauft (der Stop-Loss bleibt).' : '.');
     const ok = await ask('Einstellungen speichern?', text, 'Ja, speichern');
     if (!ok) return;

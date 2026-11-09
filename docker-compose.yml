@@ -1,20 +1,24 @@
 # Biko Bot: Freqtrade – Kraken Spot, Trendfolge 4h
 # Start (Dry-Run):  docker compose up -d
 # Logs:             docker compose logs -f
+#
+# Mehrere Bots auf einem Server: jeder hat seinen eigenen Ordner (z. B. /opt/biko-bot, /opt/cousin-bot)
+# und in seiner .env eigene Werte für INSTANZ, API_PORT und APP_PORT (legt install.sh mit BIKO_NAME=... an).
+# Ohne diese Werte gilt: biko, 8080, 8081.
 services:
   freqtrade:
     # "stable" = letzte stabile Version. Für reproduzierbare Backtests auf eine
     # feste Version pinnen, z. B. freqtradeorg/freqtrade:2026.10
     image: freqtradeorg/freqtrade:stable
     restart: unless-stopped
-    container_name: biko-bot
+    container_name: ${INSTANZ:-biko}-bot
     env_file: .env            # Secrets nur hier, nie in config.json
     volumes:
       - "./user_data:/freqtrade/user_data"
     # FreqUI/REST-API nur lokal erreichbar. Auf dem VPS per SSH-Tunnel öffnen:
     #   ssh -L 8080:127.0.0.1:8080 user@vps
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
     command: >
       trade
       --logfile /freqtrade/user_data/logs/freqtrade.log
@@ -33,7 +37,7 @@ services:
   biko-settings:
     image: python:3.12-alpine
     restart: unless-stopped
-    container_name: biko-settings
+    container_name: ${INSTANZ:-biko}-settings
     volumes:
       - "./user_data:/freqtrade/user_data"
       - "./ui/settings/server.py:/app/server.py:ro"
@@ -44,7 +48,7 @@ services:
   biko-app:
     image: nginx:1.27-alpine
     restart: unless-stopped
-    container_name: biko-app
+    container_name: ${INSTANZ:-biko}-app
     depends_on:
       - freqtrade
       - biko-settings
@@ -52,4 +56,4 @@ services:
       - "./ui/web:/usr/share/nginx/html:ro"
       - "./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:${APP_PORT:-8081}:80"

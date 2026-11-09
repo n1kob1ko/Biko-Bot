@@ -127,6 +127,10 @@ nichts federt. Mit "Bewegung reduzieren" im System bleibt nur Ein-/Ausblenden. B
 - Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
 - "Zum Home-Bildschirm hinzufügen" geht, dann sieht Biko aus wie eine eigene App. Den Port bitte **nicht** direkt ins Internet freigeben.
 - Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.
+- **Mehrere Bots auf einem Server** (zum Testen mit Spielgeld, z. B. für Familie): `curl -fsSL …/install.sh | BIKO_NAME=cousin bash`.
+  Jeder Bot bekommt einen eigenen Ordner (`/opt/<name>-bot`), eigene Ports (in der `.env`: `INSTANZ`, `API_PORT`, `APP_PORT`, `TS_PORT`),
+  ein eigenes Login und ein eigenes Maskottchen (`MASKOTTCHEN`, `MASKOTTCHEN_NAME`, landet über `ui/web/instanz.js` in der App).
+  Am Handy über Tailscale mit eigenem HTTPS-Port (z. B. `:8443`). Anleitung: [ANLEITUNG-TESTEN.md](ANLEITUNG-TESTEN.md#weg-c-eigener-bot-auf-nikos-server-nur-spielgeld).
 
 ## Die drei wichtigsten Befehle
 

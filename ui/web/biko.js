@@ -4,7 +4,7 @@
 (function () {
   const SVG = `
 <svg class="biko" viewBox="0 0 240 210" role="img" aria-labelledby="biko-title">
-  <title id="biko-title">Biko</title>
+  <title id="biko-title">__NAME__</title>
   <ellipse class="shadow" cx="120" cy="194" rx="56" ry="8"/>
 
   <g class="fx fx-zzz">
@@ -80,17 +80,32 @@
 
   const MOODS = ['schlaeft', 'tippt', 'jubelt', 'traurig', 'pause', 'offline', 'winkt', 'laedt'];
 
+  // Maskottchen: alle teilen Gesicht, Laptop, Schild und Effekte (damit alle Stimmungen gleich funktionieren),
+  // unterscheiden sich in Farben (CSS-Variablen in style.css, [data-maskottchen="..."]) und Form.
+  // Neues Maskottchen: hier eintragen, Farben in style.css, und in install.sh bei MASKOTTCHEN_LISTE.
+  const MASKOTTCHEN = {
+    biko: { svg: SVG },
+  };
+  const inst = window.BIKO_INSTANZ || {};
+  const id = Object.prototype.hasOwnProperty.call(MASKOTTCHEN, inst.maskottchen) ? inst.maskottchen : 'biko';
+  const name = (typeof inst.name === 'string' && inst.name.trim()) ? inst.name.trim().slice(0, 20) : 'Biko';
+  const safeName = name.replace(/[&<>"']/g, '');
+  const CHOSEN = MASKOTTCHEN[id].svg.replace('__NAME__', safeName);
+
   // Biko kann mehrfach auf der Seite stehen (groß in der Übersicht, klein oben in den anderen
   // Ansichten). Alle Exemplare zeigen immer dieselbe Stimmung.
   window.Biko = {
     MOODS,
+    id,
+    name,
     svgs: [],
     mood: 'laedt',
     mount(el, { decorative = false } = {}) {
       el.innerHTML = decorative
-        ? SVG.replace('role="img" aria-labelledby="biko-title"', 'aria-hidden="true"').replace(/<title[^>]*>Biko<\/title>/, '')
-        : SVG;
+        ? CHOSEN.replace('role="img" aria-labelledby="biko-title"', 'aria-hidden="true"').replace(/<title[^>]*>[^<]*<\/title>/, '')
+        : CHOSEN;
       const svg = el.querySelector('svg');
+      svg.dataset.maskottchen = id;
       svg.dataset.mood = this.mood;
       this.svgs.push(svg);
       return svg;

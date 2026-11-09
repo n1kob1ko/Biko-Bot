@@ -38,14 +38,14 @@
 
   <main class="app">
     <header class="top">
-      <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> Biko</div>
+      <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> <span data-name>Biko</span></div>
       <div class="chips" id="chips"></div>
     </header>
 
     <!-- Login -->
     <section class="panel login" id="login" hidden>
       <div class="hero hero-login"><div class="biko-wrap" id="biko-login"></div></div>
-      <h1>Hallo, ich bin Biko!</h1>
+      <h1>Hallo, ich bin <span data-name>Biko</span>!</h1>
       <p class="muted">Melde dich mit den Zugangsdaten deines Bots an.</p>
       <form id="login-form" autocomplete="on">
         <label>Benutzer
@@ -145,7 +145,7 @@
           <div id="set-form" hidden>
             <div class="set-block">
               <div class="set-label">Strategie</div>
-              <div class="set-hint">Nach welcher Regel Biko kauft und verkauft. Stop-Loss und Schutzregeln sind bei allen gleich.</div>
+              <div class="set-hint">Nach welcher Regel <span data-name>Biko</span> kauft und verkauft. Stop-Loss und Schutzregeln sind bei allen gleich.</div>
               <div class="scards" id="set-strategy" role="radiogroup" aria-label="Strategie"></div>
             </div>
             <div class="set-block">
@@ -189,6 +189,7 @@
       <button type="button" class="btn-main" id="confirm-ok" data-answer="yes">OK</button>
     </div>
   </dialog>
+  <script src="instanz.js"></script>
   <script src="biko.js"></script>
   <script src="app.js"></script>
 </body>
