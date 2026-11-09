@@ -20,6 +20,16 @@
 # Kraken-Konto und API-Key, Validierungs- und Final-Backtest (erst wenn die Regeln feststehen).
 set -uo pipefail
 ZIEL="${BIKO_DIR:-/opt/biko-bot}"
+
+# Bei "curl ... | bash" liest bash das Skript häppchenweise von stdin. Programme wie "docker compose run"
+# lesen ebenfalls von stdin und fressen dabei den Rest des Skripts auf (so ist der erste Lauf am 9.11.
+# nach den Kursdaten einfach stehen geblieben). Darum: erst als Datei speichern, dann daraus starten.
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ ! -f "${BASH_SOURCE[0]}" ]; then
+  SELBST="$(mktemp /tmp/live-vorbereiten.XXXXXX.sh)"
+  curl -fsSL "https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/scripts/live-vorbereiten.sh" -o "$SELBST" \
+    || { echo "FEHLER: Skript konnte nicht geladen werden." >&2; exit 1; }
+  exec bash "$SELBST" "$@"
+fi
 [ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo starten." >&2; exit 1; }
 
 schritt() { echo; echo "=================================================================="; echo "==> $1"; echo "=================================================================="; }
@@ -64,7 +74,7 @@ fi
 schritt "3/6 Kursdaten laden (Binance, EUR-Paare, 4h und 1h, ab 2020)"
 if docker compose run --rm freqtrade download-data \
      --config /freqtrade/user_data/config.binance.json \
-     --timeframes 4h 1h --timerange 20200101- --erase 2>&1 | tail -n 15; then
+     --timeframes 4h 1h --timerange 20200101- --erase </dev/null 2>&1 | tail -n 15; then
   echo "[OK] Daten in user_data/data/binance"
   ls -la user_data/data/binance 2>/dev/null | head
 else

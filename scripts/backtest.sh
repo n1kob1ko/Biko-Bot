@@ -28,7 +28,7 @@ case "$PHASE" in
 esac
 BOERSE="kraken"; [ "$CONFIG" = "config.binance.json" ] && BOERSE="binance"
 
-FT=(docker compose run --rm freqtrade)
+FT=(docker compose run --rm -T freqtrade)
 CFG=(--config "/freqtrade/user_data/$CONFIG")
 
 echo "==> Backtest $STRATEGIE, $ZEIT, Takt $TAKT, Gebühr $FEE pro Seite ($BOERSE)"
@@ -36,7 +36,7 @@ echo "==> Backtest $STRATEGIE, $ZEIT, Takt $TAKT, Gebühr $FEE pro Seite ($BOERS
   --timerange "$ZEIT" --fee "$FEE" --enable-protections --breakdown month --export trades
 
 echo "==> Vergleich mit BTC halten (vor und nach 27,5 % Steuer)"
-docker compose run --rm -v "$(pwd)/scripts:/scripts:ro" --entrypoint python freqtrade \
+docker compose run --rm -T -v "$(pwd)/scripts:/scripts:ro" --entrypoint python freqtrade \
   /scripts/vergleich.py /freqtrade/user_data/backtest_results "/freqtrade/user_data/data/$BOERSE" BTC/EUR
 
 if [ "${PRUEFEN:-}" = "ja" ]; then
