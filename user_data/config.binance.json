@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.freqtrade.io/schema.json",
   "bot_name": "biko-bot-binance",
+  "strategy": "EmaTrendStrategy",
   "dry_run": true,
   "dry_run_wallet": 500,
   "trading_mode": "spot",

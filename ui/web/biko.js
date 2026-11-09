@@ -1,4 +1,5 @@
 // Biko, das Maskottchen. Eigenes SVG, alle Animationen in style.css.
+// Biko.mount(el) hängt ein Exemplar ein, Biko.setMood(m) stellt die Stimmung für alle ein.
 // Stimmungen: schlaeft, tippt, jubelt, traurig, pause, offline, winkt, laedt
 (function () {
   const SVG = `
@@ -79,16 +80,25 @@
 
   const MOODS = ['schlaeft', 'tippt', 'jubelt', 'traurig', 'pause', 'offline', 'winkt', 'laedt'];
 
+  // Biko kann mehrfach auf der Seite stehen (groß in der Übersicht, klein oben in den anderen
+  // Ansichten). Alle Exemplare zeigen immer dieselbe Stimmung.
   window.Biko = {
     MOODS,
-    mount(el) {
-      el.innerHTML = SVG;
-      this.svg = el.querySelector('svg');
-      this.setMood('laedt');
+    svgs: [],
+    mood: 'laedt',
+    mount(el, { decorative = false } = {}) {
+      el.innerHTML = decorative
+        ? SVG.replace('role="img" aria-labelledby="biko-title"', 'aria-hidden="true"').replace(/<title[^>]*>Biko<\/title>/, '')
+        : SVG;
+      const svg = el.querySelector('svg');
+      svg.dataset.mood = this.mood;
+      this.svgs.push(svg);
+      return svg;
     },
     setMood(mood) {
-      if (!this.svg || !MOODS.includes(mood)) return;
-      this.svg.dataset.mood = mood;
+      if (!MOODS.includes(mood)) return;
+      this.mood = mood;
+      this.svgs.forEach((svg) => { svg.dataset.mood = mood; });
     },
   };
 })();

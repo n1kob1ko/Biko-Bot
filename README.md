@@ -19,13 +19,24 @@ install.sh                            Ein-Zeilen-Installation auf Ubuntu/Debian-
 ANLEITUNG-TESTEN.md                   Anleitung für Tester ohne PC (Telegram/Handy)
 ```
 
-## Was die Strategie macht
+## Was die Strategien machen
+
+Es gibt drei Strategien, alle in `user_data/strategies/`. Sie teilen sich den Unterbau `BikoBase` (`biko_base.py`):
+Positionsgröße, Stop-Loss an der Börse, Protections und Kill-Switch sind bei allen gleich. Nur Entry und Exit unterscheiden sich.
+Welche läuft, steht in der Config (`"strategy"`) und lässt sich in der Biko-App wechseln.
+
+| Strategie (Name in der App) | Entry | Exit | Stand |
+|---|---|---|---|
+| `EmaTrendStrategy` (Trendfolger) | EMA20 > EMA50 **und** Close > EMA200 | EMA20 < EMA50 | getestet (4h, BTC/ETH/SOL) |
+| `BreakoutStrategy` (Ausbruch) | Close über dem Hoch der letzten 20 Kerzen (ohne die aktuelle) **und** Close > EMA200 | Close unter dem Tief der letzten 10 Kerzen | neu, noch kein Backtest |
+| `DipBuyStrategy` (Rücksetzer) | Close > EMA200 **und** RSI(14) < 35 | RSI(14) > 65 oder +8 % (`minimal_roi`) | neu, noch kein Backtest |
+
+Gemeinsam (BikoBase):
 
 | Teil | Umsetzung |
 |---|---|
-| Entry | EMA20 > EMA50 **und** Close > EMA200 (nur auf abgeschlossenen 4h-Kerzen) |
-| Exit | EMA20 < EMA50, kein ROI-Ausstieg, kein Trailing |
-| Stop-Loss | -5 %, als Stop-Order **an der Börse** (`stoploss_on_exchange`, Kraken unterstützt das im Spot) |
+| Kerzen | nur abgeschlossene Kerzen, Takt 4h (in der App 15m/1h/4h) |
+| Stop-Loss | -5 %, als Stop-Order **an der Börse** (`stoploss_on_exchange`, Kraken und Binance unterstützen das im Spot) |
 | Positionsgröße | `custom_stake_amount`: Konto × 1 % ÷ (5 % Stop + 1 % Kostenpuffer). Bei 500 € ≈ 83 € pro Trade, Verlust beim Stop ≈ 5 € |
 | Protections | CooldownPeriod (8h), StoplossGuard (2 Stops in 2 Tagen → 1 Tag Pause), MaxDrawdown im `equity`-Modus (−3 % in 24h → 24h Pause) |
 | Kill-Switch | Ab −15 % Konto-Drawdown (geschlossene Trades) blockiert `confirm_trade_entry` alle neuen Entries, dauerhaft bis du es manuell freigibst |
@@ -39,7 +50,7 @@ Hinweise:
 
 ## Börse wählen: Kraken oder Binance
 
-Die Strategie ist börsenunabhängig (CCXT). Welche Config läuft, steuert `BOT_CONFIG` in der `.env`.
+Die Strategien sind börsenunabhängig (CCXT). Welche Config läuft, steuert `BOT_CONFIG` in der `.env`.
 `install.sh` fragt beim Einrichten "1 = Kraken, 2 = Binance" und trägt das ein (nochmal ausführen = wechseln, oder ohne Frage mit `BIKO_BOERSE=binance`).
 
 | | Kraken (`config.json`, Standard) | Binance (`config.binance.json`) |
@@ -81,9 +92,11 @@ Telegram: Token von @BotFather, Chat-ID z. B. über @userinfobot, dann in `.env`
 ![Biko](docs/biko-app.png)
 
 Neben FreqUI (Profi-Ansicht, Port 8080) startet `docker compose up -d` auch die **Biko-App** auf Port 8081.
-Sie zeigt nur das Wichtigste: Guthaben, vier Status-Kacheln (Bot-Status, Risiko, nächster Check, Gewinn bisher), die Trades
-(Paar, Betrag, Status, Zeit), welche Coins im Konto liegen, welche Strategie läuft und ob Kraken oder Binance, Spielgeld oder Echtgeld.
-Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Kacheln stehen im 2 × 2-Raster. Ganz oben sitzt Biko und zeigt, was los ist:
+Sie hat fünf Ansichten, erreichbar über die Icon-Leiste (unten am Handy, links am großen Bildschirm):
+**Übersicht** (Biko, Guthaben, Kurzstatus), **Bot** (Status-Kacheln, Pause/Weiter, Strategie), **Trades** (offen und zuletzt verkauft),
+**Konto** (Coins, Börse, Modus) und **Einstellen**. In allen Ansichten außer der Übersicht sitzt ein kleiner Biko oben und sagt, was los ist.
+Bewegung ist bewusst knapp: Eingänge mit Ease-out, Ausgänge kürzer, Knöpfe werden beim Drücken leicht kleiner, Listen kommen leicht versetzt,
+nichts federt. Mit "Bewegung reduzieren" im System bleibt nur Ein-/Ausblenden. Biko zeigt die Stimmung des Bots:
 
 | Biko … | wenn |
 |---|---|
@@ -103,12 +116,14 @@ Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Ka
   bei jedem offenen Trade **"Verkaufen"** (sofort zum Marktpreis, `/forceexit`). Jede Aktion fragt vorher nach.
   Von Hand kaufen, den Bot ganz stoppen oder Trades löschen geht über die App absichtlich nicht: nginx lässt außer Lesen (GET), Anmelden
   und diesen drei Aktionen nichts zum Bot durch (403). Die App lädt nichts von fremden Servern und hat kein Tracking.
-- Einstellungen (Zahnrad-Symbol in der Leiste): **Coins** (BTC, ETH, SOL, XRP, ADA, LINK, DOT, AVAX, LTC, DOGE), **Takt** (15 Min, 1 Std, 4 Std),
-  **Risiko pro Trade** (0,5 bis 3 %) und **gleichzeitige Trades** (1 bis 6). Speichern schreibt `user_data/biko-settings.json`
+- Einstellungen ("Einstellen" in der Leiste): **Strategie** (Trendfolger, Ausbruch, Rücksetzer, siehe oben), **Coins** (BTC, ETH, SOL, XRP, ADA, LINK, DOT, AVAX, LTC, DOGE),
+  **Takt** (15 Min, 1 Std, 4 Std), **Risiko pro Trade** (0,5 bis 3 %) und **gleichzeitige Trades** (1 bis 6). Speichern schreibt `user_data/biko-settings.json`
   (zweite `--config`, nicht im Repo) und lädt den Bot neu (`/reload_config`). Das macht der kleine Dienst `biko-settings`
   (`ui/settings/server.py`, nur Python-Standardbibliothek, kein offener Port). Er prüft jede Anfrage mit dem Login der App und nimmt nur erlaubte Werte an.
   Stop-Loss (−5 %), Tageslimit (−3 %) und Kill-Switch (−15 %) sind dort absichtlich nicht änderbar. Die Protections rechnen in Stunden und passen sich dem Takt an.
-  **Achtung:** Getestet ist die Strategie nur mit 4 Std und BTC/ETH/SOL. Andere Einstellungen vor Echtgeld erst im Testmodus und im Backtest prüfen.
+  Ein Strategie-Wechsel gilt sofort auch für offene Trades: sie werden ab dann nach den Exit-Regeln der neuen Strategie verkauft, der Stop-Loss bleibt.
+  Damit das geht, steht die Strategie in der Config (`"strategy"`) und **nicht** als `--strategy` im `docker-compose.yml` (das würde die Config überstimmen).
+  **Achtung:** Getestet ist nur der Trendfolger mit 4 Std und BTC/ETH/SOL. Andere Strategien oder Einstellungen vor Echtgeld erst im Testmodus und im Backtest prüfen.
 - Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
 - "Zum Home-Bildschirm hinzufügen" geht, dann sieht Biko aus wie eine eigene App. Den Port bitte **nicht** direkt ins Internet freigeben.
 - Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.

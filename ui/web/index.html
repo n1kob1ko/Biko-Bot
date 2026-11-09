@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0B1030">
+  <meta name="theme-color" content="#FFF6E8">
   <meta name="robots" content="noindex, nofollow">
   <title>Biko</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -11,29 +11,29 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="backdrop" aria-hidden="true"></div>
-
+  <!-- Leiste: unten am Handy, links am großen Bildschirm. Ein Knopf = eine Ansicht. -->
   <nav class="rail" id="rail" aria-label="Bereiche" hidden>
-    <a href="#home" class="nav-btn active" data-nav="home" aria-label="Übersicht">
+    <span class="rail-pill" aria-hidden="true"></span>
+    <button type="button" class="nav-btn" data-view="home" aria-label="Übersicht" aria-current="page">
       <svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
       <span>Übersicht</span>
-    </a>
-    <a href="#status" class="nav-btn" data-nav="status" aria-label="Bot">
+    </button>
+    <button type="button" class="nav-btn" data-view="bot" aria-label="Bot">
       <svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="4"/><path d="M12 8V4.5M9.5 13h.01M14.5 13h.01M3 13v2M21 13v2"/></svg>
       <span>Bot</span>
-    </a>
-    <a href="#trades-panel" class="nav-btn" data-nav="trades-panel" aria-label="Trades">
+    </button>
+    <button type="button" class="nav-btn" data-view="trades" aria-label="Trades">
       <svg viewBox="0 0 24 24"><path d="M5 8h12l-3-3M19 16H7l3 3"/></svg>
       <span>Trades</span>
-    </a>
-    <a href="#konto" class="nav-btn" data-nav="konto" aria-label="Konto">
+    </button>
+    <button type="button" class="nav-btn" data-view="konto" aria-label="Konto">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.5"/><path d="M5 19.5c1.2-3.2 3.8-5 7-5s5.8 1.8 7 5"/></svg>
       <span>Konto</span>
-    </a>
-    <a href="#einstellungen" class="nav-btn" data-nav="einstellungen" aria-label="Einstellungen">
+    </button>
+    <button type="button" class="nav-btn" data-view="einstellungen" aria-label="Einstellungen">
       <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       <span>Einstellen</span>
-    </a>
+    </button>
   </nav>
 
   <main class="app">
@@ -42,20 +42,9 @@
       <div class="chips" id="chips"></div>
     </header>
 
-    <section class="panel hero-panel" id="home">
-      <div class="hero">
-        <div class="biko-wrap" id="biko"></div>
-        <div class="bubble" id="bubble" aria-live="polite">Hallo!</div>
-      </div>
-      <div class="money" id="money" hidden>
-        <div class="label">Guthaben</div>
-        <div class="big" id="total">–</div>
-        <div class="delta" id="delta"></div>
-      </div>
-    </section>
-
     <!-- Login -->
     <section class="panel login" id="login" hidden>
+      <div class="hero hero-login"><div class="biko-wrap" id="biko-login"></div></div>
       <h1>Hallo, ich bin Biko!</h1>
       <p class="muted">Melde dich mit den Zugangsdaten deines Bots an.</p>
       <form id="login-form" autocomplete="on">
@@ -65,92 +54,140 @@
         <label>Passwort
           <input name="pass" type="password" autocomplete="current-password" required>
         </label>
-        <button type="submit">Los geht's</button>
+        <button type="submit" class="btn-main">Los geht's</button>
         <p class="error" id="login-error" hidden></p>
       </form>
       <p class="hint">Die Zugangsdaten stehen in <code>ZUGANGSDATEN.txt</code> bzw. in der <code>.env</code> (<code>API_SERVER__USERNAME</code> / <code>PASSWORD</code>).</p>
     </section>
 
-    <!-- Übersicht -->
-    <div class="grid" id="dash" hidden>
+    <!-- Kleiner Biko oben in allen Ansichten außer der Übersicht -->
+    <div class="mini" id="mini" hidden>
+      <div class="biko-mini" id="biko-mini"></div>
+      <div class="mini-bubble" id="mini-bubble" aria-live="polite"></div>
+    </div>
 
-      <section class="panel status-panel" id="status">
-        <h2>Bot</h2>
-        <div class="tiles">
-          <div class="tile"><div class="t-label">Bot-Status</div><div class="t-value" id="t-state">–</div></div>
-          <div class="tile"><div class="t-label">Risiko</div><div class="t-value" id="t-risk">–</div><div class="t-sub" id="t-risk-sub"></div></div>
-          <div class="tile"><div class="t-label">Nächster Check</div><div class="t-value" id="t-next">–</div></div>
-          <div class="tile"><div class="t-label">Gewinn bisher</div><div class="t-value" id="t-profit">–</div></div>
-          <div class="tile-hub" id="t-hub" aria-hidden="true"></div>
+    <div class="views" id="views" hidden>
+
+      <!-- Übersicht -->
+      <section class="view" data-view="home" id="view-home">
+        <div class="hero">
+          <div class="biko-wrap" id="biko"></div>
+          <div class="bubble" id="bubble" aria-live="polite">Hallo!</div>
         </div>
-        <button class="action" id="toggle-run" type="button" hidden></button>
+        <div class="money" id="money">
+          <div class="label">Guthaben</div>
+          <div class="big" id="total">–</div>
+          <div class="delta" id="delta"></div>
+        </div>
+        <div class="quick" id="quick">
+          <button type="button" class="qcard" data-go="bot">
+            <div class="q-label">Bot</div>
+            <div class="q-value" id="q-state">–</div>
+            <div class="q-sub" id="q-next"></div>
+          </button>
+          <button type="button" class="qcard" data-go="trades">
+            <div class="q-label">Trades</div>
+            <div class="q-value" id="q-trades">–</div>
+            <div class="q-sub" id="q-last"></div>
+          </button>
+        </div>
       </section>
 
-      <section class="panel trades-panel" id="trades-panel">
-        <h2>Trades</h2>
-        <ul class="trades" id="trades"></ul>
-      </section>
-
-      <section class="panel konto-panel" id="konto">
-        <h2>Konto</h2>
-        <div class="alloc" id="alloc" aria-hidden="true"></div>
-        <ul class="coins" id="coins"></ul>
-        <div class="facts" id="facts"></div>
-        <div class="strategy">
-          <div class="t-label">Strategie</div>
+      <!-- Bot -->
+      <section class="view" data-view="bot" id="view-bot" hidden>
+        <section class="panel status-panel">
+          <h2>Bot</h2>
+          <div class="tiles">
+            <div class="tile"><div class="t-label">Bot-Status</div><div class="t-value" id="t-state">–</div></div>
+            <div class="tile"><div class="t-label">Risiko</div><div class="t-value" id="t-risk">–</div><div class="t-sub" id="t-risk-sub"></div></div>
+            <div class="tile"><div class="t-label">Nächster Check</div><div class="t-value" id="t-next">–</div></div>
+            <div class="tile"><div class="t-label">Gewinn bisher</div><div class="t-value" id="t-profit">–</div></div>
+            <div class="tile-hub" id="t-hub" aria-hidden="true"></div>
+          </div>
+          <button class="action" id="toggle-run" type="button" hidden><span class="swap"></span></button>
+        </section>
+        <section class="panel">
+          <h2>Strategie</h2>
           <div class="strategy-name" id="strategy-name">–</div>
-          <p id="strategy-text" class="muted"></p>
-        </div>
-        <footer class="foot">
-          <span id="updated"></span>
-          <button class="link" id="logout" type="button">Abmelden</button>
-        </footer>
+          <p id="strategy-text" class="muted strategy-text"></p>
+          <div class="facts" id="strategy-facts"></div>
+          <button type="button" class="link link-arrow" data-go="einstellungen">Strategie oder Takt ändern</button>
+        </section>
       </section>
 
-      <section class="panel settings-panel" id="einstellungen">
-        <h2>Einstellungen</h2>
-        <p class="muted set-loading" id="set-loading">Lade Einstellungen …</p>
-        <div id="set-form" hidden>
-          <div class="set-block">
-            <div class="set-label">Coins</div>
-            <div class="set-hint">Mehr Coins heißt: öfter eine Chance auf einen Trend.</div>
-            <div class="coin-picks" id="set-coins"></div>
-          </div>
-          <div class="set-block">
-            <div class="set-label">Takt</div>
-            <div class="seg" id="set-tf" role="radiogroup" aria-label="Takt"></div>
-            <div class="set-hint" id="set-tf-hint"></div>
-          </div>
-          <div class="set-block">
-            <div class="set-label">Risiko pro Trade</div>
-            <div class="seg" id="set-risk" role="radiogroup" aria-label="Risiko pro Trade"></div>
-            <div class="set-hint" id="set-risk-hint"></div>
-          </div>
-          <div class="set-block">
-            <div class="set-label">Gleichzeitige Trades</div>
-            <div class="stepper">
-              <button type="button" id="set-mot-minus" aria-label="Weniger">−</button>
-              <span id="set-mot">3</span>
-              <button type="button" id="set-mot-plus" aria-label="Mehr">+</button>
+      <!-- Trades -->
+      <section class="view" data-view="trades" id="view-trades" hidden>
+        <section class="panel">
+          <h2>Trades</h2>
+          <ul class="trades" id="trades"></ul>
+        </section>
+      </section>
+
+      <!-- Konto -->
+      <section class="view" data-view="konto" id="view-konto" hidden>
+        <section class="panel">
+          <h2>Konto</h2>
+          <div class="alloc" id="alloc" aria-hidden="true"></div>
+          <ul class="coins" id="coins"></ul>
+          <div class="facts" id="facts"></div>
+          <footer class="foot">
+            <span id="updated"></span>
+            <button class="link" id="logout" type="button">Abmelden</button>
+          </footer>
+        </section>
+      </section>
+
+      <!-- Einstellungen -->
+      <section class="view" data-view="einstellungen" id="view-einstellungen" hidden>
+        <section class="panel settings-panel">
+          <h2>Einstellungen</h2>
+          <p class="muted set-loading" id="set-loading">Lade Einstellungen …</p>
+          <div id="set-form" hidden>
+            <div class="set-block">
+              <div class="set-label">Strategie</div>
+              <div class="set-hint">Nach welcher Regel Biko kauft und verkauft. Stop-Loss und Schutzregeln sind bei allen gleich.</div>
+              <div class="scards" id="set-strategy" role="radiogroup" aria-label="Strategie"></div>
             </div>
-            <div class="set-hint" id="set-mot-hint"></div>
+            <div class="set-block">
+              <div class="set-label">Coins</div>
+              <div class="set-hint">Mehr Coins heißt: öfter eine Chance auf ein Signal.</div>
+              <div class="coin-picks" id="set-coins"></div>
+            </div>
+            <div class="set-block">
+              <div class="set-label">Takt</div>
+              <div class="seg" id="set-tf" role="radiogroup" aria-label="Takt"></div>
+              <div class="set-hint" id="set-tf-hint"></div>
+            </div>
+            <div class="set-block">
+              <div class="set-label">Risiko pro Trade</div>
+              <div class="seg" id="set-risk" role="radiogroup" aria-label="Risiko pro Trade"></div>
+              <div class="set-hint" id="set-risk-hint"></div>
+            </div>
+            <div class="set-block">
+              <div class="set-label">Gleichzeitige Trades</div>
+              <div class="stepper">
+                <button type="button" id="set-mot-minus" aria-label="Weniger">−</button>
+                <span id="set-mot">3</span>
+                <button type="button" id="set-mot-plus" aria-label="Mehr">+</button>
+              </div>
+              <div class="set-hint" id="set-mot-hint"></div>
+            </div>
+            <button type="button" class="save" id="set-save" disabled><span class="swap">Gespeichert</span></button>
+            <p class="set-note">Immer an, egal was du einstellst: Stop-Loss, Tageslimit (−3 %) und Notbremse bei −15 %.</p>
           </div>
-          <button type="button" class="save" id="set-save" disabled>Speichern</button>
-          <p class="set-note">Immer an, egal was du einstellst: Stop-Loss, Tageslimit (−3 %) und Notbremse bei −15 %.</p>
-        </div>
+        </section>
       </section>
     </div>
   </main>
+
   <!-- Sicherheitsabfrage vor jeder Aktion -->
   <dialog class="confirm" id="confirm">
-    <form method="dialog">
-      <h3 id="confirm-title"></h3>
-      <p id="confirm-text" class="muted"></p>
-      <div class="confirm-buttons">
-        <button value="no" class="btn-ghost">Abbrechen</button>
-        <button value="yes" class="btn-main" id="confirm-ok">OK</button>
-      </div>
-    </form>
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-text" class="muted"></p>
+    <div class="confirm-buttons">
+      <button type="button" class="btn-ghost" data-answer="no">Abbrechen</button>
+      <button type="button" class="btn-main" id="confirm-ok" data-answer="yes">OK</button>
+    </div>
   </dialog>
   <script src="biko.js"></script>
   <script src="app.js"></script>
