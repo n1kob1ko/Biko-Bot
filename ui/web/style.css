@@ -547,12 +547,36 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 .biko[data-mood="offline"] .ear-r { rotate: 22deg; }
 .biko[data-mood="pause"] .tail { animation-duration: 4s; }
 
+/* ---------- Biko (dicker Vogel) ---------- */
+.biko .wing { fill: var(--biko-body); stroke: var(--biko-shade); stroke-width: 2.5; stroke-linejoin: round; }
+.biko .tuft-f { fill: var(--biko-shade); }
+.biko .tail-feathers { fill: var(--biko-shade); }
+.biko .chest-feathers { fill: none; stroke: #F6C66A; stroke-width: 2.5; stroke-linecap: round; opacity: .8; }
+.biko .bird-feet path { stroke: var(--bird-beak, #FF9F43); stroke-width: 4.5; }
+.biko .beak-top, .biko .beak-low { fill: var(--bird-beak, #FF9F43); }
+.biko .beak-inside { fill: #C2452F; }
+.biko .beak-shine { fill: none; stroke: #FFD3A0; stroke-width: 2; stroke-linecap: round; }
+.biko .beak-open { display: none; }
+.biko .tuft { transform-origin: 50% 100%; animation: tuft-sway 3.2s ease-in-out infinite; transition: rotate .4s ease; }
+.biko .tuft, .biko .beak-open, .biko .beak-top { transform-box: fill-box; }
+/* Schnabel auf beim Jubeln, beim Winken piepst Biko */
+.biko[data-mood="jubelt"] .beak-open, .biko[data-mood="winkt"] .beak-open { display: inline; }
+.biko[data-mood="jubelt"] .beak-top, .biko[data-mood="winkt"] .beak-top { translate: 0 -2px; }
+.biko[data-mood="winkt"] .beak-open { transform-origin: 50% 0; animation: chirp 1.6s ease-in-out infinite; }
+.biko[data-mood="schlaeft"] .tuft { rotate: -22deg; animation-duration: 6s; }
+.biko[data-mood="traurig"] .tuft { rotate: 24deg; animation: none; }
+.biko[data-mood="offline"] .tuft { rotate: 14deg; }
+.biko[data-mood="tippt"] .tuft { animation-duration: 1.2s; }
+.biko[data-mood="traurig"] .beak-top { translate: 0 2px; }
+
 /* ---------- Zwischendurch-Bewegungen (biko.js setzt data-fidget kurz) ---------- */
 .biko[data-fidget="hop"] .fidget-g { animation: hop .65s cubic-bezier(.3, .7, .4, 1); }
 .biko[data-fidget="tilt"] .fidget-g { animation: tilt 1.4s ease-in-out; }
 .biko[data-fidget="wiggle"] .fidget-g { animation: wiggle .7s ease-in-out; }
 .biko[data-fidget="boop"] .fidget-g { animation: boop .52s cubic-bezier(.3, .7, .4, 1); }
-.biko[data-fidget="antenna"] .antenna { animation: antenna-boing .9s ease-out; }
+.biko[data-fidget="antenna"] .antenna, .biko[data-fidget="tuft"] .tuft { animation: antenna-boing .9s ease-out; }
+.biko[data-fidget="flap"] .arm-l { transform-origin: 90% 10%; animation: flap-l .6s ease-in-out; }
+.biko[data-fidget="flap"] .arm-r { transform-origin: 10% 10%; animation: flap-r .6s ease-in-out; }
 .biko[data-fidget="ear"] .ear-r { animation: ear-twitch .45s ease-out; }
 .biko[data-fidget="tail"] .tail { animation: tail-flick .75s ease-in-out; }
 .biko-mini { cursor: pointer; }
@@ -564,6 +588,10 @@ code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius
 @keyframes tail-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(8deg); } }
 @keyframes tail-flick { 0%, 100% { transform: rotate(0); } 40% { transform: rotate(22deg); } 70% { transform: rotate(-8deg); } }
 @keyframes ear-twitch { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(18deg); } 55% { transform: rotate(-4deg); } 75% { transform: rotate(10deg); } }
+@keyframes tuft-sway { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes chirp { 0%, 40%, 100% { transform: scaleY(1); } 20%, 60% { transform: scaleY(.25); } }
+@keyframes flap-l { 0%, 100% { transform: rotate(0); } 25%, 75% { transform: rotate(28deg); } 50% { transform: rotate(6deg); } }
+@keyframes flap-r { 0%, 100% { transform: rotate(0); } 25%, 75% { transform: rotate(-28deg); } 50% { transform: rotate(-6deg); } }
 @keyframes antenna-boing { 0% { transform: rotate(0); } 25% { transform: rotate(-22deg); } 50% { transform: rotate(16deg); } 75% { transform: rotate(-8deg); } 100% { transform: rotate(0); } }
 @keyframes hop { 0%, 100% { transform: none; } 20% { transform: scale(1.05, .94); } 50% { transform: translateY(-14px) scale(.97, 1.04); } 80% { transform: scale(1.04, .96); } }
 @keyframes tilt { 0%, 100% { transform: rotate(0); } 30%, 65% { transform: rotate(-7deg); } }
