@@ -270,6 +270,42 @@ section[id] { scroll-margin-top: 12px; }
 .btn-ghost { background: var(--bg); color: var(--ink); }
 .btn-main { background: var(--ink); color: var(--bg); }
 
+
+/* Einstellungen */
+.set-block { padding: 14px 0; border-top: 1px solid var(--line); }
+.set-block:first-child { border-top: 0; padding-top: 0; }
+.set-label { font-weight: 800; font-size: 16px; }
+.set-hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.coin-picks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.pick {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
+  font: inherit; font-size: 14px; font-weight: 800; cursor: pointer;
+  background: var(--bg); color: var(--muted); border: 1.5px solid transparent;
+}
+.pick .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coin, #8E86A8); opacity: .35; }
+.pick.on { color: var(--ink); border-color: var(--ink); background: var(--card); }
+.pick.on .dot { opacity: 1; }
+.seg { display: flex; gap: 4px; margin-top: 10px; padding: 4px; border-radius: 14px; background: var(--bg); }
+.seg button {
+  flex: 1; padding: 10px 6px; border: 0; border-radius: 11px; background: none; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 800; color: var(--muted);
+}
+.seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px rgba(43, 33, 64, .12); }
+.stepper { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 4px; border-radius: 14px; background: var(--bg); }
+.stepper button {
+  width: 44px; height: 40px; border: 0; border-radius: 11px; background: var(--card); color: var(--ink);
+  font: inherit; font-size: 22px; font-weight: 800; cursor: pointer;
+}
+.stepper button:disabled { opacity: .35; cursor: default; }
+.stepper span { min-width: 40px; text-align: center; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.save {
+  display: block; width: 100%; margin-top: 8px; padding: 14px; border: 0; border-radius: 14px; cursor: pointer;
+  font: inherit; font-size: 16px; font-weight: 800; background: var(--ink); color: var(--bg);
+}
+.save:disabled { background: var(--bg); color: var(--muted); cursor: default; }
+.set-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; text-align: center; }
+@media (min-width: 900px) { .settings-panel { grid-column: 1 / -1; } }
+
 /* ===================== Biko ===================== */
 .biko .shadow { fill: rgba(43, 33, 64, 0.12); }
 .biko .torso, .biko .arm ellipse { fill: var(--biko-body); }

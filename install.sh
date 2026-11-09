@@ -112,6 +112,19 @@ else
   echo "[OK] Börse: Kraken"
 fi
 
+# Einstellungen der Biko-App (Coins, Takt, Risiko, max. Trades). Nur beim ersten Mal anlegen,
+# danach ändert man sie in der App. Freqtrade lädt die Datei als zweite --config.
+if [ ! -f user_data/biko-settings.json ]; then
+  cat > user_data/biko-settings.json <<'JSON'
+{
+  "timeframe": "4h",
+  "max_open_trades": 3,
+  "exchange": { "pair_whitelist": ["BTC/EUR", "ETH/EUR", "SOL/EUR"] },
+  "biko": { "risk_per_trade": 0.01 }
+}
+JSON
+fi
+
 # Der Container läuft als Benutzer 1000 und muss in user_data schreiben dürfen
 mkdir -p user_data/logs user_data/data
 chown -R 1000:1000 user_data

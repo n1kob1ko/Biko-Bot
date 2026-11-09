@@ -103,6 +103,12 @@ Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Ka
   bei jedem offenen Trade **"Verkaufen"** (sofort zum Marktpreis, `/forceexit`). Jede Aktion fragt vorher nach.
   Von Hand kaufen, den Bot ganz stoppen oder Trades löschen geht über die App absichtlich nicht: nginx lässt außer Lesen (GET), Anmelden
   und diesen drei Aktionen nichts zum Bot durch (403). Die App lädt nichts von fremden Servern und hat kein Tracking.
+- Einstellungen (Zahnrad-Symbol in der Leiste): **Coins** (BTC, ETH, SOL, XRP, ADA, LINK, DOT, AVAX, LTC, DOGE), **Takt** (15 Min, 1 Std, 4 Std),
+  **Risiko pro Trade** (0,5 bis 3 %) und **gleichzeitige Trades** (1 bis 6). Speichern schreibt `user_data/biko-settings.json`
+  (zweite `--config`, nicht im Repo) und lädt den Bot neu (`/reload_config`). Das macht der kleine Dienst `biko-settings`
+  (`ui/settings/server.py`, nur Python-Standardbibliothek, kein offener Port). Er prüft jede Anfrage mit dem Login der App und nimmt nur erlaubte Werte an.
+  Stop-Loss (−5 %), Tageslimit (−3 %) und Kill-Switch (−15 %) sind dort absichtlich nicht änderbar. Die Protections rechnen in Stunden und passen sich dem Takt an.
+  **Achtung:** Getestet ist die Strategie nur mit 4 Std und BTC/ETH/SOL. Andere Einstellungen vor Echtgeld erst im Testmodus und im Backtest prüfen.
 - Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
 - "Zum Home-Bildschirm hinzufügen" geht, dann sieht Biko aus wie eine eigene App. Den Port bitte **nicht** direkt ins Internet freigeben.
 - Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.
