@@ -3,44 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#FFF6E8">
+  <meta name="theme-color" content="#FFF6E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1C1830" media="(prefers-color-scheme: dark)">
   <meta name="robots" content="noindex, nofollow">
   <title>Biko Helfer</title>
-  <link rel="icon" href="biko.svg" type="image/svg+xml">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preload" href="fonts/atkinson-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="biko.css">
 </head>
 <body>
-  <!-- Texte stehen in app.js (Deutsch und Chinesisch). data-t = Text, data-t-ph = Platzhalter. -->
-  <button type="button" class="sprache-knopf" id="sprache-knopf" aria-label="Sprache wechseln">中文</button>
+  <!-- Texte stehen in texte.js (Deutsch und Chinesisch). data-t = Text, data-t-ph = Platzhalter, data-t-label = aria-label. -->
+  <svg class="icon-sammlung" aria-hidden="true" focusable="false"><!-- Phosphor Icons (MIT), Gewicht bold -->
+<symbol id="i-reden" viewBox="0 0 256 256"><path d="M120,128a16,16,0,1,1-16-16A16,16,0,0,1,120,128Zm32-16a16,16,0,1,0,16,16A16,16,0,0,0,152,112Zm84,16A108,108,0,0,1,78.77,224.15L46.34,235A20,20,0,0,1,21,209.66l10.81-32.43A108,108,0,1,1,236,128Zm-24,0A84,84,0,1,0,55.27,170.06a12,12,0,0,1,1,9.81l-9.93,29.79,29.79-9.93a12.1,12.1,0,0,1,3.8-.62,12,12,0,0,1,6,1.62A84,84,0,0,0,212,128Z"/></symbol>
+<symbol id="i-nachricht" viewBox="0 0 256 256"><path d="M224,44H32A12,12,0,0,0,20,56V192a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A12,12,0,0,0,224,44ZM193.15,68,128,127.72,62.85,68ZM44,188V83.28l75.89,69.57a12,12,0,0,0,16.22,0L212,83.28V188Z"/></symbol>
+<symbol id="i-erinnern" viewBox="0 0 256 256"><path d="M128,36A100,100,0,1,0,228,136,100.11,100.11,0,0,0,128,36Zm0,176a76,76,0,1,1,76-76A76.08,76.08,0,0,1,128,212ZM32.49,72.49a12,12,0,1,1-17-17l32-32a12,12,0,1,1,17,17Zm208,0a12,12,0,0,1-17,0l-32-32a12,12,0,1,1,17-17l32,32A12,12,0,0,1,240.49,72.49ZM176,124a12,12,0,0,1,0,24H128a12,12,0,0,1-12-12V88a12,12,0,0,1,24,0v36Z"/></symbol>
+<symbol id="i-einstellen" viewBox="0 0 256 256"><path d="M128,76a52,52,0,1,0,52,52A52.06,52.06,0,0,0,128,76Zm0,80a28,28,0,1,1,28-28A28,28,0,0,1,128,156Zm113.86-49.57A12,12,0,0,0,236,98.34L208.21,82.49l-.11-31.31a12,12,0,0,0-4.25-9.12,116,116,0,0,0-38-21.41,12,12,0,0,0-9.68.89L128,37.27,99.83,21.53a12,12,0,0,0-9.7-.9,116.06,116.06,0,0,0-38,21.47,12,12,0,0,0-4.24,9.1l-.14,31.34L20,98.35a12,12,0,0,0-5.85,8.11,110.7,110.7,0,0,0,0,43.11A12,12,0,0,0,20,157.66l27.82,15.85.11,31.31a12,12,0,0,0,4.25,9.12,116,116,0,0,0,38,21.41,12,12,0,0,0,9.68-.89L128,218.73l28.14,15.74a12,12,0,0,0,9.7.9,116.06,116.06,0,0,0,38-21.47,12,12,0,0,0,4.24-9.1l.14-31.34,27.81-15.81a12,12,0,0,0,5.85-8.11A110.7,110.7,0,0,0,241.86,106.43Zm-22.63,33.18-26.88,15.28a11.94,11.94,0,0,0-4.55,4.59c-.54,1-1.11,1.93-1.7,2.88a12,12,0,0,0-1.83,6.31L184.13,199a91.83,91.83,0,0,1-21.07,11.87l-27.15-15.19a12,12,0,0,0-5.86-1.53h-.29c-1.14,0-2.3,0-3.44,0a12.08,12.08,0,0,0-6.14,1.51L93,210.82A92.27,92.27,0,0,1,71.88,199l-.11-30.24a12,12,0,0,0-1.83-6.32c-.58-.94-1.16-1.91-1.7-2.88A11.92,11.92,0,0,0,63.7,155L36.8,139.63a86.53,86.53,0,0,1,0-23.24l26.88-15.28a12,12,0,0,0,4.55-4.58c.54-1,1.11-1.94,1.7-2.89a12,12,0,0,0,1.83-6.31L71.87,57A91.83,91.83,0,0,1,92.94,45.17l27.15,15.19a11.92,11.92,0,0,0,6.15,1.52c1.14,0,2.3,0,3.44,0a12.08,12.08,0,0,0,6.14-1.51L163,45.18A92.27,92.27,0,0,1,184.12,57l.11,30.24a12,12,0,0,0,1.83,6.32c.58.94,1.16,1.91,1.7,2.88A11.92,11.92,0,0,0,192.3,101l26.9,15.33A86.53,86.53,0,0,1,219.23,139.61Z"/></symbol>
+<symbol id="i-mikro" viewBox="0 0 256 256"><path d="M128,180a52.06,52.06,0,0,0,52-52V64A52,52,0,0,0,76,64v64A52.06,52.06,0,0,0,128,180ZM100,64a28,28,0,0,1,56,0v64a28,28,0,0,1-56,0Zm40,155.22V240a12,12,0,0,1-24,0V219.22A92.14,92.14,0,0,1,36,128a12,12,0,0,1,24,0,68,68,0,0,0,136,0,12,12,0,0,1,24,0A92.14,92.14,0,0,1,140,219.22Z"/></symbol>
+<symbol id="i-senden" viewBox="0 0 256 256"><path d="M233.86,110.48,65.8,14.58A20,20,0,0,0,37.15,38.64L67.33,128,37.15,217.36A20,20,0,0,0,56,244a20.1,20.1,0,0,0,9.81-2.58l.09-.06,168-96.07a20,20,0,0,0,0-34.81ZM63.19,215.26,88.61,140H144a12,12,0,0,0,0-24H88.61L63.18,40.72l152.76,87.17Z"/></symbol>
+<symbol id="i-stopp" viewBox="0 0 256 256"><path d="M200,36H56A20,20,0,0,0,36,56V200a20,20,0,0,0,20,20H200a20,20,0,0,0,20-20V56A20,20,0,0,0,200,36Zm-4,160H60V60H196Z"/></symbol>
+<symbol id="i-vorlesen" viewBox="0 0 256 256"><path d="M157.27,21.22a12,12,0,0,0-12.64,1.31L75.88,76H32A20,20,0,0,0,12,96v64a20,20,0,0,0,20,20H75.88l68.75,53.47A12,12,0,0,0,164,224V32A12,12,0,0,0,157.27,21.22ZM36,100H68v56H36Zm104,99.46L92,162.13V93.87l48-37.33ZM212,128a44,44,0,0,1-11,29.11,12,12,0,1,1-18-15.88,20,20,0,0,0,0-26.43,12,12,0,0,1,18-15.86A43.94,43.94,0,0,1,212,128Zm40,0a83.87,83.87,0,0,1-21.39,56,12,12,0,0,1-17.89-16,60,60,0,0,0,0-80,12,12,0,1,1,17.88-16A83.87,83.87,0,0,1,252,128Z"/></symbol>
+<symbol id="i-kopieren" viewBox="0 0 256 256"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></symbol>
+<symbol id="i-ok" viewBox="0 0 256 256"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></symbol>
+<symbol id="i-teilen" viewBox="0 0 256 256"><path d="M220,112v96a20,20,0,0,1-20,20H56a20,20,0,0,1-20-20V112A20,20,0,0,1,56,92H76a12,12,0,0,1,0,24H60v88H196V116H180a12,12,0,0,1,0-24h20A20,20,0,0,1,220,112ZM96.49,72.49,116,53v83a12,12,0,0,0,24,0V53l19.51,19.52a12,12,0,1,0,17-17l-40-40a12,12,0,0,0-17,0l-40,40a12,12,0,1,0,17,17Z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"/></symbol>
+<symbol id="i-loeschen" viewBox="0 0 256 256"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></symbol>
+<symbol id="i-zu" viewBox="0 0 256 256"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></symbol>
+<symbol id="i-sprache" viewBox="0 0 256 256"><path d="M250.73,210.63l-56-112a12,12,0,0,0-21.46,0l-20.52,41A84.2,84.2,0,0,1,114,126.22,107.48,107.48,0,0,0,139.33,68H160a12,12,0,0,0,0-24H108V32a12,12,0,0,0-24,0V44H32a12,12,0,0,0,0,24h83.13A83.69,83.69,0,0,1,96,110.35,84,84,0,0,1,83.6,91a12,12,0,1,0-21.81,10A107.55,107.55,0,0,0,78,126.24,83.54,83.54,0,0,1,32,140a12,12,0,0,0,0,24,107.47,107.47,0,0,0,64-21.07,108.4,108.4,0,0,0,45.39,19.44l-24.13,48.26a12,12,0,1,0,21.46,10.73L151.41,196h65.17l12.68,25.36a12,12,0,1,0,21.47-10.73ZM163.41,172,184,130.83,204.58,172Z"/></symbol>
+<symbol id="i-pfeil" viewBox="0 0 256 256"><path d="M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z"/></symbol>
+</svg>
+
+  <!-- Sprache: kleines Menü, das am Knopf aufgeht -->
+  <div class="sprache">
+    <button type="button" id="sprache-knopf" class="druck" aria-haspopup="menu" aria-expanded="false" aria-controls="sprache-menue">
+      <svg class="icon " aria-hidden="true"><use href="#i-sprache"/></svg><span id="sprache-name"></span><svg class="icon pfeil" aria-hidden="true"><use href="#i-pfeil"/></svg>
+    </button>
+    <div id="sprache-menue" role="menu" data-t-label="sprache" hidden>
+      <button type="button" role="menuitemradio" data-sprache="de" lang="de"><span>Deutsch</span><svg class="icon " aria-hidden="true"><use href="#i-ok"/></svg></button>
+      <button type="button" role="menuitemradio" data-sprache="zh" lang="zh-CN"><span>中文</span><svg class="icon " aria-hidden="true"><use href="#i-ok"/></svg></button>
+    </div>
+  </div>
 
   <!-- Anmelden: nur einmal pro Handy -->
   <section id="login" class="login" hidden>
-    <img src="biko.svg" alt="" class="biko gross">
+    <div class="biko-platz" data-biko></div>
     <h1 data-t="login_titel"></h1>
-    <p data-t="login_text"></p>
+    <p class="leise" data-t="login_text"></p>
     <form id="login-form">
       <label for="passwort" data-t="passwort"></label>
-      <input id="passwort" type="password" autocomplete="current-password" required>
-      <button type="submit" class="knopf haupt" data-t="anmelden"></button>
-      <p id="login-fehler" class="fehler" role="alert"></p>
+      <input id="passwort" type="password" autocomplete="current-password" required aria-describedby="login-fehler">
+      <p id="login-fehler" class="meldung fehler" role="alert"></p>
+      <button type="submit" class="knopf haupt druck" data-t="anmelden"></button>
     </form>
   </section>
 
   <main id="app" hidden>
-    <!-- Erinnerung, die gerade fällig ist: groß über allem, bis "Erledigt" gedrückt wird -->
-    <div id="alarm" class="alarm" role="alertdialog" aria-live="assertive" hidden>
-      <img src="biko.svg" alt="" class="biko wackelt">
-      <p class="alarm-titel" data-t="erinnerung"></p>
-      <p id="alarm-text" class="alarm-text"></p>
-      <button type="button" id="alarm-ok" class="knopf haupt" data-t="erledigt"></button>
-      <button type="button" id="alarm-spaeter" class="knopf" data-t="spaeter"></button>
-    </div>
-
+    <div class="ansichten">
     <!-- 1. Reden und fragen -->
     <section class="ansicht" data-ansicht="reden">
-      <header class="kopf">
-        <img src="biko.svg" alt="" class="biko" id="biko-reden">
+      <header class="kopf gross" id="reden-kopf">
+        <div class="biko-platz" data-biko="haupt" id="biko-reden"></div>
         <div>
           <h1 id="gruss"></h1>
           <p class="leise" data-t="reden_text"></p>
@@ -48,112 +71,161 @@
       </header>
       <div id="vorschlaege" class="vorschlaege"></div>
       <div id="verlauf" class="verlauf" aria-live="polite"></div>
-      <form id="chat-form" class="eingabe">
-        <textarea id="chat-text" rows="2" data-t-ph="hier_schreiben" aria-label="Nachricht an Biko"></textarea>
-        <div class="eingabe-knoepfe">
-          <button type="button" class="knopf mikro" data-ziel="chat-text" data-t="sprechen"></button>
-          <button type="submit" class="knopf haupt" data-t="senden"></button>
-        </div>
-      </form>
+      <div class="eingabe-platz">
+        <p id="chat-hinweis" class="meldung klein" role="status"></p>
+        <form id="chat-form" class="eingabe">
+          <textarea id="chat-text" rows="1" data-t-ph="eingabe" data-t-label="eingabe" enterkeyhint="send"></textarea>
+          <button type="submit" id="chat-knopf" class="druck" data-art="mikro">
+            <span class="wechsel"><svg class="icon i-mikro" aria-hidden="true"><use href="#i-mikro"/></svg><svg class="icon i-senden" aria-hidden="true"><use href="#i-senden"/></svg><svg class="icon i-stopp" aria-hidden="true"><use href="#i-stopp"/></svg></span>
+          </button>
+        </form>
+      </div>
     </section>
 
     <!-- 2. Nachricht schreiben -->
     <section class="ansicht" data-ansicht="nachricht" hidden>
       <header class="kopf">
-        <img src="biko.svg" alt="" class="biko">
+        <div class="biko-platz" data-biko></div>
         <div>
           <h1 data-t="nachricht_titel"></h1>
           <p class="leise" data-t="nachricht_text"></p>
         </div>
       </header>
-      <form id="nachricht-form" class="karte">
+      <form id="nachricht-form" class="karte reihe">
         <label for="nachricht-an" data-t="an_wen"></label>
-        <input id="nachricht-an" data-t-ph="an_wen_ph">
+        <input id="nachricht-an" type="text" aria-describedby="nachricht-an-hilfe" autocomplete="off">
+        <p class="hilfe detail" id="nachricht-an-hilfe" data-t="an_wen_hilfe"></p>
         <label for="nachricht-was" data-t="was_sagen"></label>
-        <textarea id="nachricht-was" rows="3" data-t-ph="was_sagen_ph"></textarea>
-        <div class="eingabe-knoepfe">
-          <button type="button" class="knopf mikro" data-ziel="nachricht-was" data-t="sprechen"></button>
-          <button type="submit" class="knopf haupt" data-t="schreiben"></button>
-        </div>
+        <textarea id="nachricht-was" rows="3" aria-describedby="nachricht-was-hilfe"></textarea>
+        <p class="hilfe detail" id="nachricht-was-hilfe" data-t="was_sagen_hilfe"></p>
+        <button type="submit" class="knopf haupt druck" id="nachricht-los"><svg class="icon " aria-hidden="true"><use href="#i-nachricht"/></svg><span data-t="schreiben"></span></button>
+        <p id="nachricht-fehler" class="meldung fehler" role="alert"></p>
       </form>
-      <div id="nachricht-ergebnis" class="karte ergebnis" hidden>
-        <p class="leise" data-t="so_lautet"></p>
+      <div id="nachricht-ergebnis" class="karte" hidden>
+        <h2 data-t="so_lautet"></h2>
         <p id="nachricht-text" class="nachricht-text"></p>
-        <div class="eingabe-knoepfe">
-          <button type="button" id="nachricht-kopieren" class="knopf haupt" data-t="kopieren"></button>
-          <button type="button" id="nachricht-teilen" class="knopf" data-t="teilen"></button>
+        <div class="zwei">
+          <button type="button" id="nachricht-kopieren" class="knopf haupt druck" data-zustand="ruhe">
+            <span class="wechsel"><svg class="icon i-ruhe" aria-hidden="true"><use href="#i-kopieren"/></svg><svg class="icon i-ok" aria-hidden="true"><use href="#i-ok"/></svg></span><span id="nachricht-kopieren-text"></span>
+          </button>
+          <button type="button" id="nachricht-teilen" class="knopf druck"><svg class="icon " aria-hidden="true"><use href="#i-teilen"/></svg><span data-t="teilen"></span></button>
         </div>
-        <p id="nachricht-info" class="leise" role="status"></p>
+        <p id="nachricht-info" class="meldung" role="status"></p>
       </div>
     </section>
 
     <!-- 3. Erinnerungen -->
     <section class="ansicht" data-ansicht="erinnern" hidden>
       <header class="kopf">
-        <img src="biko.svg" alt="" class="biko">
+        <div class="biko-platz" data-biko></div>
         <div>
           <h1 data-t="erinnern_titel"></h1>
           <p class="leise" data-t="erinnern_text"></p>
         </div>
       </header>
-      <ul id="erinnerungen" class="liste"></ul>
-      <form id="erinnerung-form" class="karte">
-        <h2 data-t="neue_erinnerung"></h2>
-        <label for="erinnerung-zeit" data-t="uhrzeit"></label>
-        <input id="erinnerung-zeit" type="time" required value="08:00">
-        <label for="erinnerung-text" data-t="woran"></label>
-        <input id="erinnerung-text" required maxlength="120" data-t-ph="woran_ph">
-        <fieldset class="tage" id="tage-wahl">
-          <legend data-t="welche_tage"></legend>
-        </fieldset>
-        <button type="submit" class="knopf haupt" data-t="speichern"></button>
-      </form>
-      <button type="button" id="ton-test" class="knopf" data-t="ton_test"></button>
+      <button type="button" id="erinnerung-neu" class="knopf haupt druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neue_erinnerung"></span></button>
+      <ul id="erinnerungen" class="liste" aria-live="polite"></ul>
+      <button type="button" id="ton-test" class="knopf druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="ton_test"></span></button>
     </section>
 
     <!-- Einstellungen (für die Familie) -->
     <section class="ansicht" data-ansicht="einstellen" hidden>
       <header class="kopf">
-        <img src="biko.svg" alt="" class="biko">
+        <div class="biko-platz" data-biko></div>
         <div>
           <h1 data-t="einstellen_titel"></h1>
           <p class="leise" data-t="einstellen_text"></p>
         </div>
       </header>
-      <form id="profil-form" class="karte">
+      <form id="profil-form" class="karte reihe">
         <label for="profil-name" data-t="name"></label>
-        <input id="profil-name" maxlength="80" data-t-ph="name_ph">
+        <input id="profil-name" type="text" maxlength="80" aria-describedby="profil-name-hilfe" autocomplete="off">
+        <p class="hilfe detail" id="profil-name-hilfe" data-t="name_hilfe"></p>
         <label for="profil-anrede" data-t="anrede"></label>
         <select id="profil-anrede">
           <option value="du" data-t="anrede_du"></option>
           <option value="Sie" data-t="anrede_sie"></option>
         </select>
         <label for="profil-diaet" data-t="diaet"></label>
-        <textarea id="profil-diaet" rows="4" data-t-ph="diaet_ph"></textarea>
+        <textarea id="profil-diaet" rows="3" aria-describedby="profil-diaet-hilfe"></textarea>
+        <p class="hilfe detail" id="profil-diaet-hilfe" data-t="diaet_hilfe"></p>
         <label for="profil-notizen" data-t="notizen"></label>
-        <textarea id="profil-notizen" rows="4" data-t-ph="notizen_ph"></textarea>
-        <label class="schalter"><input type="checkbox" id="vorlesen"> <span data-t="vorlesen_immer"></span></label>
-        <label for="schrift" data-t="schrift"></label>
-        <select id="schrift">
-          <option value="1" data-t="schrift_normal"></option>
-          <option value="1.15" data-t="schrift_gross"></option>
-          <option value="1.3" data-t="schrift_sehr_gross"></option>
-        </select>
-        <button type="submit" class="knopf haupt" data-t="speichern"></button>
-        <p id="profil-info" class="leise" role="status"></p>
+        <textarea id="profil-notizen" rows="3" aria-describedby="profil-notizen-hilfe"></textarea>
+        <p class="hilfe detail" id="profil-notizen-hilfe" data-t="notizen_hilfe"></p>
+        <button type="submit" class="knopf haupt druck" id="profil-speichern" data-zustand="ruhe">
+          <span class="wechsel"><svg class="icon i-ok" aria-hidden="true"><use href="#i-ok"/></svg></span><span id="profil-speichern-text"></span>
+        </button>
+        <p id="profil-info" class="meldung" role="status"></p>
       </form>
-      <button type="button" id="verlauf-loeschen" class="knopf" data-t="vergessen"></button>
-      <p class="leise klein" data-t="hinweis"></p>
+      <div class="karte reihe">
+        <div class="schalter-zeile">
+          <span id="vorlesen-text" data-t="vorlesen_immer"></span>
+          <button type="button" id="vorlesen" class="schalter" role="switch" aria-checked="false" aria-labelledby="vorlesen-text">
+            <span class="bahn"><span class="knauf"></span></span>
+          </button>
+        </div>
+        <p class="label" id="schrift-text" data-t="schrift"></p>
+        <div id="schrift" class="segment" role="group" aria-labelledby="schrift-text">
+          <button type="button" data-wert="1" data-t="schrift_normal"></button>
+          <button type="button" data-wert="1.15" data-t="schrift_gross"></button>
+          <button type="button" data-wert="1.3" data-t="schrift_sehr_gross"></button>
+          <div class="oben" aria-hidden="true">
+            <span data-t="schrift_normal"></span><span data-t="schrift_gross"></span><span data-t="schrift_sehr_gross"></span>
+          </div>
+        </div>
+      </div>
+      <button type="button" id="verlauf-loeschen" class="knopf druck reihe" data-t="vergessen"></button>
+      <p id="vergessen-info" class="meldung" role="status"></p>
+      <p class="leise klein hinweis detail" data-t="hinweis"></p>
     </section>
+    </div>
 
-    <nav class="leiste" aria-label="Bereiche">
-      <button type="button" data-ziel="reden" aria-current="page"><span aria-hidden="true">💬</span><b data-t="tab_reden"></b></button>
-      <button type="button" data-ziel="nachricht"><span aria-hidden="true">✉️</span><b data-t="tab_nachricht"></b></button>
-      <button type="button" data-ziel="erinnern"><span aria-hidden="true">⏰</span><b data-t="tab_erinnern"></b></button>
-      <button type="button" data-ziel="einstellen"><span aria-hidden="true">⚙️</span><b data-t="tab_einstellen"></b></button>
+    <nav class="leiste" data-t-label="bereiche">
+      <span class="leiste-kissen" aria-hidden="true"></span>
+      <button type="button" data-ziel="reden" aria-current="page"><svg class="icon " aria-hidden="true"><use href="#i-reden"/></svg><span data-t="tab_reden"></span></button>
+      <button type="button" data-ziel="nachricht"><svg class="icon " aria-hidden="true"><use href="#i-nachricht"/></svg><span data-t="tab_nachricht"></span></button>
+      <button type="button" data-ziel="erinnern"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="tab_erinnern"></span></button>
+      <button type="button" data-ziel="einstellen"><svg class="icon " aria-hidden="true"><use href="#i-einstellen"/></svg><span data-t="tab_einstellen"></span></button>
     </nav>
   </main>
 
+  <!-- Blatt: neue Erinnerung. Geht aus dem Plus-Knopf auf, lässt sich nach unten wegziehen. -->
+  <dialog id="blatt" aria-labelledby="blatt-titel">
+    <div class="blatt-inhalt">
+      <div class="blatt-griff" aria-hidden="true"></div>
+      <div class="blatt-kopf">
+        <h2 id="blatt-titel" data-t="neue_erinnerung" tabindex="-1" autofocus></h2>
+        <button type="button" id="blatt-zu" class="rund-klein druck" data-t-label="schliessen"><svg class="icon " aria-hidden="true"><use href="#i-zu"/></svg></button>
+      </div>
+      <form id="erinnerung-form">
+        <label for="erinnerung-zeit" data-t="uhrzeit"></label>
+        <input id="erinnerung-zeit" type="time" required value="08:00">
+        <label for="erinnerung-text" data-t="woran"></label>
+        <input id="erinnerung-text" type="text" required maxlength="120" aria-describedby="erinnerung-text-hilfe" autocomplete="off">
+        <p class="hilfe" id="erinnerung-text-hilfe" data-t="woran_hilfe"></p>
+        <fieldset>
+          <legend data-t="welche_tage"></legend>
+          <div class="tage" id="tage-wahl"></div>
+        </fieldset>
+        <p id="erinnerung-fehler" class="meldung fehler" role="alert"></p>
+        <button type="submit" class="knopf haupt druck" data-t="speichern"></button>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- Erinnerung, die gerade fällig ist: groß über allem, bis "Erledigt" gedrückt wird -->
+  <div id="alarm" class="alarm" role="alertdialog" aria-labelledby="alarm-titel" aria-describedby="alarm-text" hidden>
+    <div class="biko-platz" data-biko></div>
+    <p class="alarm-titel" id="alarm-titel" data-t="erinnerung"></p>
+    <p id="alarm-text" class="alarm-text"></p>
+    <button type="button" id="alarm-ok" class="knopf haupt druck"><svg class="icon " aria-hidden="true"><use href="#i-ok"/></svg><span data-t="erledigt"></span></button>
+    <button type="button" id="alarm-spaeter" class="knopf druck" data-t="spaeter"></button>
+  </div>
+
+  <script src="texte.js"></script>
+  <script src="logik.js"></script>
+  <script src="biko.js"></script>
+  <script src="bewegung.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

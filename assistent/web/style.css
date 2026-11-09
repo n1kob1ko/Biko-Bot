@@ -1,151 +1,397 @@
-/* Biko Helfer: groß, hell, einfach. Große Knöpfe (mind. 56 px), große Schrift, starker Kontrast. */
+/* Biko Helfer. Für ältere Augen und Finger: große Schrift, große Tippflächen, starker Kontrast.
+   Ecken: Knöpfe und Felder 16 px, Karten 22 px, runde Aktionen und Chips ganz rund.
+   Bewegung: Eingänge bremsen ab (ease-out), Wege auf dem Bildschirm ease-in-out, Ausgänge 20 % kürzer,
+   nichts federt. Nur transform, opacity, clip-path und filter werden bewegt. */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(fonts/atkinson-latin-ext.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(fonts/atkinson-latin.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #FFF6E8;
-  --karte: #FFFFFF;
+  --card: #FFFFFF;
   --ink: #2B2140;
-  --leise: #5E5672;
-  --linie: #EADBC2;
-  --gelb: #FFC94D;
-  --gelb-dunkel: #F2A535;
-  --gruen: #12855A;
-  --rot: #C23348;
-  --biko-blase: #FFF0C7;
-  --radius: 20px;
+  --muted: #5E5672;
+  --line: #E6D5B8;
+  --accent: #FFC94D;          /* Biko-Gelb: die eine Akzentfarbe */
+  --accent-stark: #E0902A;
+  --accent-ink: #2B2140;      /* Schrift auf Gelb */
+  --blase: #FFEFC2;           /* Bikos Sprechblase */
+  --up: #0F7A52;
+  --up-bg: #DDF5E9;
+  --down: #B32B40;
+  --down-bg: #FDE3E6;
+  --down-ink: #FFFFFF;        /* Symbol auf Rot */
+  --schatten: 0 6px 20px rgba(43, 33, 64, .10);
+  --schatten-hoch: 0 14px 40px rgba(43, 33, 64, .18);
+
+  --r-feld: 16px;
+  --r-karte: 22px;
   --schrift: 1;
-  --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  /* Lateinisch: Atkinson Hyperlegible (für schwache Augen gezeichnet). Chinesisch: die Schrift des Handys. */
+  --font: "Atkinson Hyperlegible Next", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --t-druck: 160ms;
+  --t-ein: 220ms;
+  --t-aus: 176ms;             /* 20 % kürzer als der Eingang */
   color-scheme: light;
 }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1C1830;
+    --card: #28233F;
+    --ink: #F6F0FF;
+    --muted: #BDB5D6;
+    --line: #453E63;
+    --accent-stark: #FFC94D;
+    --blase: #3B3257;
+    --up: #5BDCA4;
+    --up-bg: #1E3A33;
+    --down: #FF8E9C;
+    --down-bg: #43243A;
+    --down-ink: #2B2140;
+    --schatten: 0 6px 20px rgba(0, 0, 0, .35);
+    --schatten-hoch: 0 14px 40px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+
 * { box-sizing: border-box; }
-html { font-size: calc(19px * var(--schrift)); }
+html { font-size: calc(19px * var(--schrift)); -webkit-text-size-adjust: 100%; scrollbar-color: var(--line) transparent; }
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font);
-  line-height: 1.45;
-  -webkit-text-size-adjust: 100%;
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  caret-color: var(--accent-stark);
 }
+::selection { background: var(--accent); color: var(--accent-ink); }
 [hidden] { display: none !important; }
-h1 { font-size: 1.45rem; margin: 0; line-height: 1.2; }
-h2 { font-size: 1.15rem; margin: 0 0 .4rem; }
-.leise { color: var(--leise); margin: .2rem 0 0; }
-.klein { font-size: .85rem; margin-top: 1.2rem; }
-.fehler { color: var(--rot); font-weight: 600; min-height: 1.4em; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+h1 { font-size: 1.55rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0 0 .25rem; }
+p { margin: 0; }
+.leise { color: var(--muted); }
+.klein { font-size: .875rem; }
+.icon-sammlung { position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon { width: 1.5em; height: 1.5em; flex: none; fill: currentColor; }
 
-/* Ansichten */
-#app { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(110px + env(safe-area-inset-bottom)); }
-.kopf { display: flex; align-items: center; gap: 14px; margin: 8px 0 16px; }
-.biko { width: 72px; height: 72px; flex: none; animation: atmen 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
-.biko.gross { width: 140px; height: 140px; }
-.biko.denkt { animation: tippen .5s ease-in-out infinite; }
-.biko.wackelt { width: 110px; height: 110px; animation: wackeln .9s ease-in-out infinite; }
-@keyframes atmen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04, .97); } }
-@keyframes tippen { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-4px) rotate(-3deg); } }
-@keyframes wackeln { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
-@media (prefers-reduced-motion: reduce) { .biko, .biko.denkt, .biko.wackelt { animation: none; } }
+/* ---------- Gerüst ---------- */
+#app, .login { max-width: 560px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 16px 0; }
+#app { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
+body { --oben: max(14px, env(safe-area-inset-top)); --leiste-hoehe: calc(98px + env(safe-area-inset-bottom)); }
+.ansichten { display: grid; }
+.ansicht { grid-area: 1 / 1; min-width: 0; }
+/* Wechsel: alte und neue Ansicht liegen kurz übereinander */
+.ansicht.kommt { animation: kommt var(--t-ein) var(--ease-out) both; }
+.ansicht.geht { animation: geht var(--t-aus) ease both; pointer-events: none; }
+@keyframes kommt { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes geht { from { opacity: 1; } to { opacity: 0; } }
+@keyframes blende-ein { from { opacity: 0; } to { opacity: 1; } }
 
-/* Formulare */
-label { display: block; font-weight: 700; margin: .9rem 0 .35rem; }
-input, textarea, select {
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  background: #fff;
-  border: 2px solid var(--linie);
-  border-radius: 14px;
-  padding: 14px;
-  min-height: 56px;
-}
-textarea { resize: vertical; }
-input:focus, textarea:focus, select:focus { outline: 3px solid var(--gelb-dunkel); outline-offset: 1px; border-color: var(--gelb-dunkel); }
-.karte { background: var(--karte); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; box-shadow: 0 2px 0 var(--linie); }
-.tage { border: 0; padding: 0; margin: .9rem 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.tage legend { font-weight: 700; margin-bottom: .35rem; padding: 0; }
-.tage label { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 10px 12px; border: 2px solid var(--linie); border-radius: 12px; font-weight: 600; }
-.tage input, .schalter input { width: 26px; height: 26px; min-height: 0; margin: 0; accent-color: var(--gelb-dunkel); }
-.schalter { display: flex; align-items: center; gap: 12px; }
+/* Kopf eines Bereichs: kleiner Biko und Titel in einer Zeile (rechts bleibt Platz für den Sprachknopf),
+   die Erklärung darunter über die ganze Breite */
+.kopf { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; align-items: center; min-height: 56px; margin: 0 0 16px; padding-right: 64px; }
+.kopf > div { display: contents; }
+.kopf .biko-platz { width: 64px; aspect-ratio: 240 / 210; }
+.kopf h1 { font-size: 1.35rem; overflow-wrap: anywhere; hyphens: auto; }
+.kopf p { grid-column: 1 / -1; margin: 10px -64px 0 0; }
+/* Start: großer Biko in der Mitte, solange noch nichts gesagt wurde */
+.kopf.gross { display: flex; flex-direction: column; text-align: center; padding: 40px 0 0; gap: 6px; }
+.kopf.gross > div { display: block; }
+.kopf.gross .biko-platz { width: min(200px, 50vw, 22dvh); }
+.kopf.gross h1 { font-size: 1.55rem; }
+.kopf.gross p { max-width: 30ch; margin: .2rem auto 0; }
+.ansicht > .knopf { margin-bottom: 14px; }
 
-/* Knöpfe */
+/* Zeilen kommen um 30 ms versetzt, Details setzen sich danach */
+.kommt .reihe { animation: reihe 260ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 30ms); }
+.kommt .detail { animation: blende-ein 220ms ease both; animation-delay: calc(var(--i, 0) * 30ms + 120ms); }
+@keyframes reihe { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Knöpfe ---------- */
 .knopf {
-  font: inherit; font-weight: 700;
-  min-height: 60px; padding: 0 22px;
-  border-radius: 16px; border: 2px solid var(--linie);
-  background: #fff; color: var(--ink);
-  cursor: pointer; width: 100%; margin-top: 10px;
-  transition: transform 140ms ease-out;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 60px; padding: 0 22px;
+  border-radius: var(--r-feld); border: 2px solid var(--line);
+  background: var(--card); color: var(--ink); font-weight: 700; cursor: pointer;
+  position: relative;
 }
-.knopf:active { transform: scale(.97); }
-.knopf.haupt { background: var(--gelb); border-color: var(--gelb-dunkel); }
-.knopf:disabled { opacity: .55; }
-.knopf.hoert { background: var(--rot); border-color: var(--rot); color: #fff; }
-.eingabe-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.eingabe-knoepfe .knopf { margin-top: 10px; }
+.knopf.haupt { background: var(--accent); border-color: var(--accent-stark); color: var(--accent-ink); }
+.knopf:disabled { opacity: .6; cursor: default; }
+/* Drücken: sofort kleiner (solange gehalten ohne Übergang), Loslassen weich */
+.druck { transition: transform var(--t-druck) var(--ease-out); }
+.druck:active:not(:disabled) { transform: scale(0.97); transition-duration: 40ms; }
 
-/* Gespräch */
-.verlauf { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.blase { max-width: 88%; padding: 12px 16px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.blase.biko-sagt { background: var(--biko-blase); align-self: flex-start; border-bottom-left-radius: 6px; }
-.blase.ich { background: #fff; align-self: flex-end; border: 2px solid var(--linie); border-bottom-right-radius: 6px; }
-.blase.fehler-blase { background: #FDE3E6; color: var(--rot); align-self: flex-start; }
-.blase .vorlesen { display: block; margin-top: 6px; background: none; border: 0; font: inherit; font-size: .9rem; color: var(--leise); padding: 6px 0; cursor: pointer; text-decoration: underline; }
-.eingabe { position: sticky; bottom: calc(96px + env(safe-area-inset-bottom)); background: var(--bg); padding-top: 6px; }
+/* Erfolg: ein Ring pulsiert einmal nach außen */
+.puls::after {
+  content: ""; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  animation: puls 620ms var(--ease-out) both;
+}
+@keyframes puls { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--up) 55%, transparent); } to { box-shadow: 0 0 0 16px transparent; } }
 
-/* Nachricht */
-.nachricht-text { font-size: 1.15rem; background: var(--biko-blase); padding: 14px; border-radius: 14px; white-space: pre-wrap; }
+/* Symbolwechsel: altes und neues Symbol blenden mit leichter Unschärfe ineinander */
+.wechsel { position: relative; display: inline-grid; width: 1.5em; height: 1.5em; flex: none; }
+.wechsel .icon {
+  grid-area: 1 / 1; opacity: 0; transform: scale(.6); filter: blur(4px);
+  transition: opacity 180ms ease, transform 180ms var(--ease-out), filter 180ms ease;
+}
+[data-art="mikro"] .i-mikro, [data-art="senden"] .i-senden, [data-art="stopp"] .i-stopp,
+[data-zustand="ruhe"] .i-ruhe, [data-zustand="ok"] .i-ok, [data-zustand="laeuft"] .i-laeuft {
+  opacity: 1; transform: none; filter: none;
+}
 
-/* Erinnerungen */
+/* ---------- Formulare ---------- */
+.karte { background: var(--card); border-radius: var(--r-karte); padding: 18px; margin: 0 0 16px; box-shadow: var(--schatten); }
+label, legend, .label { display: block; font-weight: 700; margin: 1rem 0 .35rem; padding: 0; }
+.karte > label:first-child, .karte > h2 + label { margin-top: .2rem; }
+input[type="text"], input[type="password"], input[type="time"], textarea, select {
+  width: 100%; min-height: 58px; padding: 14px;
+  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld);
+}
+textarea { resize: none; display: block; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--accent-stark); outline-offset: 1px; border-color: var(--accent-stark); }
+.hilfe { color: var(--muted); font-size: .875rem; margin-top: .3rem; }
+.meldung { color: var(--muted); margin-top: .6rem; }
+.meldung:empty { display: none; }
+#nachricht-info { scroll-margin-bottom: 130px; }
+.meldung.fehler { color: var(--down); font-weight: 700; }
+.karte .knopf { margin-top: 1.1rem; }
+fieldset { border: 0; padding: 0; margin: 1rem 0 0; }
+legend { margin-top: 0; }
+.tage { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tage label {
+  display: inline-flex; align-items: center; justify-content: center; margin: 0; cursor: pointer;
+  min-width: 52px; min-height: 52px; padding: 0 12px; border-radius: 999px;
+  border: 2px solid var(--line); background: var(--card); font-weight: 700;
+  transition: background-color 160ms ease, border-color 160ms ease, transform var(--t-druck) var(--ease-out);
+}
+.tage label:active { transform: scale(0.97); transition-duration: 40ms; }
+.tage input { position: absolute; opacity: 0; pointer-events: none; }
+.tage label:has(input:checked) { background: var(--accent); border-color: var(--accent-stark); color: var(--accent-ink); }
+.tage label:has(input:focus-visible) { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+/* Schalter: der Knauf wandert und dehnt sich unterwegs (Bewegung in app.js) */
+.schalter-zeile { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.schalter-zeile span { font-weight: 700; }
+.schalter {
+  flex: none; width: 68px; height: 52px; padding: 8px 6px; border: 0; background: none; cursor: pointer; border-radius: 999px;
+}
+.schalter .bahn { display: block; height: 36px; border-radius: 999px; background: var(--line); transition: background-color 200ms ease; }
+.schalter .knauf {
+  display: block; width: 28px; height: 28px; margin: 4px; border-radius: 999px; background: #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .28); transform: translateX(0px);
+}
+.schalter[aria-checked="true"] .bahn { background: var(--up); }
+.schalter[aria-checked="true"] .knauf { transform: translateX(20px); }
+
+/* Auswahl in Segmenten: die gelbe Ebene liegt darüber und wird auf die gewählte Stelle zugeschnitten.
+   So wechselt die Schriftfarbe genau an der Kante, während der Ausschnitt wandert. */
+.segment { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 4px; border-radius: var(--r-feld); background: var(--bg); border: 2px solid var(--line); }
+.segment button { min-height: 52px; padding: 0 2px; border: 0; background: none; font-weight: 700; font-size: .92rem; color: var(--muted); border-radius: 12px; cursor: pointer; transition: transform var(--t-druck) var(--ease-out); }
+.segment button:active, #sprache-menue button:active { transform: scale(0.97); transition-duration: 40ms; }
+.segment .oben {
+  position: absolute; inset: 4px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--accent); color: var(--accent-ink); border-radius: 12px; pointer-events: none;
+  clip-path: inset(0 66.667% 0 0 round 12px);
+  transition: clip-path 260ms var(--ease-in-out);
+}
+.segment .oben span { display: grid; place-items: center; text-align: center; padding: 0 2px; font-weight: 700; font-size: .92rem; }
+
+/* ---------- Sprache ---------- */
+.sprache { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; z-index: 5; }
+@media (min-width: 592px) { .sprache { right: calc(50% - 280px + 16px); } }
+#sprache-knopf {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px;
+  border-radius: 999px; border: 2px solid var(--line); background: var(--card); font-weight: 700; cursor: pointer;
+}
+#sprache-knopf .pfeil { width: 1em; height: 1em; transition: transform 200ms var(--ease-out); }
+/* Neben einem Titel ist der Knopf nur das Sprachsymbol */
+.kompakt #sprache-name, .kompakt #sprache-knopf .pfeil { display: none; }
+.kompakt #sprache-knopf { width: 52px; height: 52px; padding: 0; justify-content: center; }
+#sprache-knopf[aria-expanded="true"] .pfeil { transform: rotate(180deg); }
+#sprache-menue {
+  position: absolute; right: 0; top: calc(100% + 8px); min-width: 190px; padding: 6px;
+  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld); box-shadow: var(--schatten-hoch);
+  transform-origin: calc(100% - 28px) -8px;   /* geht am Knopf auf */
+}
+#sprache-menue button {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 0 14px;
+  border: 0; border-radius: 12px; background: none; font-weight: 700; cursor: pointer; text-align: left;
+  transition: transform var(--t-druck) var(--ease-out);
+}
+#sprache-menue button[aria-checked="true"] { background: var(--blase); }
+#sprache-menue button .icon { opacity: 0; }
+#sprache-menue button[aria-checked="true"] .icon { opacity: 1; }
+
+/* ---------- Reden ---------- */
+.vorschlaege, .vorschlaege-geist { display: grid; gap: 10px; margin: 6px 0 16px; }
+.vorschlag, .vorschlag-geist {
+  min-height: 58px; padding: 12px 18px; text-align: left; cursor: pointer;
+  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld); box-shadow: var(--schatten);
+}
+.verlauf { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.blase { max-width: 88%; padding: 12px 16px; border-radius: 22px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.blase.ich { align-self: flex-end; background: var(--card); border: 2px solid var(--line); border-bottom-right-radius: 8px; }
+.blase.biko-sagt { align-self: flex-start; background: var(--blase); border-bottom-left-radius: 8px; animation: kommt var(--t-ein) var(--ease-out) both; }
+.blase.fehler-blase { align-self: flex-start; background: var(--down-bg); color: var(--down); font-weight: 700; }
+.blase .vorlesen {
+  display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 8px 0 -4px -8px; padding: 0 12px 0 8px;
+  border: 0; border-radius: 999px; background: none; color: var(--muted); font-weight: 700; font-size: .9rem; cursor: pointer;
+}
+.blase.denkt { align-self: flex-start; background: var(--blase); display: inline-flex; gap: 7px; align-items: center; min-height: 52px; }
+.blase.denkt i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); animation: punkt 1.1s ease-in-out infinite; }
+.blase.denkt i:nth-child(2) { animation-delay: .15s; }
+.blase.denkt i:nth-child(3) { animation-delay: .3s; }
+@keyframes punkt { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
+.nur-vorlesen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Das Eingabefeld steht immer unten über der Leiste. Was dahinter durchläuft, blendet davor aus. */
+.ansicht[data-ansicht="reden"] { display: flex; flex-direction: column; min-height: calc(100dvh - var(--oben) - var(--leiste-hoehe)); margin-bottom: -26px; }
+.eingabe-platz {
+  position: sticky; bottom: var(--leiste-hoehe); z-index: 2; margin: auto -16px 0; padding: 20px 16px 12px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 20px);
+  box-shadow: 0 100px 0 var(--bg);   /* deckt auch den Streifen neben und unter der Leiste ab */
+}
+.eingabe-platz .meldung { margin: 0 4px 10px; }
+.eingabe {
+  display: flex; align-items: flex-end; gap: 10px; padding: 8px;
+  background: var(--card); border: 2px solid var(--line); border-radius: 30px; box-shadow: var(--schatten);
+}
+.eingabe textarea { border: 0; background: none; font-size: min(1rem, 21px); min-height: 60px; max-height: 9.5rem; padding: 16px 6px 14px 14px; flex: 1; outline: none; }
+.eingabe:focus-within { border-color: var(--accent-stark); }
+#chat-knopf {
+  position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink);
+  transition: transform var(--t-druck) var(--ease-out), background-color 200ms ease, color 200ms ease;
+}
+#chat-knopf .wechsel { font-size: 1.25rem; }
+#chat-knopf[data-art="stopp"] { background: var(--down); color: var(--down-ink); }
+#chat-knopf[data-art="stopp"]::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  border: 3px solid var(--down); animation: welle 1.4s ease-out infinite;
+}
+@keyframes welle { from { transform: scale(1); opacity: .7; } to { transform: scale(1.5); opacity: 0; } }
+
+/* Im Gespräch bleibt der kleine Biko oben stehen: an ihm sieht man, ob er zuhört oder nachdenkt */
+#reden-kopf:not(.gross) { position: sticky; top: 0; z-index: 3; margin: 0 -16px 12px; padding: 8px 80px 8px 16px; background: var(--bg); }
+#reden-kopf:not(.gross) p { display: none; }
+#chat-knopf:disabled { opacity: .5; cursor: default; }
+/* Kopie, die kurz stehen bleibt und ausblendet (bewegung.js) */
+.geist { position: absolute; z-index: 4; margin: 0; pointer-events: none; }
+
+/* ---------- Nachricht ---------- */
+#nachricht-ergebnis { scroll-margin-bottom: 130px; }
+#profil-speichern .wechsel { position: absolute; left: 20px; }
+.nachricht-text { font-size: 1.15rem; background: var(--blase); padding: 16px; border-radius: var(--r-feld); white-space: pre-wrap; margin-top: .5rem; }
+.zwei { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.zwei:has(> [hidden]) { grid-template-columns: 1fr; }
+
+/* ---------- Erinnerungen ---------- */
 .liste { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
-.liste li { background: var(--karte); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; box-shadow: 0 2px 0 var(--linie); }
-.liste .zeit { font-size: 1.4rem; font-weight: 800; }
-.liste .tage-text { color: var(--leise); font-size: .9rem; }
-.liste .weg { min-height: 56px; min-width: 56px; border-radius: 14px; border: 2px solid var(--linie); background: #fff; font: inherit; cursor: pointer; }
+.erinnerung {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+  background: var(--card); border-radius: var(--r-karte); padding: 12px 12px 12px 18px; box-shadow: var(--schatten);
+}
+.erinnerung .zeit { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.erinnerung .tage-text { color: var(--muted); font-size: .875rem; }
+.erinnerung .weg {
+  width: 56px; height: 56px; display: grid; place-items: center; border-radius: var(--r-feld);
+  border: 2px solid var(--line); background: var(--card); color: var(--down); cursor: pointer;
+}
+.erinnerung.neu { animation: reihe 320ms var(--ease-out) both; }
+.erinnerung .sicher { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 4px 6px 6px 0; }
+.erinnerung .sicher p { grid-column: 1 / -1; font-weight: 700; }
+.erinnerung .sicher .ja { border-color: var(--down); color: var(--down); }
+.leer-zeile { color: var(--muted); padding: 22px 18px; border: 2px dashed var(--line); border-radius: var(--r-karte); }
+.unter-liste { display: grid; gap: 10px; }
 
+/* Blatt für "Neue Erinnerung": geht aus dem Plus-Knopf auf und dorthin wieder zu */
+#blatt {
+  width: min(560px, 100%); max-width: 100%; max-height: 96dvh; margin: auto auto 0; padding: 0; border: 0;
+  background: none; color: inherit; overflow: visible;
+}
+#blatt-titel:focus { outline: none; }
+#blatt::backdrop { background: rgba(28, 24, 48, .45); animation: blende-ein var(--t-ein) ease both; }
+#blatt.schliesst::backdrop { animation: geht var(--t-aus) ease both; }
+.blatt-inhalt {
+  background: var(--card); border-radius: 28px 28px 0 0; padding: 8px 18px calc(22px + env(safe-area-inset-bottom));
+  box-shadow: var(--schatten-hoch); max-height: 96dvh; overflow-y: auto; touch-action: pan-y;
+}
+.blatt-griff { height: 28px; display: grid; place-items: center; cursor: grab; touch-action: none; }
+.blatt-griff::before { content: ""; width: 52px; height: 6px; border-radius: 3px; background: var(--line); }
+.blatt-kopf { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.blatt-kopf h2 { margin: 0; }
+#erinnerung-form .knopf { margin-top: 1.1rem; }
+.rund-klein { width: 52px; height: 52px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--line); background: var(--card); cursor: pointer; }
 
-/* Alarm */
+/* ---------- Erinnerung, die gerade fällig ist ---------- */
 .alarm {
-  position: fixed; inset: 0; z-index: 10;
-  background: var(--bg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 20; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   padding: 24px; text-align: center;
 }
-.alarm-titel { font-weight: 700; color: var(--leise); margin: 12px 0 0; }
-.alarm-text { font-size: 2rem; font-weight: 800; margin: 8px 0 20px; max-width: 18ch; }
-.alarm .knopf { max-width: 420px; }
+.alarm .biko-platz { width: min(230px, 60vw); aspect-ratio: 240 / 210; }
+.alarm-titel { font-weight: 700; color: var(--muted); margin-top: 10px; }
+.alarm-text { font-size: 2rem; font-weight: 800; line-height: 1.2; margin: 4px 0 22px; max-width: 16ch; text-wrap: balance; }
+.alarm .knopf { max-width: 420px; margin-top: 10px; }
+.alarm > * { animation: reihe 320ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms); }
 
-/* Anmelden */
-.login { max-width: 460px; margin: 0 auto; padding: 40px 16px; text-align: center; }
-.login form { text-align: left; margin-top: 16px; }
+/* ---------- Anmelden ---------- */
+.login { padding-top: 64px; text-align: center; }
+.login .biko-platz { width: min(220px, 58vw); aspect-ratio: 240 / 210; margin: 0 auto 8px; }
+.login form { text-align: left; margin-top: 22px; }
+.login p { max-width: 32ch; margin: .4rem auto 0; }
 
-/* Leiste unten */
+/* ---------- Leiste unten: ein Kissen wandert zum gewählten Bereich ---------- */
 .leiste {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  background: #fff; border-top: 2px solid var(--linie);
-  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  position: fixed; z-index: 10; left: 50%; translate: -50% 0; bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(528px, calc(100% - 24px)); display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px;
+  background: var(--card); border: 2px solid var(--line); border-radius: 26px; box-shadow: var(--schatten-hoch);
 }
+.leiste-kissen {
+  position: absolute; left: 0; top: 6px; bottom: 6px; width: 10px; border-radius: 20px; background: var(--accent);
+  pointer-events: none; opacity: 0; transform: translateX(0px);
+}
+.leiste-kissen.bereit { opacity: 1; }
 .leiste button {
-  font: inherit; font-size: .85rem; font-weight: 700; color: var(--leise);
-  background: none; border: 0; border-radius: 14px;
-  min-height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  cursor: pointer;
+  position: relative; min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; background: none; border-radius: 20px; cursor: pointer;
+  font-size: calc(15px + (var(--schrift) - 1) * 6px); font-weight: 700; color: var(--muted);
+  transition: color 200ms ease, transform var(--t-druck) var(--ease-out);
 }
-.leiste button span { font-size: 1.6rem; line-height: 1; }
-.leiste button[aria-current="page"] { background: var(--biko-blase); color: var(--ink); }
+.leiste button .icon { width: 28px; height: 28px; }
+.leiste button[aria-current="page"] { color: var(--accent-ink); }
+.leiste button:active { transform: scale(0.97); transition-duration: 40ms; }
 
-/* Sprache wechseln: immer oben rechts */
-.sprache-knopf {
-  position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px; z-index: 5;
-  font: inherit; font-weight: 800; font-size: .95rem;
-  min-height: 48px; padding: 0 16px; border-radius: 999px;
-  border: 2px solid var(--gelb-dunkel); background: #fff; color: var(--ink); cursor: pointer;
-}
-.kopf { padding-right: 96px; }
+/* Niedriger Bildschirm (Handy im Browser): weniger Vorschläge, damit nichts hinter dem Eingabefeld liegt */
+@media (max-height: 800px) { .vorschlag:nth-child(n+4) { display: none; } }
+@media (max-height: 720px) { .vorschlag:nth-child(n+3) { display: none; } }
 
-/* Vorschläge zum Antippen, solange noch nichts geredet wurde */
-.vorschlaege { display: grid; gap: 10px; margin-bottom: 14px; }
-.vorschlag {
-  font: inherit; text-align: left; padding: 14px 16px; min-height: 56px;
-  background: #fff; border: 2px dashed var(--gelb-dunkel); border-radius: 16px; color: var(--ink); cursor: pointer;
+@media (hover: hover) and (pointer: fine) {
+  .knopf:hover:not(:disabled), .vorschlag:hover, #sprache-knopf:hover, .rund-klein:hover, .erinnerung .weg:hover { border-color: var(--accent-stark); }
+  .leiste button:hover, .segment button:hover, .blase .vorlesen:hover { color: var(--ink); }
+  #sprache-menue button:hover { background: var(--bg); }
 }
-.blase.denkt-blase { background: var(--biko-blase); align-self: flex-start; color: var(--leise); font-style: italic; }
-.liste .leer-zeile { display: block; color: var(--leise); }
+
+/* "Bewegung reduzieren": nichts wandert oder wächst, es wird nur ein- und ausgeblendet */
+@media (prefers-reduced-motion: reduce) {
+  .ansicht.kommt, .kommt .reihe, .alarm > *, .blase.biko-sagt { animation-name: blende-ein; animation-duration: 160ms; animation-delay: 0s; }
+  .druck:active:not(:disabled), .tage label:active, .leiste button:active, .segment button:active, #sprache-menue button:active { transform: none; }
+  .erinnerung.neu { animation-name: blende-ein; animation-duration: 160ms; }
+  .wechsel .icon { transform: none; filter: none; }
+  .segment .oben, #sprache-knopf .pfeil { transition: none; }
+  .puls::after, #chat-knopf[data-art="stopp"]::before { animation: none; }
+}

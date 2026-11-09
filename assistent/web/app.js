@@ -1,307 +1,449 @@
-// Biko Helfer: Oberfläche auf Deutsch und Chinesisch. Keine externen Abhängigkeiten.
+// Biko Helfer: Verhalten der Oberfläche, ohne externe Abhängigkeiten.
+// Texte stehen in texte.js, die reine Logik in logik.js (getestet), die Bewegungen in bewegung.js.
 (function () {
   'use strict';
-
-  // ---------- Texte ----------
-  const T = {
-    de: {
-      login_titel: 'Hallo, ich bin Biko!',
-      login_text: 'Bitte einmal das Passwort eingeben. Danach merkt sich das Handy dich.',
-      passwort: 'Passwort', anmelden: 'Anmelden',
-      erinnerung: 'Erinnerung', erledigt: 'Erledigt', spaeter: 'In 10 Minuten nochmal',
-      hallo: 'Hallo!', hallo_name: 'Hallo, {name}!',
-      reden_text: 'Frag mich, was du willst. Oder erzähl mir einfach etwas.',
-      hier_schreiben: 'Hier schreiben …', sprechen: '🎤 Sprechen', hoere: '● Ich höre zu …', senden: 'Senden',
-      vorlesen: '🔊 Vorlesen', stopp: '■ Stopp', denkt: 'Biko denkt nach …',
-      vorschlaege: ['Gibt es diese Woche Angebote für Kaffee?', 'Was kann ich heute Gesundes kochen?', 'Erzähl mir etwas Schönes', 'Wie wird das Wetter morgen?'],
-      nachricht_titel: 'Nachricht schreiben', nachricht_text: 'Sag mir kurz, was du sagen willst. Ich schreibe es schön.',
-      an_wen: 'An wen?', an_wen_ph: 'z. B. meine Enkelin Anna',
-      was_sagen: 'Was willst du sagen?', was_sagen_ph: 'z. B. danke für die Blumen, Sonntag Kaffee?',
-      schreiben: 'Schreiben', so_lautet: 'So könnte die Nachricht lauten:',
-      kopieren: 'Kopieren', teilen: 'Senden mit …',
-      kopiert: 'Kopiert! Jetzt in WeChat, WhatsApp oder SMS lange drücken und "Einfügen" wählen.',
-      kopieren_geht_nicht: 'Kopieren ging nicht. Bitte den Text lange drücken und kopieren.',
-      erinnern_titel: 'Erinnerungen', erinnern_text: 'Ich melde mich, wenn es so weit ist. Dafür diese Seite offen lassen.',
-      neue_erinnerung: 'Neue Erinnerung', uhrzeit: 'Uhrzeit', woran: 'Woran soll ich erinnern?',
-      woran_ph: 'z. B. Blutdrucktablette nehmen', welche_tage: 'An welchen Tagen?', speichern: 'Speichern',
-      ton_test: 'Ton und Hinweis testen', test_text: 'So sieht eine Erinnerung aus.',
-      keine_erinnerungen: 'Noch keine Erinnerungen.', jeden_tag: 'jeden Tag', loeschen: 'Löschen',
-      tage: { mo: 'Mo', di: 'Di', mi: 'Mi', do: 'Do', fr: 'Fr', sa: 'Sa', so: 'So' },
-      einstellen_titel: 'Einstellungen', einstellen_text: 'Für die Familie. Biko liest das bei jeder Antwort mit.',
-      name: 'Name', name_ph: 'z. B. Oma Li', anrede: 'Anrede', anrede_du: 'du', anrede_sie: 'Sie',
-      diaet: 'Diät-Regeln', diaet_ph: 'z. B. Diabetes: wenig Zucker und Weißmehl. Kein Grapefruitsaft (Medikament).',
-      notizen: 'Gut zu wissen', notizen_ph: 'z. B. Enkel heißt Niko. Hört schlecht, mag Gartenarbeit.',
-      vorlesen_immer: 'Antworten immer laut vorlesen', schrift: 'Schriftgröße',
-      schrift_normal: 'Normal', schrift_gross: 'Groß', schrift_sehr_gross: 'Sehr groß',
-      gespeichert: 'Gespeichert.', vergessen: 'Gespräch vergessen', vergessen_ok: 'Biko hat das Gespräch vergessen.',
-      hinweis: 'Biko ist eine KI und kann sich irren. Notfall: 144. Fragen zur Gesundheit: 1450.',
-      tab_reden: 'Reden', tab_nachricht: 'Nachricht', tab_erinnern: 'Erinnern', tab_einstellen: 'Einstellen',
-      kein_mikro: 'Sprechen geht in diesem Browser leider nicht. Bitte die Mikrofon-Taste der Tastatur benutzen.',
-      fehler: 'Das hat nicht geklappt. Bitte nochmal probieren.',
-      sprache_knopf: '中文',
-    },
-    zh: {
-      login_titel: '你好，我是 Biko！',
-      login_text: '请输入一次密码。之后手机会记住你。',
-      passwort: '密码', anmelden: '登录',
-      erinnerung: '提醒', erledigt: '已完成', spaeter: '10 分钟后再提醒',
-      hallo: '你好！', hallo_name: '你好，{name}！',
-      reden_text: '想问什么都可以。或者跟我聊聊天。',
-      hier_schreiben: '在这里输入……', sprechen: '🎤 说话', hoere: '● 我在听……', senden: '发送',
-      vorlesen: '🔊 朗读', stopp: '■ 停止', denkt: 'Biko 正在想……',
-      vorschlaege: ['这周超市有什么优惠？', '今天做什么健康的菜？', '跟我说点开心的事', '明天天气怎么样？'],
-      nachricht_titel: '写消息', nachricht_text: '简单告诉我你想说什么，我帮你写好。',
-      an_wen: '发给谁？', an_wen_ph: '例如：我的孙女安娜',
-      was_sagen: '想说什么？', was_sagen_ph: '例如：谢谢你的花，周日一起喝咖啡？',
-      schreiben: '帮我写', so_lautet: '消息可以这样写：',
-      kopieren: '复制', teilen: '发送到……',
-      kopiert: '已复制！在微信、WhatsApp 或短信里长按，选择"粘贴"。',
-      kopieren_geht_nicht: '复制失败。请长按文字复制。',
-      erinnern_titel: '提醒', erinnern_text: '时间到了我会提醒你。请让这个页面保持打开。',
-      neue_erinnerung: '新提醒', uhrzeit: '时间', woran: '提醒什么？',
-      woran_ph: '例如：吃降压药', welche_tage: '哪几天？', speichern: '保存',
-      ton_test: '测试声音和提醒', test_text: '提醒就是这个样子。',
-      keine_erinnerungen: '还没有提醒。', jeden_tag: '每天', loeschen: '删除',
-      tage: { mo: '一', di: '二', mi: '三', do: '四', fr: '五', sa: '六', so: '日' },
-      einstellen_titel: '设置', einstellen_text: '给家人填写。Biko 每次回答都会参考这些内容。',
-      name: '名字', name_ph: '例如：李奶奶', anrede: '称呼', anrede_du: '你（德语 du）', anrede_sie: '您（德语 Sie）',
-      diaet: '饮食规则', diaet_ph: '例如：糖尿病，少糖少白面。不喝西柚汁（药物）。',
-      notizen: '其他信息', notizen_ph: '例如：孙子叫 Niko。听力不好，喜欢种花。',
-      vorlesen_immer: '总是朗读回答', schrift: '字体大小',
-      schrift_normal: '正常', schrift_gross: '大', schrift_sehr_gross: '特大',
-      gespeichert: '已保存。', vergessen: '忘记对话', vergessen_ok: 'Biko 已经忘记这段对话。',
-      hinweis: 'Biko 是人工智能，可能会出错。紧急情况请拨 144。健康问题请拨 1450。',
-      tab_reden: '聊天', tab_nachricht: '消息', tab_erinnern: '提醒', tab_einstellen: '设置',
-      kein_mikro: '这个浏览器不能用语音。请用键盘上的麦克风按钮。',
-      fehler: '没有成功，请再试一次。',
-      sprache_knopf: 'Deutsch',
-    },
-  };
+  const T = window.BikoTexte, L = window.BikoLogik, B = window.BikoBewegung, M = window.Maskottchen;
   const STIMME = { de: 'de-AT', zh: 'zh-CN' };
   const TAGE = ['mo', 'di', 'mi', 'do', 'fr', 'sa', 'so'];
-  const JS_TAG = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa']; // Date.getDay()
 
-  const $ = (s) => document.querySelector(s);
-  const $$ = (s) => Array.from(document.querySelectorAll(s));
-  const merken = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* egal */ } };
+  const $ = (s, wo = document) => wo.querySelector(s);
+  const $$ = (s, wo = document) => Array.from(wo.querySelectorAll(s));
+  const merken = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* privates Fenster */ } };
   const holen = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const neu = (tag, klasse, text) => {
+    const el = document.createElement(tag);
+    if (klasse) el.className = klasse;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  };
+  const icon = (name, klasse = '') => `<svg class="icon ${klasse}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
-  let sprache = holen('sprache') === 'zh' ? 'zh' : 'de';
-  let profil = {};
-  let erinnerungen = [];
+  // Sprache der Oberfläche: gemerkte Wahl, sonst die Sprache des Handys
+  let sprache = holen('sprache') || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'de');
+  if (!T[sprache]) sprache = 'de';
   const t = (k) => T[sprache][k] ?? T.de[k] ?? k;
 
-  // ---------- Sprache der Oberfläche ----------
+  let profil = {};
+  let erinnerungen = [];
+  let angemeldet = false;
+  let aktiv = 'reden'; // der gezeigte Bereich
+  const spracheKnopf = $('#sprache-knopf'), spracheMenue = $('#sprache-menue');
+  // Neben einem Titel ist für den ausgeschriebenen Sprachknopf kein Platz: dann zeigt er nur sein Symbol
+  const kopfRichten = () => document.body.classList.toggle('kompakt',
+    angemeldet && (aktiv !== 'reden' || !$('#reden-kopf').classList.contains('gross')));
+
+  // ---------- Biko zeigt, was gerade passiert ----------
+  $$('[data-biko]').forEach((el) => M.mount(el, { decorative: el.dataset.biko !== 'haupt' }));
+  let ruheUhr;
+  function stimmung(art, zurueckNach) {
+    clearTimeout(ruheUhr);
+    M.setMood(art);
+    if (zurueckNach) ruheUhr = setTimeout(() => M.setMood('da'), zurueckNach);
+  }
+  $('#biko-reden').addEventListener('click', () => M.fidget('boop'));
+
+  // ---------- Texte ----------
   function texteSetzen() {
     document.documentElement.lang = sprache === 'zh' ? 'zh-CN' : 'de';
     $$('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
     $$('[data-t-ph]').forEach((el) => { el.placeholder = t(el.dataset.tPh); });
-    $('#sprache-knopf').textContent = t('sprache_knopf');
+    $$('[data-t-label]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.tLabel)));
+    $('#sprache-name').textContent = t('sprache_' + sprache);
+    spracheKnopf.setAttribute('aria-label', `${t('sprache')}: ${t('sprache_' + sprache)}`);
+    $$('#sprache-menue [data-sprache]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.sprache === sprache)));
     $('#gruss').textContent = profil.name ? t('hallo_name').replace('{name}', profil.name) : t('hallo');
+    $$('.blase .vorlesen').forEach((k) => { k.lastElementChild.textContent = t(k.dataset.zustand === 'laeuft' ? 'stopp' : 'vorlesen'); });
+    $$('.blase.denkt .nur-vorlesen').forEach((el) => { el.textContent = t('denkt'); });
+    zustand($('#nachricht-kopieren'), 'ruhe', 'kopieren');
+    zustand($('#profil-speichern'), 'ruhe', 'speichern');
+    knopfZeigen();
     tageAufbauen();
     vorschlaegeZeigen();
     erinnerungenZeigen();
   }
+  // Knopf mit Zustand: Symbol und Beschriftung wechseln zusammen
+  function zustand(knopf, art, textSchluessel) {
+    knopf.dataset.zustand = art;
+    knopf.lastElementChild.textContent = t(textSchluessel);
+  }
+  function bestaetigen(knopf, okText, ruheText) {
+    zustand(knopf, 'ok', okText);
+    B.puls(knopf);
+    clearTimeout(knopf._zurueck);
+    knopf._zurueck = setTimeout(() => zustand(knopf, 'ruhe', ruheText), 2600);
+  }
 
-  $('#sprache-knopf').addEventListener('click', () => {
-    sprache = sprache === 'zh' ? 'de' : 'zh';
-    merken('sprache', sprache);
-    texteSetzen();
-    if (!$('#app').hidden) {
-      profil.sprache = STIMME[sprache];
-      api('/api/profil', profil).catch(() => {});
-    }
+  // ---------- Sprachmenü (geht am Knopf auf) ----------
+  function menueZu(fokus) {
+    if (spracheKnopf.getAttribute('aria-expanded') !== 'true') return;
+    spracheKnopf.setAttribute('aria-expanded', 'false');
+    B.zuklappen(spracheMenue);
+    if (fokus) spracheKnopf.focus();
+  }
+  spracheKnopf.addEventListener('click', () => {
+    if (spracheKnopf.getAttribute('aria-expanded') === 'true') return menueZu();
+    spracheKnopf.setAttribute('aria-expanded', 'true');
+    B.aufklappen(spracheMenue);
   });
+  spracheMenue.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sprache]');
+    if (!b) return;
+    if (b.dataset.sprache !== sprache) {
+      sprache = b.dataset.sprache;
+      merken('sprache', sprache);
+      texteSetzen();
+      if (angemeldet) { // Biko antwortet im Zweifel in dieser Sprache
+        profil.sprache = STIMME[sprache];
+        api('/api/profil', profil).catch(() => {});
+      }
+    }
+    menueZu(true);
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.sprache')) menueZu(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menueZu(true); });
 
   // ---------- Server ----------
   async function api(pfad, daten) {
-    const r = await fetch(pfad, {
-      method: daten === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
-      body: daten === undefined ? undefined : JSON.stringify(daten),
-      credentials: 'same-origin',
-    });
+    let r;
+    try {
+      r = await fetch(pfad, {
+        method: daten === undefined ? 'GET' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
+        body: daten === undefined ? undefined : JSON.stringify(daten),
+        credentials: 'same-origin',
+      });
+    } catch (e) { throw new Error(t('keine_verbindung')); }
     let j = {};
     try { j = await r.json(); } catch (e) { /* leer */ }
-    if (r.status === 401) { loginZeigen(); }
+    if (r.status === 401 && pfad !== '/api/login') loginZeigen();
     if (!r.ok) throw new Error(j.fehler || t('fehler'));
     return j;
   }
 
   // ---------- Anmelden ----------
-  function loginZeigen() { $('#app').hidden = true; $('#login').hidden = false; }
-
+  function loginZeigen() {
+    angemeldet = false;
+    $('#app').hidden = true;
+    $('#login').hidden = false;
+    kopfRichten();
+    stimmung('winkt');
+  }
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const knopf = $('#login-form button[type=submit]');
     $('#login-fehler').textContent = '';
+    knopf.disabled = true;
     try {
       await api('/api/login', { passwort: $('#passwort').value });
       $('#passwort').value = '';
       await starten();
     } catch (err) { $('#login-fehler').textContent = err.message; }
+    knopf.disabled = false;
   });
 
   async function starten() {
-    const s = await api('/api/status');
-    if (!s.angemeldet) { texteSetzen(); loginZeigen(); return; }
+    texteSetzen();
+    let s;
+    try { s = await api('/api/status'); } catch (err) {
+      loginZeigen();
+      stimmung('offline');
+      $('#login-fehler').textContent = err.message;
+      return;
+    }
+    if (!s.angemeldet) { loginZeigen(); return; }
+    [profil, erinnerungen] = await Promise.all([api('/api/profil'), api('/api/erinnerungen')]);
+    angemeldet = true;
     $('#login').hidden = true;
     $('#app').hidden = false;
-    [profil, erinnerungen] = await Promise.all([api('/api/profil'), api('/api/erinnerungen')]);
-    if (!holen('sprache') && profil.sprache) sprache = profil.sprache.startsWith('zh') ? 'zh' : 'de';
     profilInsFormular();
     texteSetzen();
-    const verlauf = await api('/api/verlauf');
-    $('#verlauf').innerHTML = '';
-    verlauf.forEach((m) => blase(m.content, m.role === 'user' ? 'ich' : 'biko-sagt'));
-    vorschlaegeZeigen();
-    setInterval(erinnerungPruefen, 15000);
+    kopfRichten();
+    kissenRichten(false);
+    stimmung('winkt', 2600); // Biko grüßt kurz und ist dann einfach da
+    alteMerkerLoeschen();
+    clearInterval(starten.uhr);
+    starten.uhr = setInterval(erinnerungPruefen, 15000);
     erinnerungPruefen();
   }
 
-  // ---------- Ansichten ----------
-  $$('.leiste button').forEach((b) => b.addEventListener('click', () => {
-    $$('.leiste button').forEach((x) => x.removeAttribute('aria-current'));
-    b.setAttribute('aria-current', 'page');
-    $$('.ansicht').forEach((a) => { a.hidden = a.dataset.ansicht !== b.dataset.ziel; });
+  // ---------- Bereiche wechseln ----------
+  const leiste = $('.leiste'), kissen = $('.leiste-kissen');
+  const ansicht = (name) => $(`.ansicht[data-ansicht="${name}"]`);
+  const kissenRichten = (animiert) => B.kissenSetzen(kissen, $(`.leiste button[data-ziel="${aktiv}"]`), animiert);
+  if (window.ResizeObserver) new ResizeObserver(() => kissenRichten(false)).observe(leiste);
+
+  // Zeilen kommen der Reihe nach (je 30 ms später), Hilfetexte setzen sich danach
+  function reihenZaehlen(wo) {
+    $$('.reihe', wo).forEach((el, i) => {
+      el.style.setProperty('--i', Math.min(i, 8));
+      $$('.detail', el).forEach((d) => d.style.setProperty('--i', Math.min(i, 8)));
+    });
+    $$(':scope > .detail', wo).forEach((d) => d.style.setProperty('--i', 8));
+  }
+  function wechseln(ziel) {
+    if (ziel === aktiv) return;
+    const alt = ansicht(aktiv), neuA = ansicht(ziel);
+    aktiv = ziel;
+    kopfRichten();
+    $$('.leiste button').forEach((b) => {
+      if (b.dataset.ziel === ziel) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    kissenRichten(true);
+    // Alte und neue Ansicht liegen kurz übereinander: die alte blendet aus, während die neue schon kommt
+    clearTimeout(neuA._uhr);
+    clearTimeout(alt._uhr);
+    reihenZaehlen(neuA);
+    neuA.classList.remove('geht');
+    neuA.hidden = false;
+    neuA.classList.add('kommt');
+    alt.classList.remove('kommt');
+    alt.classList.add('geht');
+    alt._uhr = setTimeout(() => { alt.hidden = true; alt.classList.remove('geht'); }, L.ausgang(220));
+    neuA._uhr = setTimeout(() => neuA.classList.remove('kommt'), 900);
     window.scrollTo(0, 0);
-  }));
+  }
+  leiste.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-ziel]');
+    if (b) wechseln(b.dataset.ziel);
+  });
 
   // ---------- Vorlesen ----------
-  let liestGerade = null;
-  function vorlesen(text, knopf) {
-    if (!('speechSynthesis' in window)) return;
+  const kannVorlesen = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  const vorlesenAn = () => holen('vorlesen') === '1';
+  let liest = null; // der Knopf der Blase, die gerade vorgelesen wird
+  function vorlesenStopp() {
+    if (!kannVorlesen) return;
     speechSynthesis.cancel();
-    if (liestGerade === knopf && knopf) { liestGerade = null; knopf.textContent = t('vorlesen'); return; }
+    if (liest) zustand(liest, 'ruhe', 'vorlesen');
+    liest = null;
+  }
+  function vorlesen(text, knopf) {
+    if (!kannVorlesen) return;
+    const war = liest;
+    vorlesenStopp();
+    if (knopf && war === knopf) return; // nochmal antippen heißt Stopp
     const u = new SpeechSynthesisUtterance(text);
-    // Sprache am Text erkennen: chinesische Schriftzeichen -> Chinesisch
-    u.lang = /[一-鿿]/.test(text) ? 'zh-CN' : 'de-AT';
+    u.lang = L.spracheVonText(text);
     u.rate = 0.92;
     if (knopf) {
-      liestGerade = knopf;
-      knopf.textContent = t('stopp');
-      u.onend = u.onerror = () => { knopf.textContent = t('vorlesen'); liestGerade = null; };
+      liest = knopf;
+      zustand(knopf, 'laeuft', 'stopp');
+      u.onend = u.onerror = () => { if (liest === knopf) { zustand(knopf, 'ruhe', 'vorlesen'); liest = null; } };
     }
     speechSynthesis.speak(u);
   }
-
-  // ---------- Sprechen statt tippen ----------
-  const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
-  $$('.mikro').forEach((knopf) => knopf.addEventListener('click', () => {
-    const feld = document.getElementById(knopf.dataset.ziel);
-    if (!Erkennung) { alertSanft(knopf, t('kein_mikro')); feld.focus(); return; }
-    const r = new Erkennung();
-    r.lang = STIMME[sprache];
-    r.interimResults = true;
-    const vorher = feld.value ? feld.value + ' ' : '';
-    knopf.classList.add('hoert');
-    knopf.textContent = t('hoere');
-    r.onresult = (e) => {
-      feld.value = vorher + Array.from(e.results).map((x) => x[0].transcript).join('');
-    };
-    r.onend = () => {
-      knopf.classList.remove('hoert');
-      knopf.textContent = t('sprechen');
-      // Im Gespräch gleich abschicken, wie bei einer Sprachnachricht
-      if (feld.id === 'chat-text' && feld.value.trim()) $('#chat-form').requestSubmit();
-    };
-    r.onerror = () => { knopf.classList.remove('hoert'); knopf.textContent = t('sprechen'); };
-    r.start();
-  }));
-
-  function alertSanft(nahe, text) {
-    const p = document.createElement('p');
-    p.className = 'leise';
-    p.textContent = text;
-    nahe.closest('form').appendChild(p);
-    setTimeout(() => p.remove(), 6000);
+  // iPhones lesen nur vor, wenn das Vorlesen einmal durch ein Antippen begonnen wurde
+  let stimmeWach = false;
+  function stimmeWecken() {
+    if (stimmeWach || !kannVorlesen || !vorlesenAn()) return;
+    stimmeWach = true;
+    speechSynthesis.speak(new SpeechSynthesisUtterance(''));
   }
 
   // ---------- 1. Reden ----------
+  const feld = $('#chat-text'), chatKnopf = $('#chat-knopf'), verlauf = $('#verlauf');
+  let sendet = false;
+  let hoert = null; // laufende Spracherkennung
+
+  function knopfZeigen() {
+    const art = L.knopfArt(feld.value, !!hoert);
+    chatKnopf.dataset.art = art;
+    chatKnopf.setAttribute('aria-label', t('knopf_' + art));
+    chatKnopf.disabled = sendet && art !== 'stopp';
+    feld.placeholder = t(hoert ? 'eingabe_hoert' : 'eingabe');
+  }
+  function feldAnpassen() {
+    feld.style.height = 'auto';
+    feld.style.height = feld.scrollHeight + 'px';
+    knopfZeigen();
+  }
+  const nachUnten = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: B.reduziert() ? 'auto' : 'smooth' });
+
   function blase(text, art) {
-    const d = document.createElement('div');
-    d.className = 'blase ' + art;
-    d.textContent = text;
-    if (art === 'biko-sagt') {
-      const k = document.createElement('button');
+    const d = neu('div', 'blase ' + art);
+    d.appendChild(neu('span', '', text));
+    if (art === 'biko-sagt' && kannVorlesen) {
+      const k = neu('button', 'vorlesen druck');
       k.type = 'button';
-      k.className = 'vorlesen';
-      k.textContent = t('vorlesen');
+      k.dataset.zustand = 'ruhe';
+      k.innerHTML = `<span class="wechsel">${icon('vorlesen', 'i-ruhe')}${icon('stopp', 'i-laeuft')}</span><span></span>`;
+      k.lastElementChild.textContent = t('vorlesen');
       k.addEventListener('click', () => vorlesen(text, k));
       d.appendChild(k);
     }
-    $('#verlauf').appendChild(d);
-    // Ganz nach unten, damit die neue Blase über dem Eingabefeld sichtbar ist
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    verlauf.appendChild(d);
+    nachUnten(); // ganz nach unten, damit die neue Blase über dem Eingabefeld zu sehen ist
+    return d;
+  }
+  function denkBlase() {
+    const d = neu('div', 'blase denkt');
+    d.innerHTML = '<i></i><i></i><i></i>';
+    d.appendChild(neu('span', 'nur-vorlesen', t('denkt')));
+    verlauf.appendChild(d);
+    nachUnten();
     return d;
   }
 
   function vorschlaegeZeigen() {
     const box = $('#vorschlaege');
-    box.innerHTML = '';
-    if ($('#verlauf').children.length) return;
-    t('vorschlaege').forEach((v) => {
-      const b = document.createElement('button');
+    box.replaceChildren();
+    box.hidden = verlauf.children.length > 0;
+    if (box.hidden) return;
+    t('vorschlaege').forEach((v, i) => {
+      const b = neu('button', 'vorschlag druck reihe', v);
       b.type = 'button';
-      b.className = 'vorschlag';
-      b.textContent = v;
-      b.addEventListener('click', () => { $('#chat-text').value = v; $('#chat-form').requestSubmit(); });
+      b.style.setProperty('--i', i + 1);
+      b.addEventListener('click', () => senden(v, b.getBoundingClientRect()));
       box.appendChild(b);
     });
   }
+  // Vom Startbild ins Gespräch: Biko wird klein und rückt nach oben, die Vorschläge blenden aus
+  function gespraechBeginnen() {
+    const box = $('#vorschlaege'), kopf = $('#reden-kopf');
+    if (!box.hidden) { B.geist(box); box.replaceChildren(); box.hidden = true; }
+    if (!kopf.classList.contains('gross')) return;
+    const platz = $('#biko-reden'), vorher = platz.getBoundingClientRect();
+    kopf.classList.remove('gross');
+    kopfRichten();
+    B.umzug(platz, vorher);
+    B.spiele($('#gruss'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 140, fill: 'backwards', easing: 'ease' });
+  }
+  function startbild() {
+    verlauf.replaceChildren();
+    $('#reden-kopf').classList.add('gross');
+    kopfRichten();
+    vorschlaegeZeigen();
+  }
 
-  let sendet = false;
-  $('#chat-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const feld = $('#chat-text');
-    const text = feld.value.trim();
+  // `von`: Stelle, von der die Frage losfliegt (Vorschlag oder Eingabefeld)
+  async function senden(text, von) {
+    text = text.trim();
     if (!text || sendet) return;
     sendet = true;
-    feld.value = '';
-    $('#vorschlaege').innerHTML = '';
-    blase(text, 'ich');
-    const warte = blase(t('denkt'), 'denkt-blase');
-    $('#biko-reden').classList.add('denkt');
+    const start = von || feld.getBoundingClientRect();
+    if (!von) feld.value = '';
+    feldAnpassen();
+    vorlesenStopp();
+    stimmeWecken();
+    gespraechBeginnen();
+    stimmung('tippt');
+    B.flug(blase(text, 'ich'), start);
+    const warte = denkBlase();
     try {
       const { antwort } = await api('/api/chat', { text });
       warte.remove();
+      stimmung('da');
       const d = blase(antwort, 'biko-sagt');
-      if ($('#vorlesen').checked) vorlesen(antwort, d.querySelector('.vorlesen'));
+      if (vorlesenAn()) vorlesen(antwort, d.querySelector('.vorlesen'));
     } catch (err) {
       warte.remove();
+      stimmung('traurig', 5000);
       blase(err.message, 'fehler-blase');
-      feld.value = text;
-    } finally {
-      sendet = false;
-      $('#biko-reden').classList.remove('denkt');
+      if (!feld.value) feld.value = text; // nichts geht verloren
     }
+    sendet = false;
+    feldAnpassen();
+  }
+
+  // Sprechen statt tippen: der Satz wird wie eine Sprachnachricht gleich abgeschickt
+  const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function hinweis(text) {
+    const p = $('#chat-hinweis');
+    p.textContent = text;
+    clearTimeout(p._uhr);
+    p._uhr = setTimeout(() => { p.textContent = ''; }, 8000);
+  }
+  function zuhoeren() {
+    if (!Erkennung) { hinweis(t('kein_mikro')); feld.focus(); return; }
+    vorlesenStopp(); // sonst hört Biko sich selbst zu
+    const r = new Erkennung();
+    const vorher = feld.value ? feld.value + ' ' : '';
+    r.lang = STIMME[sprache];
+    r.interimResults = true;
+    r.onresult = (e) => {
+      feld.value = vorher + Array.from(e.results).map((x) => x[0].transcript).join('');
+      feldAnpassen();
+    };
+    const fertig = (fehler) => {
+      if (hoert !== r) return;
+      hoert = null;
+      stimmung('da');
+      knopfZeigen();
+      if (fehler && fehler !== 'no-speech' && fehler !== 'aborted') hinweis(t('kein_mikro'));
+      else if (feld.value.trim()) senden(feld.value);
+    };
+    r.onend = () => fertig();
+    r.onerror = (e) => fertig(e.error || 'fehler');
+    hoert = r;
+    stimmung('hoert');
+    knopfZeigen();
+    try { r.start(); } catch (e) { fertig('fehler'); }
+  }
+
+  $('#chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const art = chatKnopf.dataset.art;
+    if (art === 'stopp') hoert.stop();
+    else if (art === 'mikro') zuhoeren();
+    else senden(feld.value);
+  });
+  feld.addEventListener('input', feldAnpassen);
+  feld.addEventListener('keydown', (e) => {
+    // Eingabetaste schickt ab. Nicht, solange die chinesische Tastatur noch Zeichen zusammensetzt.
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    if (feld.value.trim()) senden(feld.value);
   });
 
   // ---------- 2. Nachricht ----------
   $('#nachricht-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const knopf = e.submitter || $('#nachricht-form .haupt');
+    const knopf = $('#nachricht-los'), fehler = $('#nachricht-fehler');
+    fehler.textContent = '';
+    if (!$('#nachricht-was').value.trim()) { fehler.textContent = t('nachricht_leer'); $('#nachricht-was').focus(); return; }
     knopf.disabled = true;
-    knopf.textContent = t('denkt');
-    $('#nachricht-info').textContent = '';
+    knopf.lastElementChild.textContent = t('schreibt');
+    stimmung('tippt');
     try {
       const { nachricht } = await api('/api/nachricht', { an: $('#nachricht-an').value, was: $('#nachricht-was').value });
+      stimmung('da');
+      const ergebnis = $('#nachricht-ergebnis');
       $('#nachricht-text').textContent = nachricht;
-      $('#nachricht-ergebnis').hidden = false;
+      $('#nachricht-info').textContent = '';
       $('#nachricht-teilen').hidden = !navigator.share;
-      $('#nachricht-ergebnis').scrollIntoView({ behavior: 'smooth' });
+      zustand($('#nachricht-kopieren'), 'ruhe', 'kopieren');
+      ergebnis.hidden = false;
+      B.aufdecken(ergebnis);
+      ergebnis.scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
     } catch (err) {
-      $('#nachricht-info').textContent = err.message;
-      $('#nachricht-ergebnis').hidden = false;
-    } finally {
-      knopf.disabled = false;
-      knopf.textContent = t('schreiben');
+      stimmung('traurig', 5000);
+      fehler.textContent = err.message;
     }
+    knopf.disabled = false;
+    knopf.lastElementChild.textContent = t('schreiben');
   });
-  $('#nachricht-kopieren').addEventListener('click', async () => {
+  async function kopiere(el) {
     try {
-      await navigator.clipboard.writeText($('#nachricht-text').textContent);
-      $('#nachricht-info').textContent = t('kopiert');
-    } catch (e) { $('#nachricht-info').textContent = t('kopieren_geht_nicht'); }
+      await navigator.clipboard.writeText(el.textContent);
+      return true;
+    } catch (e) { // ohne https gibt es die Zwischenablage nur auf dem alten Weg
+      const wahl = getSelection(), bereich = document.createRange();
+      bereich.selectNodeContents(el);
+      wahl.removeAllRanges();
+      wahl.addRange(bereich);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) { /* geht nicht */ }
+      wahl.removeAllRanges();
+      return ok;
+    }
+  }
+  $('#nachricht-kopieren').addEventListener('click', async () => {
+    if (await kopiere($('#nachricht-text'))) {
+      bestaetigen($('#nachricht-kopieren'), 'kopiert', 'kopieren');
+      $('#nachricht-info').textContent = t('kopiert_hilfe');
+      M.fidget('hop');
+    } else $('#nachricht-info').textContent = t('kopieren_geht_nicht');
+    $('#nachricht-info').scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
   });
   $('#nachricht-teilen').addEventListener('click', () => {
     navigator.share({ text: $('#nachricht-text').textContent }).catch(() => {});
@@ -309,174 +451,228 @@
 
   // ---------- 3. Erinnerungen ----------
   function tageAufbauen() {
-    const fs = $('#tage-wahl');
-    const gewaehlt = new Set($$('#tage-wahl input:checked').map((i) => i.value));
-    const ersterAufbau = !fs.querySelector('input');
-    fs.querySelectorAll('label').forEach((l) => l.remove());
-    TAGE.forEach((tag) => {
-      const l = document.createElement('label');
-      const i = document.createElement('input');
+    const box = $('#tage-wahl');
+    const erster = !box.children.length;
+    const gewaehlt = new Set($$('input:checked', box).map((i) => i.value));
+    box.replaceChildren(...TAGE.map((tag) => {
+      const l = neu('label'), i = neu('input');
       i.type = 'checkbox';
       i.value = tag;
-      i.checked = ersterAufbau || gewaehlt.has(tag);
-      l.append(i, ' ' + t('tage')[tag]);
-      fs.appendChild(l);
-    });
+      i.checked = erster || gewaehlt.has(tag);
+      l.append(i, t('tage')[tag]);
+      return l;
+    }));
   }
 
-  function erinnerungenZeigen() {
+  function erinnerungenZeigen(neuId) {
     const ul = $('#erinnerungen');
-    ul.innerHTML = '';
-    if (!erinnerungen.length) {
-      const li = document.createElement('li');
-      li.className = 'leer-zeile';
-      li.textContent = t('keine_erinnerungen');
-      ul.appendChild(li);
-      return;
-    }
-    erinnerungen.forEach((er) => {
-      const li = document.createElement('li');
-      const zeit = document.createElement('span');
-      zeit.className = 'zeit';
-      zeit.textContent = er.zeit;
-      const mitte = document.createElement('div');
-      const text = document.createElement('div');
-      text.textContent = er.text;
-      const tage = document.createElement('div');
-      tage.className = 'tage-text';
-      tage.textContent = er.tage.length === 7 ? t('jeden_tag') : er.tage.map((x) => t('tage')[x]).join(', ');
-      mitte.append(text, tage);
-      const weg = document.createElement('button');
+    if (!erinnerungen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_erinnerungen'))); return; }
+    ul.replaceChildren(...erinnerungen.map((er) => {
+      const li = neu('li', 'erinnerung reihe' + (er.id === neuId ? ' neu' : ''));
+      const mitte = neu('div');
+      mitte.append(neu('div', '', er.text), neu('div', 'tage-text', er.tage.length === 7 ? t('jeden_tag') : er.tage.map((x) => t('tage')[x]).join(', ')));
+      const weg = neu('button', 'weg druck');
       weg.type = 'button';
-      weg.className = 'weg';
-      weg.textContent = '🗑';
-      weg.setAttribute('aria-label', t('loeschen'));
-      weg.addEventListener('click', () => erinnerungenSpeichern(erinnerungen.filter((x) => x.id !== er.id)));
-      li.append(zeit, mitte, weg);
-      ul.appendChild(li);
-    });
+      weg.innerHTML = icon('loeschen');
+      weg.setAttribute('aria-label', `${t('loeschen')}: ${er.text}`);
+      // Erst nachfragen: ein falscher Tipp soll keine Tabletten-Erinnerung kosten
+      const sicher = neu('div', 'sicher');
+      const ja = neu('button', 'knopf druck ja', t('loeschen')), nein = neu('button', 'knopf druck nein', t('behalten'));
+      ja.type = nein.type = 'button';
+      sicher.append(neu('p', '', t('loeschen_frage')), nein, ja);
+      sicher.hidden = true;
+      weg.addEventListener('click', () => {
+        sicher.hidden = !sicher.hidden;
+        weg.setAttribute('aria-expanded', String(!sicher.hidden));
+        if (!sicher.hidden) { B.spiele(sicher, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease' }); nein.focus({ preventScroll: true }); }
+      });
+      nein.addEventListener('click', () => { sicher.hidden = true; weg.setAttribute('aria-expanded', 'false'); weg.focus(); });
+      ja.addEventListener('click', async () => {
+        ja.disabled = true;
+        try {
+          const liste = await api('/api/erinnerungen', { erinnerungen: erinnerungen.filter((x) => x.id !== er.id) });
+          await B.spiele(li, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: L.ausgang(220), easing: 'ease', fill: 'forwards' });
+          erinnerungen = liste;
+          erinnerungenZeigen();
+        } catch (err) { ja.disabled = false; sicher.firstElementChild.textContent = err.message; }
+      });
+      li.append(neu('span', 'zeit', er.zeit), mitte, weg, sicher);
+      return li;
+    }));
   }
 
-  async function erinnerungenSpeichern(liste) {
-    erinnerungen = await api('/api/erinnerungen', { erinnerungen: liste });
-    erinnerungenZeigen();
-  }
+  // Blatt "Neue Erinnerung": geht aus dem Plus-Knopf auf und dorthin wieder zu
+  const blatt = $('#blatt');
+  B.blattZiehen(blatt);
+  $('#erinnerung-neu').addEventListener('click', (e) => {
+    $('#erinnerung-form').reset();
+    $$('#tage-wahl input').forEach((i) => { i.checked = true; });
+    $('#erinnerung-fehler').textContent = '';
+    B.blattAuf(blatt, e.currentTarget);
+  });
+  $('#blatt-zu').addEventListener('click', () => B.blattZu(blatt));
+  blatt.addEventListener('cancel', (e) => { e.preventDefault(); B.blattZu(blatt); }); // Escape oder Zurück-Taste
+  blatt.addEventListener('click', (e) => { if (e.target === blatt) B.blattZu(blatt); }); // daneben getippt
 
   $('#erinnerung-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const tage = $$('#tage-wahl input:checked').map((i) => i.value);
+    const knopf = e.submitter || $('#erinnerung-form button[type=submit]');
+    const neue = { zeit: $('#erinnerung-zeit').value, text: $('#erinnerung-text').value, tage: $$('#tage-wahl input:checked').map((i) => i.value) };
+    knopf.disabled = true;
     try {
-      await erinnerungenSpeichern(erinnerungen.concat({
-        zeit: $('#erinnerung-zeit').value, text: $('#erinnerung-text').value, tage,
-      }));
-      $('#erinnerung-text').value = '';
-    } catch (err) { alertSanft($('#erinnerung-form .haupt'), err.message); }
+      const vorher = new Set(erinnerungen.map((x) => x.id));
+      erinnerungen = await api('/api/erinnerungen', { erinnerungen: erinnerungen.concat(neue) });
+      erinnerungenZeigen((erinnerungen.find((x) => !vorher.has(x.id)) || {}).id);
+      B.blattZu(blatt);
+      M.fidget('hop');
+    } catch (err) { $('#erinnerung-fehler').textContent = err.message; }
+    knopf.disabled = false;
     // Erlaubnis für Hinweise holen, solange die Person gerade etwas angetippt hat
-    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch (err) { /* alte Browser */ }
+    }
   });
 
-  // Welche Erinnerung wurde heute schon gezeigt? (pro Handy, im Browser gemerkt)
-  const heute = () => new Date().toISOString().slice(0, 10);
-  let snooze = {}; // id -> Zeitpunkt in ms
+  // Welche Erinnerung wurde heute schon gezeigt? Das merkt sich das Handy.
+  const speicherSchluessel = () => { try { return Object.keys(localStorage); } catch (e) { return []; } };
+  const spaeterLesen = () => { try { return JSON.parse(holen('spaeter')) || {}; } catch (e) { return {}; } };
+  function alteMerkerLoeschen() {
+    const heute = L.gezeigtSchluessel({ id: '' }, new Date()).slice(-10);
+    speicherSchluessel().filter((k) => k.startsWith('gezeigt-') && !k.endsWith(heute)).forEach((k) => { try { localStorage.removeItem(k); } catch (e) { /* egal */ } });
+  }
+  const alarm = $('#alarm');
+  $$(':scope > *', alarm).forEach((el, i) => el.style.setProperty('--i', i));
   let offen = null;
 
   function erinnerungPruefen() {
-    if (offen) return;
-    const jetzt = new Date();
-    const hhmm = jetzt.toTimeString().slice(0, 5);
-    const tag = JS_TAG[jetzt.getDay()];
-    for (const er of erinnerungen) {
-      if (!er.aktiv || !er.tage.includes(tag)) continue;
-      const schluessel = 'gezeigt-' + er.id + '-' + heute();
-      const faellig = (er.zeit <= hhmm && !holen(schluessel)) || (snooze[er.id] && snooze[er.id] <= jetzt.getTime());
-      // Nur bis 2 Stunden nach der Uhrzeit nachholen (z. B. wenn das Handy kurz aus war)
-      const [h, m] = er.zeit.split(':').map(Number);
-      const minutenSeit = jetzt.getHours() * 60 + jetzt.getMinutes() - (h * 60 + m);
-      if (faellig && minutenSeit <= 120) { alarm(er); return; }
-    }
+    if (offen || !angemeldet) return;
+    const er = L.faelligeErinnerung({
+      erinnerungen, jetzt: new Date(),
+      gezeigt: new Set(speicherSchluessel().filter((k) => k.startsWith('gezeigt-'))),
+      spaeter: spaeterLesen(),
+    });
+    if (er) alarmZeigen(er);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) erinnerungPruefen(); });
+
+  function ton() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ac = ton.ac || (ton.ac = new AC());
+      if (ac.state === 'suspended') ac.resume();
+      [523, 659, 784].forEach((hz, i) => { // drei freundliche Töne
+        const o = ac.createOscillator(), g = ac.createGain(), ab = ac.currentTime + i * 0.28;
+        o.frequency.value = hz;
+        g.gain.setValueAtTime(0.0001, ab);
+        g.gain.exponentialRampToValueAtTime(0.3, ab + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, ab + 0.5);
+        o.connect(g).connect(ac.destination);
+        o.start(ab);
+        o.stop(ab + 0.55);
+      });
+    } catch (e) { /* kein Ton möglich, die Anzeige reicht */ }
   }
 
-  function alarm(er) {
+  function alarmZeigen(er) {
     offen = er;
+    if (blatt.open) blatt.close(); // ein offenes Blatt läge sonst über der Erinnerung
+    alarm.getAnimations().forEach((a) => a.cancel());
     $('#alarm-text').textContent = er.text;
-    $('#alarm').hidden = false;
+    $('#alarm-ok').disabled = $('#alarm-spaeter').disabled = false;
+    alarm.hidden = false;
+    $('#alarm-ok').focus({ preventScroll: true });
+    stimmung('winkt');
     ton();
-    vorlesen((sprache === 'zh' ? '提醒：' : 'Erinnerung: ') + er.text);
+    vorlesenStopp();
+    if (kannVorlesen) vorlesen(`${t('erinnerung')}: ${er.text}`);
     if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
     if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
       try { new Notification('Biko: ' + t('erinnerung'), { body: er.text, icon: 'icon.svg' }); } catch (e) { /* manche Handys nur per Service Worker */ }
     }
   }
-
-  function alarmZu(spaeter) {
+  async function alarmZu(spaeter) {
     if (!offen) return;
-    if (offen.id !== 'test') merken('gezeigt-' + offen.id + '-' + heute(), '1');
-    if (spaeter) snooze[offen.id] = Date.now() + 10 * 60 * 1000; else delete snooze[offen.id];
+    const er = offen, merker = spaeterLesen();
+    if (er.id !== 'test') merken(L.gezeigtSchluessel(er, new Date()), '1');
+    if (spaeter) merker[er.id] = Date.now() + 10 * 60 * 1000; else delete merker[er.id];
+    merken('spaeter', JSON.stringify(merker));
+    $('#alarm-ok').disabled = $('#alarm-spaeter').disabled = true;
+    vorlesenStopp();
+    if (!spaeter) { // geschafft: Biko freut sich kurz mit
+      stimmung('jubelt');
+      B.puls($('#alarm-ok'));
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    await B.ausblenden(alarm);
+    stimmung('da');
     offen = null;
-    $('#alarm').hidden = true;
-    speechSynthesis && speechSynthesis.cancel();
   }
   $('#alarm-ok').addEventListener('click', () => alarmZu(false));
   $('#alarm-spaeter').addEventListener('click', () => alarmZu(true));
-  $('#ton-test').addEventListener('click', () => {
-    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-    alarm({ id: 'test', text: t('test_text') });
-  });
-
-  // Freundlicher Dreiklang, ohne Audiodatei
-  function ton() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      [523, 659, 784].forEach((f, i) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.frequency.value = f;
-        o.connect(g); g.connect(ctx.destination);
-        const s = ctx.currentTime + i * 0.25;
-        g.gain.setValueAtTime(0.0001, s);
-        g.gain.exponentialRampToValueAtTime(0.4, s + 0.03);
-        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
-        o.start(s); o.stop(s + 0.55);
-      });
-    } catch (e) { /* kein Ton möglich */ }
-  }
+  $('#ton-test').addEventListener('click', () => alarmZeigen({ id: 'test', text: t('test_text') }));
 
   // ---------- Einstellungen ----------
   function profilInsFormular() {
     $('#profil-name').value = profil.name || '';
-    $('#profil-anrede').value = profil.anrede || 'du';
+    $('#profil-anrede').value = profil.anrede === 'Sie' ? 'Sie' : 'du';
     $('#profil-diaet').value = profil.diaet || '';
     $('#profil-notizen').value = profil.notizen || '';
-    $('#vorlesen').checked = holen('vorlesen') === '1';
-    $('#schrift').value = holen('schrift') || '1';
-    document.documentElement.style.setProperty('--schrift', $('#schrift').value);
   }
-  $('#schrift').addEventListener('change', () => {
-    document.documentElement.style.setProperty('--schrift', $('#schrift').value);
-    merken('schrift', $('#schrift').value);
-  });
-  $('#vorlesen').addEventListener('change', () => merken('vorlesen', $('#vorlesen').checked ? '1' : '0'));
-
   $('#profil-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const knopf = $('#profil-speichern');
+    $('#profil-info').textContent = '';
+    knopf.disabled = true;
     try {
       profil = await api('/api/profil', {
-        name: $('#profil-name').value, anrede: $('#profil-anrede').value,
-        diaet: $('#profil-diaet').value, notizen: $('#profil-notizen').value, sprache: STIMME[sprache],
+        name: $('#profil-name').value, anrede: $('#profil-anrede').value, sprache: STIMME[sprache],
+        diaet: $('#profil-diaet').value, notizen: $('#profil-notizen').value,
       });
-      $('#profil-info').textContent = t('gespeichert');
-      texteSetzen();
+      $('#gruss').textContent = profil.name ? t('hallo_name').replace('{name}', profil.name) : t('hallo');
+      bestaetigen(knopf, 'gespeichert', 'speichern');
+      M.fidget('hop');
     } catch (err) { $('#profil-info').textContent = err.message; }
+    knopf.disabled = false;
   });
+
+  // Schalter "immer vorlesen"
+  const schalter = $('#vorlesen');
+  schalter.setAttribute('aria-checked', String(vorlesenAn()));
+  schalter.addEventListener('click', () => {
+    const an = !vorlesenAn();
+    merken('vorlesen', an ? '1' : '0');
+    schalter.setAttribute('aria-checked', String(an));
+    B.knaufSchieben($('.knauf', schalter), an);
+    if (an) stimmeWecken(); else vorlesenStopp();
+  });
+
+  // Schriftgröße: die gelbe Ebene wird auf die gewählte Stelle zugeschnitten
+  const AUSSCHNITT = ['inset(0 66.667% 0 0 round 12px)', 'inset(0 33.333% 0 33.333% round 12px)', 'inset(0 0 0 66.667% round 12px)'];
+  function schriftSetzen(wert) {
+    const knoepfe = $$('#schrift button');
+    const i = Math.max(0, knoepfe.findIndex((b) => b.dataset.wert === String(wert)));
+    knoepfe.forEach((b, n) => b.setAttribute('aria-pressed', String(n === i)));
+    $('#schrift .oben').style.clipPath = AUSSCHNITT[i];
+    document.documentElement.style.setProperty('--schrift', knoepfe[i].dataset.wert);
+    merken('schrift', knoepfe[i].dataset.wert);
+  }
+  $('#schrift').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-wert]');
+    if (b) schriftSetzen(b.dataset.wert);
+  });
+  schriftSetzen(holen('schrift') || '1');
 
   $('#verlauf-loeschen').addEventListener('click', async () => {
-    await api('/api/verlauf/loeschen', {});
-    $('#verlauf').innerHTML = '';
-    vorschlaegeZeigen();
-    $('#profil-info').textContent = t('vergessen_ok');
+    const info = $('#vergessen-info');
+    try {
+      await api('/api/verlauf/loeschen', {});
+      vorlesenStopp();
+      startbild();
+      info.textContent = t('vergessen_ok');
+    } catch (err) { info.textContent = err.message; }
+    clearTimeout(info._uhr);
+    info._uhr = setTimeout(() => { info.textContent = ''; }, 6000);
   });
 
-  document.documentElement.style.setProperty('--schrift', holen('schrift') || '1');
-  texteSetzen();
-  starten().catch(() => { texteSetzen(); loginZeigen(); });
+  starten().catch(() => { loginZeigen(); $('#login-fehler').textContent = t('fehler'); });
 })();

@@ -1,0 +1,80 @@
+// Reine Logik der Oberfläche, ohne Browser testbar (tests/logik.test.js).
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BikoLogik = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const JS_TAG = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa']; // Date.getDay()
+  const NACHHOLEN_MIN = 120; // so lange wird eine verpasste Erinnerung noch gezeigt
+
+  const zwei = (n) => String(n).padStart(2, '0');
+  const datum = (d) => `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}`;
+
+  // Unter diesem Namen merkt sich das Handy, dass eine Erinnerung heute schon gezeigt wurde
+  function gezeigtSchluessel(er, jetzt) {
+    return `gezeigt-${er.id}-${datum(jetzt)}`;
+  }
+
+  // Welche Erinnerung soll jetzt aufgehen? `gezeigt`: Set der Schlüssel von heute,
+  // `spaeter`: { id: Zeitpunkt in ms } für "In 10 Minuten nochmal".
+  function faelligeErinnerung({ erinnerungen, jetzt, gezeigt = new Set(), spaeter = {} }) {
+    const tag = JS_TAG[jetzt.getDay()];
+    const minuten = jetzt.getHours() * 60 + jetzt.getMinutes();
+    for (const er of erinnerungen) {
+      if (!er.aktiv || !er.tage.includes(tag)) continue;
+      const [h, m] = er.zeit.split(':').map(Number);
+      const seit = minuten - (h * 60 + m);
+      if (seit < 0 || seit > NACHHOLEN_MIN) continue;
+      const nochmal = spaeter[er.id] !== undefined;
+      if (nochmal ? spaeter[er.id] <= jetzt.getTime() : !gezeigt.has(gezeigtSchluessel(er, jetzt))) return er;
+    }
+    return null;
+  }
+
+  // Chinesische Schriftzeichen im Text -> chinesische Stimme, sonst deutsche
+  function spracheVonText(text) {
+    return /[一-鿿]/.test(text) ? 'zh-CN' : 'de-AT';
+  }
+
+  // Der große Knopf neben dem Textfeld
+  function knopfArt(text, hoert) {
+    if (hoert) return 'stopp';
+    return text.trim() ? 'senden' : 'mikro';
+  }
+
+  // Ziehen über eine Grenze hinaus: folgt dem Finger immer weniger, nie weiter als `grenze`
+  function gummiband(weg, grenze) {
+    if (weg <= 0) return 0;
+    return grenze * (1 - 1 / (weg / grenze + 1));
+  }
+
+  // Punkte für einen Flug von (dx, dy) nach (0, 0) auf einem Bogen:
+  // waagrecht bremst die Bewegung, senkrecht beschleunigt sie, dadurch krümmt sich der Weg.
+  function bogen(dx, dy, schritte) {
+    const punkte = [];
+    for (let i = 0; i <= schritte; i++) {
+      const t = i / schritte;
+      const x = dx * (1 - t) * (1 - t);
+      const y = dy * (1 - t * t);
+      punkte.push({ x: Math.round(x * 100) / 100 || 0, y: Math.round(y * 100) / 100 || 0 });
+    }
+    return punkte;
+  }
+
+  // Wandernder Knopf (Schalter, Kissen in der Leiste): unterwegs 12 % breiter
+  function dehnung(von, nach) {
+    return [
+      { transform: `translateX(${von}px) scaleX(1)` },
+      { transform: `translateX(${(von + nach) / 2}px) scaleX(1.12)` },
+      { transform: `translateX(${nach}px) scaleX(1)` },
+    ];
+  }
+
+  // Ausgänge laufen 20 % kürzer als Eingänge
+  function ausgang(ms) {
+    return Math.round(ms * 0.8);
+  }
+
+  return { faelligeErinnerung, gezeigtSchluessel, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
+});

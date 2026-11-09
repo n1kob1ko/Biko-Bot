@@ -287,7 +287,7 @@ ZH = {
 
 TYPEN = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml",
-         ".webmanifest": "application/manifest+json", ".png": "image/png"}
+         ".webmanifest": "application/manifest+json", ".png": "image/png", ".woff2": "font/woff2"}
 
 _fehlversuche = {}
 
@@ -309,7 +309,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", typ)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store" if typ.startswith("application/json") else "no-cache")
+        if typ.startswith("application/json"):
+            cache = "no-store"
+        elif typ == "font/woff2":
+            cache = "public, max-age=31536000, immutable"  # Schriften ändern sich nie
+        else:
+            cache = "no-cache"
+        self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
