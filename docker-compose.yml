@@ -21,3 +21,17 @@ services:
       --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
       --config /freqtrade/user_data/${BOT_CONFIG:-config.json}
       --strategy EmaTrendStrategy
+
+  # Biko App: einfache Handy-Oberfläche mit Maskottchen (liest nur die API oben)
+  # Öffnen: http://127.0.0.1:8081  (auf dem VPS per ssh -L 8081:127.0.0.1:8081 user@vps)
+  biko-app:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    container_name: biko-app
+    depends_on:
+      - freqtrade
+    volumes:
+      - "./ui/web:/usr/share/nginx/html:ro"
+      - "./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    ports:
+      - "127.0.0.1:8081:80"

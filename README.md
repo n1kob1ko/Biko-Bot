@@ -39,7 +39,8 @@ Hinweise:
 
 ## Börse wählen: Kraken oder Binance
 
-Die Strategie ist börsenunabhängig (CCXT). Welche Config läuft, steuert `BOT_CONFIG` in der `.env`:
+Die Strategie ist börsenunabhängig (CCXT). Welche Config läuft, steuert `BOT_CONFIG` in der `.env`.
+`install.sh` fragt beim Einrichten "1 = Kraken, 2 = Binance" und trägt das ein (nochmal ausführen = wechseln, oder ohne Frage mit `BIKO_BOERSE=binance`).
 
 | | Kraken (`config.json`, Standard) | Binance (`config.binance.json`) |
 |---|---|---|
@@ -74,6 +75,29 @@ FreqUI: http://127.0.0.1:8080 (Port ist nur lokal gebunden; auf dem VPS per `ssh
 Telegram: Token von @BotFather, Chat-ID z. B. über @userinfobot, dann in `.env` `FREQTRADE__TELEGRAM__ENABLED=true` setzen.
 
 **Kraken API-Key** (erst für Live): Query Funds, Query Open/Closed Orders & Trades, Create & Modify Orders, Cancel/Close Orders. **Kein Withdraw.** IP-Whitelist auf die feste VPS-IP.
+
+## Biko-App: die einfache Ansicht
+
+![Biko](docs/biko-app.png)
+
+Neben FreqUI (Profi-Ansicht, Port 8080) startet `docker compose up -d` auch die **Biko-App** auf Port 8081.
+Sie zeigt nur das Wichtigste: Guthaben, offene Trades, welche Coins im Konto liegen, welche Strategie läuft und ob Kraken oder Binance,
+Spielgeld oder Echtgeld. Darüber sitzt Biko und zeigt, was los ist:
+
+| Biko … | wenn |
+|---|---|
+| tippt am Laptop | mindestens ein Trade offen ist |
+| schläft | nichts offen ist und der Bot auf ein Signal wartet |
+| jubelt / ist traurig | in den letzten 20 Minuten ein Trade mit Gewinn / Verlust geschlossen wurde |
+| hält ein Pause-Schild | der Bot gestoppt ist oder keine neuen Trades kauft (`/stopentry`) |
+| schaut verwirrt | die App den Bot nicht erreicht |
+
+- Öffnen: http://127.0.0.1:8081, auf dem VPS per `ssh -L 8081:127.0.0.1:8081 user@vps`. Anmelden mit denselben Zugangsdaten wie FreqUI
+  (`FREQTRADE__API_SERVER__USERNAME`/`PASSWORD` aus der `.env`, bei `install.sh` in `ZUGANGSDATEN.txt`).
+- Nur lesen: Die App kann nichts kaufen, verkaufen oder umstellen. Sie spricht ausschließlich mit dem eigenen Bot (nginx leitet `/api/` an den Freqtrade-Container weiter), lädt nichts von fremden Servern und hat kein Tracking.
+- Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
+- Am Handy: "Zum Home-Bildschirm hinzufügen" geht. Den Port bitte **nicht** ins Internet freigeben; für unterwegs ein VPN wie Tailscale/WireGuard zum eigenen Server nutzen.
+- Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.
 
 ## Die drei wichtigsten Befehle
 

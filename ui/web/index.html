@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FFF6E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1C1830" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Biko</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="brand">Biko</div>
+      <div class="chips" id="chips"></div>
+    </header>
+
+    <section class="stage" aria-live="polite">
+      <div class="bubble" id="bubble">Hallo!</div>
+      <div class="biko-wrap" id="biko"></div>
+    </section>
+
+    <!-- Login -->
+    <section class="card login" id="login" hidden>
+      <h1>Hallo, ich bin Biko!</h1>
+      <p class="muted">Melde dich mit den Zugangsdaten deines Bots an.</p>
+      <form id="login-form" autocomplete="on">
+        <label>Benutzer
+          <input name="user" autocomplete="username" required autocapitalize="off" spellcheck="false">
+        </label>
+        <label>Passwort
+          <input name="pass" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Los geht's</button>
+        <p class="error" id="login-error" hidden></p>
+      </form>
+      <p class="hint">Die Zugangsdaten stehen in <code>ZUGANGSDATEN.txt</code> bzw. in der <code>.env</code> (<code>API_SERVER__USERNAME</code> / <code>PASSWORD</code>).</p>
+    </section>
+
+    <!-- Übersicht -->
+    <div id="dash" hidden>
+      <section class="card money">
+        <div class="label">Guthaben</div>
+        <div class="big" id="total">–</div>
+        <div class="delta" id="delta"></div>
+      </section>
+
+      <section class="card">
+        <h2>Gerade am Handeln</h2>
+        <ul class="trades" id="trades"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Deine Coins</h2>
+        <div class="alloc" id="alloc" aria-hidden="true"></div>
+        <ul class="coins" id="coins"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Strategie</h2>
+        <div class="strategy">
+          <div class="strategy-name" id="strategy-name">–</div>
+          <p id="strategy-text" class="muted"></p>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <span id="updated"></span>
+        <button class="link" id="logout" type="button">Abmelden</button>
+      </footer>
+    </div>
+  </main>
+  <script src="biko.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

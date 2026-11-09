@@ -1,0 +1,280 @@
+/* Biko App: mobile-first, keine externen Abhängigkeiten */
+:root {
+  --bg: #FFF6E8;
+  --card: #FFFFFF;
+  --ink: #2B2140;
+  --muted: #7A7190;
+  --line: #F0E4D0;
+  --up: #12955F;
+  --up-bg: #DDF5E9;
+  --down: #D9485A;
+  --down-bg: #FDE3E6;
+  --accent: #2FB894;
+  --warn: #B26A00;
+  --warn-bg: #FFEDC8;
+
+  --biko-body: #FFC94D;
+  --biko-shade: #F2A535;
+  --biko-belly: #FFE7A8;
+  --biko-ink: #2B2140;
+  --biko-blush: #FF8FA3;
+  --biko-mint: #3FC7A6;
+  --laptop: #5B6B8C;
+  --laptop-dark: #43506B;
+
+  --radius: 22px;
+  --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1C1830;
+    --card: #28233F;
+    --ink: #F6F0FF;
+    --muted: #A9A0C3;
+    --line: #3A3456;
+    --up: #4FD69B;
+    --up-bg: #1E3A33;
+    --down: #FF7A8A;
+    --down-bg: #43243A;
+    --warn: #FFC56B;
+    --warn-bg: #45381F;
+    --biko-ink: #2B2140;
+    --laptop: #8A99BC;
+    --laptop-dark: #6B7898;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+[hidden] { display: none !important; }
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+}
+
+/* Kopfzeile */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.brand { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip {
+  font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line); white-space: nowrap;
+}
+.chip.play { background: var(--up-bg); color: var(--up); border-color: transparent; }
+.chip.real { background: var(--down-bg); color: var(--down); border-color: transparent; }
+
+/* Bühne mit Biko */
+.stage { display: flex; flex-direction: column; align-items: center; padding: 4px 0 8px; }
+.bubble {
+  position: relative; max-width: 300px; text-align: center;
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  padding: 10px 16px; font-weight: 600; font-size: 15px; margin-bottom: 4px;
+  box-shadow: 0 4px 14px rgba(43, 33, 64, 0.06);
+}
+.bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -8px; width: 14px; height: 14px;
+  background: var(--card); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  transform: translateX(-50%) rotate(45deg);
+}
+.biko-wrap { width: min(240px, 66vw); aspect-ratio: 240 / 210; cursor: pointer; }
+.biko { width: 100%; height: 100%; overflow: visible; display: block; }
+
+/* Karten */
+.card {
+  background: var(--card); border-radius: var(--radius); padding: 18px;
+  margin-top: 12px; box-shadow: 0 1px 0 var(--line), 0 6px 24px rgba(43, 33, 64, 0.05);
+}
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+
+.money { text-align: center; }
+.money .label { color: var(--muted); font-weight: 700; font-size: 15px; }
+.money .big { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
+.delta { display: inline-block; font-weight: 700; font-size: 15px; padding: 4px 12px; border-radius: 999px; }
+.delta.up { background: var(--up-bg); color: var(--up); }
+.delta.down { background: var(--down-bg); color: var(--down); }
+.delta.flat { background: var(--line); color: var(--muted); }
+
+/* Listen */
+.trades, .coins { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; padding-top: 2px; }
+.row .main { flex: 1; min-width: 0; }
+.row .name { font-weight: 700; }
+.row .sub { font-size: 13px; color: var(--muted); }
+.row .val { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.pill { font-weight: 800; font-size: 14px; padding: 4px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.pill.up { background: var(--up-bg); color: var(--up); }
+.pill.down { background: var(--down-bg); color: var(--down); }
+.empty { color: var(--muted); padding: 4px 0; }
+
+.coin {
+  width: 38px; height: 38px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-weight: 800; font-size: 13px; color: #fff;
+  background: var(--coin, #8E86A8);
+}
+
+.alloc { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); margin-bottom: 10px; }
+.alloc span { display: block; height: 100%; background: var(--coin, #8E86A8); }
+
+.strategy-name { font-weight: 800; font-size: 18px; }
+.strategy p { margin: 6px 0 0; }
+
+/* Login */
+.login h1 { font-size: 22px; margin: 0 0 4px; }
+.login form { display: grid; gap: 12px; margin-top: 14px; }
+.login label { display: grid; gap: 4px; font-weight: 700; font-size: 14px; }
+.login input {
+  font: inherit; font-size: 17px; padding: 12px 14px; border-radius: 14px;
+  border: 1.5px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.login input:focus { outline: none; border-color: var(--accent); }
+.login button {
+  font: inherit; font-weight: 800; font-size: 17px; padding: 14px; border: 0; border-radius: 14px;
+  background: var(--ink); color: var(--bg); cursor: pointer;
+}
+.login button:disabled { opacity: 0.6; }
+.error { color: var(--down); font-weight: 700; margin: 0; }
+.hint { font-size: 13px; color: var(--muted); margin: 14px 0 0; }
+code { font-size: 12px; background: var(--line); padding: 1px 5px; border-radius: 6px; }
+
+.foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; color: var(--muted); padding: 0 4px; }
+.link { font: inherit; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 8px 0; }
+
+.banner { margin-top: 12px; padding: 12px 16px; border-radius: 16px; background: var(--warn-bg); color: var(--warn); font-weight: 700; font-size: 14px; }
+
+/* ===================== Biko ===================== */
+.biko .shadow { fill: rgba(43, 33, 64, 0.12); }
+.biko .torso, .biko .arm ellipse { fill: var(--biko-body); }
+.biko .foot { fill: var(--biko-shade); }
+.biko .belly { fill: var(--biko-belly); }
+.biko .antenna-stick { fill: none; stroke: var(--biko-shade); stroke-width: 5; stroke-linecap: round; }
+.biko .antenna-ball { fill: var(--biko-mint); transition: fill .4s; }
+.biko .antenna-shine, .biko .shine { fill: #fff; }
+.biko .eye ellipse, .biko .mouth-o, .biko .mouth-open { fill: var(--biko-ink); }
+.biko .line { fill: none; stroke: var(--biko-ink); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.biko .line path { fill: none; }
+.biko .blush { fill: var(--biko-blush); opacity: .55; }
+.biko .tear { fill: #7FC8FF; }
+.biko .laptop-back { fill: var(--laptop); }
+.biko .laptop-base { fill: var(--laptop-dark); }
+.biko .laptop-logo { fill: var(--biko-mint); }
+.biko .hand { fill: var(--biko-body); stroke: var(--biko-shade); stroke-width: 2; }
+.biko .sign-stick { fill: #B07A45; }
+.biko .sign-board { fill: #fff; stroke: var(--biko-ink); stroke-width: 3; }
+.biko .sign-text { font: 800 15px var(--font); fill: var(--biko-ink); text-anchor: middle; }
+.biko .fx text { font-family: var(--font); font-weight: 800; fill: var(--muted); }
+.biko .z { font-size: 18px; }
+.biko .z2 { font-size: 22px; }
+.biko .z3 { font-size: 28px; }
+.biko .fx-question text { font-size: 44px; fill: var(--accent); }
+.biko .fl { font-size: 18px; fill: var(--up) !important; }
+.biko .spark { fill: #FFC94D; stroke: #F2A535; stroke-width: 1.5; }
+
+/* alles Situative zuerst aus */
+.biko .eyes-closed, .biko .eyes-happy, .biko .brows-sad, .biko .mouth, .biko .tear,
+.biko .laptop, .biko .hands, .biko .sign, .biko .fx { display: none; }
+
+.biko .body-g, .biko .arm, .biko .eyes-open, .biko .antenna, .biko .hand, .biko .face,
+.biko .fx text, .biko .spark, .biko .tear { transform-box: fill-box; }
+.biko .body-g { transform-origin: 50% 100%; }
+.biko .eyes-open { transform-origin: 50% 50%; animation: blink 4.5s infinite; }
+.biko .antenna { transform-origin: 50% 100%; animation: wobble 3s ease-in-out infinite; }
+
+/* schläft */
+.biko[data-mood="schlaeft"] .eyes-open { display: none; }
+.biko[data-mood="schlaeft"] .eyes-closed,
+.biko[data-mood="schlaeft"] .mouth-o,
+.biko[data-mood="schlaeft"] .fx-zzz { display: inline; }
+.biko[data-mood="schlaeft"] .body-g { animation: breathe 3.2s ease-in-out infinite; }
+.biko[data-mood="schlaeft"] .antenna { animation: none; transform: rotate(-14deg); }
+.biko[data-mood="schlaeft"] .antenna-ball { fill: #B9B2CC; }
+.biko[data-mood="schlaeft"] .z { opacity: 0; animation: zzz 3.6s ease-in infinite; }
+.biko[data-mood="schlaeft"] .z2 { animation-delay: 1.2s; }
+.biko[data-mood="schlaeft"] .z3 { animation-delay: 2.4s; }
+
+/* tippt */
+.biko[data-mood="tippt"] .arm { display: none; }
+.biko[data-mood="tippt"] .laptop, .biko[data-mood="tippt"] .hands,
+.biko[data-mood="tippt"] .mouth-smile, .biko[data-mood="tippt"] .fx-floaters { display: inline; }
+.biko[data-mood="tippt"] .eyes-open { transform: translateY(4px); animation: none; }
+.biko[data-mood="tippt"] .face { animation: scan 2.4s ease-in-out infinite; }
+.biko[data-mood="tippt"] .body-g { animation: bob .5s ease-in-out infinite alternate; }
+.biko[data-mood="tippt"] .hand { transform-origin: 50% 50%; animation: tap .26s ease-in-out infinite alternate; }
+.biko[data-mood="tippt"] .hand-r { animation-delay: .13s; }
+.biko[data-mood="tippt"] .antenna-ball { animation: glow 1s ease-in-out infinite alternate; }
+.biko[data-mood="tippt"] .fl { opacity: 0; animation: rise 2.4s ease-out infinite; }
+.biko[data-mood="tippt"] .f2 { animation-delay: .8s; }
+.biko[data-mood="tippt"] .f3 { animation-delay: 1.6s; }
+
+/* jubelt */
+.biko[data-mood="jubelt"] .eyes-open { display: none; }
+.biko[data-mood="jubelt"] .eyes-happy, .biko[data-mood="jubelt"] .mouth-open,
+.biko[data-mood="jubelt"] .fx-sparkles { display: inline; }
+.biko[data-mood="jubelt"] .body-g { animation: jump .9s cubic-bezier(.3,.7,.4,1) infinite; }
+.biko[data-mood="jubelt"] .arm-l { transform-origin: 80% 20%; transform: rotate(130deg) translate(-4px, 10px); }
+.biko[data-mood="jubelt"] .arm-r { transform-origin: 20% 20%; transform: rotate(-130deg) translate(4px, 10px); }
+.biko[data-mood="jubelt"] .spark { transform-origin: 50% 50%; animation: twinkle 1.2s ease-in-out infinite; }
+.biko[data-mood="jubelt"] .s2 { animation-delay: .3s; }
+.biko[data-mood="jubelt"] .s3 { animation-delay: .6s; }
+.biko[data-mood="jubelt"] .s4 { animation-delay: .9s; }
+.biko[data-mood="jubelt"] .shadow { animation: shadow .9s cubic-bezier(.3,.7,.4,1) infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+
+/* traurig */
+.biko[data-mood="traurig"] .brows-sad, .biko[data-mood="traurig"] .mouth-sad,
+.biko[data-mood="traurig"] .tear { display: inline; }
+.biko[data-mood="traurig"] .eyes-open { transform: translateY(3px); animation: none; }
+.biko[data-mood="traurig"] .body-g { transform: scaleY(.97); }
+.biko[data-mood="traurig"] .antenna { animation: none; transform: rotate(18deg); }
+.biko[data-mood="traurig"] .tear { animation: tear 2.4s ease-in infinite; }
+
+/* Pause */
+.biko[data-mood="pause"] .sign, .biko[data-mood="pause"] .mouth-smile { display: inline; }
+.biko[data-mood="pause"] .arm-r { transform-origin: 30% 30%; transform: rotate(-35deg) translate(4px, -4px); }
+.biko[data-mood="pause"] .body-g { animation: sway 4s ease-in-out infinite; }
+
+/* offline */
+.biko[data-mood="offline"] .mouth-wavy, .biko[data-mood="offline"] .fx-question { display: inline; }
+.biko[data-mood="offline"] .body-g { transform: rotate(-6deg); }
+.biko[data-mood="offline"] .antenna-ball { fill: #B9B2CC; animation: flicker 2s steps(1) infinite; }
+.biko[data-mood="offline"] .fx-question text { transform-box: fill-box; transform-origin: 50% 100%; animation: wobble 1.6s ease-in-out infinite; }
+
+/* winkt (Login) und lädt */
+.biko[data-mood="winkt"] .mouth-smile, .biko[data-mood="laedt"] .mouth-smile { display: inline; }
+.biko[data-mood="winkt"] .arm-r { transform-origin: 20% 20%; animation: wave 1.1s ease-in-out infinite; }
+.biko[data-mood="laedt"] .antenna-ball { animation: glow .6s ease-in-out infinite alternate; }
+
+@keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes wobble { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.02, .975); } }
+@keyframes zzz { 0% { opacity: 0; transform: translate(0, 6px); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(10px, -16px); } }
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+@keyframes tap { from { transform: translateY(0); } to { transform: translateY(-5px); } }
+@keyframes scan { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+@keyframes glow { from { fill: var(--biko-mint); } to { fill: #9BF2DA; } }
+@keyframes rise { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-46px); } }
+@keyframes jump { 0%, 100% { transform: translateY(0) scale(1.04, .96); } 15% { transform: translateY(0) scale(.97, 1.03); } 45% { transform: translateY(-26px) scale(1); } 75% { transform: translateY(0) scale(1.03, .97); } }
+@keyframes shadow { 0%, 100%, 75% { transform: scale(1); opacity: 1; } 45% { transform: scale(.7); opacity: .5; } }
+@keyframes twinkle { 0%, 100% { transform: scale(.4) rotate(0); opacity: .3; } 50% { transform: scale(1.15) rotate(25deg); opacity: 1; } }
+@keyframes tear { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(22px); opacity: 0; } }
+@keyframes sway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes flicker { 0%, 100% { fill: #B9B2CC; } 50% { fill: var(--biko-mint); } 60% { fill: #B9B2CC; } }
+@keyframes wave { 0%, 100% { transform: rotate(-150deg) translate(2px, 12px); } 50% { transform: rotate(-110deg) translate(2px, 12px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .biko *, .biko { animation: none !important; }
+  .biko .z, .biko .fl { opacity: 1 !important; }
+}
