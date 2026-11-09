@@ -11,6 +11,7 @@ REPO="n1kob1ko/biko-bot"
 BRANCH="${BIKO_BRANCH:-main}"
 ZIEL="${BIKO_DIR:-/opt/biko-bot}"
 URL="http://127.0.0.1:8080"
+APP_URL="http://127.0.0.1:8081"
 
 fehler() { echo; echo "FEHLER: $1" >&2; exit 1; }
 schritt() { echo; echo "==> $1"; }
@@ -77,11 +78,38 @@ if [ ! -f .env ]; then
     { print }
   ' .env.example > .env
   chmod 600 .env
-  printf 'Biko Bot - FreqUI\nAdresse:  %s (nur über SSH-Tunnel)\nBenutzer: biko\nPasswort: %s\n' "$URL" "$PASSWORT" > ZUGANGSDATEN.txt
+  printf 'Biko Bot\nBiko-App: %s (einfache Ansicht, nur über SSH-Tunnel)\nFreqUI:   %s (Profi-Ansicht, nur über SSH-Tunnel)\nBenutzer: biko\nPasswort: %s\n' "$APP_URL" "$URL" "$PASSWORT" > ZUGANGSDATEN.txt
   chmod 600 ZUGANGSDATEN.txt
   echo "[OK] .env angelegt (Telegram: $TG_AN)"
 else
   echo "[OK] Vorhandene .env bleibt unverändert"
+fi
+
+# Börse: Kraken oder Binance (steuert BOT_CONFIG in .env). Ohne Frage: BIKO_BOERSE=kraken|binance
+schritt "Börse wählen"
+AKTUELL="$(grep -E '^BOT_CONFIG=' .env | tail -n1 | cut -d= -f2- || true)"
+[ -n "$AKTUELL" ] || AKTUELL="config.json"
+[ "$AKTUELL" = "config.binance.json" ] && AKTUELL_NAME="Binance" || AKTUELL_NAME="Kraken"
+case "${BIKO_BOERSE:-}" in
+  kraken|Kraken)   WAHL=1 ;;
+  binance|Binance) WAHL=2 ;;
+  *) WAHL="$(frage "Welche Börse? 1 = Kraken, 2 = Binance (Enter = $AKTUELL_NAME): ")" ;;
+esac
+case "$WAHL" in
+  1) NEU="config.json" ;;
+  2) NEU="config.binance.json" ;;
+  *) NEU="$AKTUELL" ;;
+esac
+if grep -qE '^BOT_CONFIG=' .env; then
+  sed -i "s|^BOT_CONFIG=.*|BOT_CONFIG=$NEU|" .env
+else
+  printf '\nBOT_CONFIG=%s\n' "$NEU" >> .env
+fi
+if [ "$NEU" = "config.binance.json" ]; then
+  echo "[OK] Börse: Binance"
+  echo "     Hinweis: Binance hat in der EU keine MiCA-Lizenz (siehe README). Für Echtgeld lieber Kraken."
+else
+  echo "[OK] Börse: Kraken"
 fi
 
 # Der Container läuft als Benutzer 1000 und muss in user_data schreiben dürfen
@@ -108,6 +136,7 @@ echo
 echo "=============================================="
 echo "  Läuft! Der Bot handelt NUR mit Spielgeld."
 echo
+echo "  Biko-App: $APP_URL (vom eigenen PC: ssh -L 8081:127.0.0.1:8081 <server>)"
 echo "  Telegram: schreib dem Bot /status oder /profit"
 echo "  Logs:     cd $ZIEL && docker compose logs --tail 100"
 echo "  Stoppen:  cd $ZIEL && docker compose down"

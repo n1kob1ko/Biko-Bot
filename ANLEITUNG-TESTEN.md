@@ -124,7 +124,7 @@ In Termius verbinden und eintippen:
 | Letzte Meldungen anzeigen (bei Problemen an Niko schicken) | `cd /opt/biko-bot && docker compose logs --tail 100` |
 | Server ganz loswerden | beim Anbieter den Server löschen (dann kostet er nichts mehr) |
 
-Hinweis: Die Weboberfläche FreqUI ist aus Sicherheitsgründen nur auf dem Server selbst erreichbar, nicht aus dem Internet.
+Hinweis: Die Biko-App (Port 8081, einfache Ansicht mit Maskottchen) und FreqUI (Port 8080) sind aus Sicherheitsgründen nur auf dem Server selbst erreichbar, nicht aus dem Internet.
 Mit dem Handy bedienst du den Bot deshalb über Telegram.
 
 ---

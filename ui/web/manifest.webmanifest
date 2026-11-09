@@ -1,0 +1,9 @@
+{
+  "name": "Biko",
+  "short_name": "Biko",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FFF6E8",
+  "theme_color": "#FFF6E8",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
