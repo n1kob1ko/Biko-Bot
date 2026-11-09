@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Arbeitet die technischen Punkte aus TODO.md (Phase A und B) am Server in einem Rutsch ab.
-# Einmal am Server als root ausführen (dauert je nach Internet 20-60 Minuten):
+# Einmal am Server als root ausführen. Nach dem Update läuft der Rest im Hintergrund weiter
+# (Terminal darf zu), Fortschritt: tail -f /opt/biko-bot/user_data/backtest_results/BERICHT.txt
 #
 #   curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/scripts/live-vorbereiten.sh | sudo bash
 #
@@ -34,6 +35,21 @@ cd "$ZIEL" || { echo "FEHLER: $ZIEL fehlt" >&2; exit 1; }
 BERICHT_DIR="$ZIEL/user_data/backtest_results"
 mkdir -p "$BERICHT_DIR"
 BERICHT="$BERICHT_DIR/BERICHT.txt"
+
+# Ab hier im Hintergrund weiterlaufen, damit ein zugeklappter Laptop oder eine abgebrochene
+# SSH-Verbindung die Backtests nicht killt. Das frisch heruntergeladene Skript liegt jetzt in $ZIEL/scripts.
+if [ "${1:-}" != "--vordergrund" ]; then
+  : > "$BERICHT"
+  setsid nohup bash "$ZIEL/scripts/live-vorbereiten.sh" --vordergrund >/dev/null 2>&1 < /dev/null &
+  echo
+  echo "=================================================================="
+  echo "  Der Rest läuft jetzt im Hintergrund (10 bis 40 Minuten)."
+  echo "  Du kannst das Terminal schließen und den Laptop zuklappen."
+  echo "  Zuschauen:   tail -f $BERICHT        (beenden mit Strg+C)"
+  echo "  Fertig, wenn am Ende '6/6 Zusammenfassung' steht."
+  echo "=================================================================="
+  exit 0
+fi
 exec > >(tee -a "$BERICHT") 2>&1
 echo; echo "Bericht $(date -u '+%Y-%m-%d %H:%M UTC'), Server $(hostname)"
 
