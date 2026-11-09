@@ -1,0 +1,11 @@
+# Testmodus: erzwingt Dry-Run (nur Spielgeld) und entfernt Börsen-API-Keys.
+#   docker compose -f docker-compose.yml -f docker-compose.testmodus.yml up -d
+# "environment" hat Vorrang vor env_file (.env). Selbst wenn in .env
+# FREQTRADE__DRY_RUN=false oder ein Key steht, handelt der Bot hier nie echt.
+# install.sh startet den Bot immer mit dieser Datei.
+services:
+  freqtrade:
+    environment:
+      FREQTRADE__DRY_RUN: "true"
+      FREQTRADE__EXCHANGE__KEY: ""
+      FREQTRADE__EXCHANGE__SECRET: ""

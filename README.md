@@ -3,6 +3,8 @@
 Eigener Krypto-Trading-Bot auf Basis von [Freqtrade](https://www.freqtrade.io). Lernprojekt mit 200–500 € Kapital, nur Spot, kein Hebel. Ziel ist nicht "Gewinn > 0", sondern **besser als BTC halten**, nach Gebühren und Steuer.
 Geprüft gegen **Freqtrade 2026.10** (aktuelle stable, Python ≥ 3.12).
 
+> **Nur mal testen, ohne PC?** Siehe [ANLEITUNG-TESTEN.md](ANLEITUNG-TESTEN.md): per Telegram zuschauen oder mit einer Zeile auf einem eigenen Server installieren, immer im Testmodus mit Spielgeld.
+
 ## Inhalt
 
 ```
@@ -12,6 +14,9 @@ docker-compose.yml                    Freqtrade-Container (Image: freqtradeorg/f
 user_data/config.json                 Kraken Spot, BTC/EUR ETH/EUR SOL/EUR, dry_run: true
 user_data/config.binance.json         dasselbe für Binance Spot
 user_data/strategies/EmaTrendStrategy.py
+docker-compose.testmodus.yml          erzwingt Dry-Run und leere Keys (für Tester)
+install.sh                            Ein-Zeilen-Installation auf Ubuntu/Debian-Server, immer Testmodus
+ANLEITUNG-TESTEN.md                   Anleitung für Tester ohne PC (Telegram/Handy)
 ```
 
 ## Was die Strategie macht
