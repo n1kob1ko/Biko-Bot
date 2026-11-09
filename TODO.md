@@ -1,6 +1,7 @@
 # Biko Bot: Weg zum Echtgeld (To-do-Liste)
 
-Stand: 9.11.2026. Der Bot läuft im **Testmodus** (Spielgeld) auf dem Hetzner-Server.
+Stand: 9.11.2026 abends. Der Bot läuft im **Testmodus** (Spielgeld) auf dem Hetzner-Server.
+**Zwischenstand Backtests:** keine der drei Strategien schlägt BTC halten (2021–2023). Details in Phase B. Live gehen ist damit vorerst **nicht** drin.
 Ziel: mit 200–500 € echt handeln, aber nur, wenn er nachweislich **besser ist als BTC halten**, nach Gebühren und 27,5 % Steuer.
 
 Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du machen (braucht deine Konten, deinen Server oder deine Entscheidung)
@@ -29,7 +30,7 @@ Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du mach
 | 🆕 | **Notaus** | `sudo /opt/biko-bot/scripts/notaus.sh`: nichts Neues kaufen + alles verkaufen (mit Rückfrage) |
 | 🆕 | **Steuer-Export** | `python3 scripts/steuer_export.py 2027` → CSV mit allen Trades und Jahressumme |
 | 🆕 | **Server härten** | `scripts/server-haerten.sh`: Sicherheitsupdates automatisch, Firewall, fail2ban, SSH nur mit Schlüssel, Swap |
-| 🆕 | **Backtest mit echten Kosten** | `scripts/backtest.sh`: 0,5 % pro Seite (Kraken-Taker + Spread/Slippage), Protections an, danach Vergleich mit BTC halten vor und nach Steuer |
+| 🆕 | **Backtest mit echten Kosten** | `scripts/backtest.sh`: 0,5 % pro Seite (Kraken-Taker + Spread/Slippage), Protections an, Kill-Switch im Backtest aus (`KILLSWITCH=an` schaltet ihn ein), danach Vergleich mit BTC halten vor und nach Steuer, Ausstiege und Jahre |
 | 🆕 | Docker-Logs begrenzt | max. 30 MB pro Dienst, damit die Platte nicht vollläuft |
 
 ---
@@ -42,26 +43,25 @@ Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du mach
 erledigt am Server in einem Rutsch: Update, Server härten, Kursdaten, alle Backtests mit Prüfungen, Notaus-Test, und schreibt
 einen Bericht nach `user_data/backtest_results/BERICHT.txt`. Danach bleiben nur die 👉-Punkte mit deinen Konten.
 
-- [ ] 👉 **Update einspielen:** `curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/install.sh | sudo bash` (bleibt Testmodus, startet den neuen Wächter)
+- [x] ✅ **Update einspielen** (9.11.2026, Wächter läuft)
 - [ ] 👉 **Telegram einrichten:** Bot bei @BotFather anlegen, Chat-ID über @userinfobot, in `/opt/biko-bot/.env` eintragen (`FREQTRADE__TELEGRAM__ENABLED=true`, `TOKEN`, `CHAT_ID`), dann install.sh nochmal. Ohne Telegram kein Echtgeld (install.sh verweigert es).
 - [ ] 👉 **SSH-Schlüssel statt Passwort:** am PC `ssh-keygen -t ed25519`, dann `ssh-copy-id root@2.31.179.96`. Testen, ob der Login ohne Passwort geht.
-- [ ] 👉 **Server härten:** `sudo bash /opt/biko-bot/scripts/server-haerten.sh` (erst nach dem SSH-Schlüssel, dann schaltet es den Passwort-Login ab)
+- [x] ✅ **Server härten** (9.11.2026: Updates automatisch, Firewall, fail2ban, Swap). Nach dem SSH-Schlüssel nochmal laufen lassen, dann geht der Passwort-Login aus.
 - [ ] 👉 **Hetzner-Root-Passwort ändern** (kam per E-Mail) und **2FA im Hetzner-Konto** einschalten
 - [ ] 👉 **healthchecks.io** (kostenlos): Check anlegen, Takt 5 Min., Gnadenzeit 15 Min., Ping-URL als `HEALTHCHECK_URL=` in die `.env`, install.sh nochmal
 - [ ] 👉 **Hetzner-Backups** für den Server einschalten (+20 % = ca. 1,56 €/Monat): Backup außerhalb des Servers
-- [ ] 👉 Notaus einmal im Testmodus ausprobieren: `sudo /opt/biko-bot/scripts/notaus.sh --nur-pause`, danach in der App "Weiter handeln"
+- [x] ✅ Notaus im Testmodus probiert (9.11.2026: Pause und Weiter funktionieren)
 
 ### Phase B: beweisen, dass es sich lohnt (2–3 Monate)
 
 Backtests laufen nicht in der Cloud-Sandbox (kommt nicht an Kraken), nur auf deinem PC oder dem Server.
 
-- [ ] 👉 **Kursdaten laden** (README, Abschnitt `download-data`; Kraken über die CSV-Variante, sonst dauert es Tage)
-- [ ] 👉 **Trendfolger backtesten:** `PRUEFEN=ja scripts/backtest.sh EmaTrendStrategy entw`
-  - `has_bias` muss `False` sein, recursive-analysis bei 600 Kerzen ~0 %
-  - nochmal mit `FEE=0.0025`: wenn er nur mit niedrigen Gebühren gewinnt, ist er nicht gut genug
+- [x] ✅ **Kursdaten geladen** (9.11.2026: Binance BTC/ETH/SOL in EUR, 4h und 1h, ab 2020, als Ersatz für Kraken-Kurse)
+- [x] ✅ **Trendfolger backgetestet** (9.11.2026, 2021–2023, 0,5 %): **+33 %** (nach Steuer +24 %) gegen **BTC halten +62 %** (+45 %). Schlechter als BTC, aber Rückgang 15 % statt 75 %. Mit 0,25 % Gebühr +35 %, Gebühr ist also nicht das Problem. `has_bias: No`, recursive-analysis bei 600 Kerzen 0,02 %. **Aber:** Kill-Switch hat im Sep 2022 ausgelöst, danach kein Trade mehr, 2023 komplett verpasst. Ergebnis gilt nur bis dahin.
 - [ ] 👉 Wenn der Trendfolger im Entwicklungs-Zeitraum passt: `scripts/backtest.sh EmaTrendStrategy valid` (2024, erst jetzt anschauen)
-- [ ] 👉 **Ausbruch und Rücksetzer** genauso testen. Erst danach in der App für Echtgeld erlauben.
-- [ ] 👉 **Seitwärtsmarkt:** im Backtest mit `--breakdown month` schauen, ob die Verluste aus Seitwärtsphasen kommen (viele kleine Stops hintereinander). Wenn ja, einen Filter (z. B. ADX > 20) **als eigenen Test** ausprobieren, nicht einfach einbauen. Jeder zusätzliche Parameter erhöht die Gefahr von Überanpassung.
+- [x] ✅ **Ausbruch und Rücksetzer** getestet (9.11.2026): **−12 %** und **−16 %**, beide vom Kill-Switch abgeschaltet. Kein Lookahead. So nicht für Echtgeld geeignet.
+- [ ] 👉 **Zweiter Lauf ohne Kill-Switch** (volle 3 Jahre) plus die zwei vorher festgelegten Varianten `VersuchTrendAdx` (ADX > 20) und `VersuchTrendWeiterStop` (Stop −10 %, halbe Position): `curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/scripts/varianten-testen.sh | sudo bash`, dann `cat user_data/backtest_results/VARIANTEN.txt` an Claude.
+- [x] ✅ **Seitwärtsmarkt** angeschaut: ja, 50 von 85 Trades endeten im −5-%-Stop, 17 Verluste in Folge von Nov 2021 bis Sep 2022. Darum die zwei Varianten oben (ADX-Filter, weiter Stop). Mehr Varianten gibt es bewusst nicht (Überanpassung).
 - [ ] 👉 **Finaler Test** (`scripts/backtest.sh EmaTrendStrategy final`) **genau einmal**, wenn die Regeln fest sind. Danach nichts mehr an den Regeln drehen.
 - [ ] 👉 **Testmodus mindestens 8 Wochen** mit genau den Echtgeld-Einstellungen laufen lassen (Kraken, 4h, gleiche Coins, gleiches Risiko)
 - [ ] 👉 **Testmodus mit Backtest vergleichen:** Backtest über denselben Zeitraum laufen lassen. Gleiche Trades zu ähnlichen Zeiten? Große Abweichung = Fehler im Setup, nicht Pech.

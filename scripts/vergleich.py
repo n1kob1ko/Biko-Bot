@@ -50,6 +50,18 @@ def main():
         if btc is not None:
             print(f"BTC halten:                {btc:+8.1%}   nach Steuer ca. {after_tax(btc):+8.1%}")
         print(f"Größter Konto-Rückgang:    {s.get('max_drawdown_account', 0):8.1%}")
+        print(f"Gewinnquote:               {s.get('winrate', 0):8.1%}   Profit-Faktor {s.get('profit_factor', 0):.2f}")
+        exits = s.get("exit_reason_summary") or []
+        if exits:
+            parts = []
+            for e in exits:
+                name = e.get("key") or e.get("exit_reason") or "?"
+                parts.append(f"{name} {e.get('trades', 0)}x ({e.get('profit_total_abs', 0):+.0f} EUR)")
+            print("Ausstiege:                 " + ", ".join(parts))
+        years = (s.get("periodic_breakdown") or {}).get("year") or []
+        if years:
+            parts = [f"{str(y.get('date'))[:4]}: {y.get('profit_abs', 0):+.0f} EUR ({y.get('trades', 0)} Trades)" for y in years]
+            print("Pro Jahr:                  " + " | ".join(parts))
         if btc is not None:
             diff = after_tax(bot) - after_tax(btc)
             verdict = "BESSER als BTC halten" if diff > 0 else "SCHLECHTER als BTC halten"
