@@ -1,7 +1,7 @@
 # Biko Bot: Weg zum Echtgeld (To-do-Liste)
 
 Stand: 9.11.2026 abends. Der Bot läuft im **Testmodus** (Spielgeld) auf dem Hetzner-Server.
-**Zwischenstand Backtests (2021–2023):** Nur der Original-Trendfolger schlägt BTC halten, knapp (+8 Punkte nach Steuer) und mit 22 % Rückgang. Ausbruch und Rücksetzer verlieren. Nächster Schritt: Validierung 2024. Live gehen ist vorerst **nicht** drin.
+**Ergebnis der Backtests (9.11.2026):** Keine Strategie schlägt BTC halten. Der Trendfolger ist 2021–2023 knapp besser (+8 Punkte), fällt aber in der Validierung 2024 klar durch (+17 % gegen +95 % nach Steuer). Ausbruch und Rücksetzer verlieren Geld. **Nach den festen Regeln in Abschnitt 3: kein Echtgeld.** Was mit dem Bot weiter passiert (Testmodus behalten, neues Ziel, abschalten), entscheidet Niko.
 Ziel: mit 200–500 € echt handeln, aber nur, wenn er nachweislich **besser ist als BTC halten**, nach Gebühren und 27,5 % Steuer.
 
 Zeichen: ✅ erledigt · 🆕 in diesem Schritt neu gebaut · 👉 musst du machen (braucht deine Konten, deinen Server oder deine Entscheidung)
@@ -58,7 +58,9 @@ Backtests laufen nicht in der Cloud-Sandbox (kommt nicht an Kraken), nur auf dei
 
 - [x] ✅ **Kursdaten geladen** (9.11.2026: Binance BTC/ETH/SOL in EUR, 4h und 1h, ab 2020, als Ersatz für Kraken-Kurse)
 - [x] ✅ **Trendfolger backgetestet** (9.11.2026, 2021–2023, 0,5 %): **+33 %** (nach Steuer +24 %) gegen **BTC halten +62 %** (+45 %). Schlechter als BTC, aber Rückgang 15 % statt 75 %. Mit 0,25 % Gebühr +35 %, Gebühr ist also nicht das Problem. `has_bias: No`, recursive-analysis bei 600 Kerzen 0,02 %. **Aber:** Kill-Switch hat im Sep 2022 ausgelöst, danach kein Trade mehr, 2023 komplett verpasst. Ergebnis gilt nur bis dahin.
-- [ ] 👉 **Validierung 2024** (einmal, nichts geändert): `cd /opt/biko-bot && BOT_CONFIG=config.binance.json KILLSWITCH=aus bash scripts/backtest.sh EmaTrendStrategy valid`. Hält er mit BTC mit, ist er einen 8-Wochen-Testlauf wert, sonst Testmodus bleiben.
+- [x] ✅ **Validierung 2024** (9.11.2026, einmal, nichts geändert): Bot **+23 %** (nach Steuer +17 %), BTC halten **+131 %** (+95 %). 58 Trades, Gewinnquote 31 %, Rückgang 13 %. **Klar durchgefallen.**
+  Über 2021–2024 zusammen: Bot ca. +110 %, BTC halten ca. +270 %, halb BTC / halb Cash ca. +135 %. Ursache ist die Bauart (1 % Risiko, nie voll investiert), nicht ein Fehler: der Bot verliert in Bärenjahren weniger, kann aber in Bullenjahren nicht mithalten.
+  **Ergebnis nach Regel 2 und 3: nicht live gehen.** Keine weitere Parameter-Suche (Überanpassung).
 - [x] ✅ **Ausbruch und Rücksetzer** getestet (9.11.2026): **−12 %** und **−16 %**, beide vom Kill-Switch abgeschaltet. Kein Lookahead. So nicht für Echtgeld geeignet.
 - [x] ✅ **Zweiter Lauf ohne Kill-Switch** (9.11.2026 abends, volle 3 Jahre, nach Steuer, BTC halten = +45 %):
   | Strategie | Bot | Rückgang | Trades | Gewinnquote |
