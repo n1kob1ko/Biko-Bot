@@ -1,0 +1,19 @@
+# ECHTGELD-Modus. Nicht von Hand starten, sondern: in der .env BIKO_MODUS=live setzen und install.sh
+# nochmal ausführen. install.sh prüft vorher die wichtigsten Punkte aus TODO.md (Keys, Telegram, ...).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.live.yml up -d
+#
+# Unterschied zum Testmodus:
+# - eigene Datenbank tradesv3.live.sqlite. Spielgeld-Trades landen nie in der Echtgeld-Datenbank
+#   (BikoBase.bot_start bricht sonst den Start ab).
+# - Dry-Run ist hier ausdrücklich aus, die Keys kommen aus der .env.
+services:
+  freqtrade:
+    environment:
+      FREQTRADE__DRY_RUN: "false"
+    command: >
+      trade
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.live.sqlite
+      --config /freqtrade/user_data/${BOT_CONFIG:-config.json}
+      --config /freqtrade/user_data/biko-settings.json

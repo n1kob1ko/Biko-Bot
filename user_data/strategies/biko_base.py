@@ -7,6 +7,7 @@ Hier steckt alles, was NICHT vom Signal abhängt und bei jeder Strategie gleich 
 - Stop-Loss als Stop-Order direkt an der Börse (stoploss_on_exchange)
 - Protections: CooldownPeriod, StoplossGuard, MaxDrawdown (Tageslimit -3 %)
 - Kill-Switch: ab -15 % Konto-Drawdown (geschlossene Trades) keine neuen Entries mehr
+- Datenbank-Schutz: Echtgeld nur mit eigener Live-Datenbank (tradesv3.live.sqlite), Testmodus nie mit ihr
 
 Die eigentlichen Strategien (EmaTrendStrategy, BreakoutStrategy, DipBuyStrategy) erben von
 BikoBase und definieren nur Indikatoren, Entry und Exit. So kann man in der Biko-App die
@@ -23,6 +24,8 @@ from datetime import datetime
 
 from pandas import DataFrame
 
+from freqtrade.enums import RunMode
+from freqtrade.exceptions import OperationalException
 from freqtrade.exchange import timeframe_to_minutes
 from freqtrade.persistence import Trade
 from freqtrade.strategy import IStrategy
@@ -116,6 +119,33 @@ class BikoBase(IStrategy):
                 "max_allowed_drawdown": 0.03,
             },
         ]
+
+    # --- Start-Prüfung: Echtgeld und Spielgeld nie in derselben Datenbank ------------
+    LIVE_DB_MARKER = "live"
+
+    def bot_start(self, **kwargs) -> None:
+        """
+        Spielgeld-Trades in der Echtgeld-Datenbank wären gefährlich: der Bot würde versuchen,
+        Coins zu verkaufen, die es gar nicht gibt (und umgekehrt echte Trades "vergessen").
+        Darum: Live nur mit einer Datenbank, deren Name "live" enthält (docker-compose.live.yml),
+        Testmodus nie mit so einer. Sonst startet der Bot gar nicht erst.
+        """
+        if self.dp.runmode not in (RunMode.LIVE, RunMode.DRY_RUN):
+            return  # Backtest, Hyperopt, Analyse: keine Datenbank im Spiel
+        db_url = str(self.config.get("db_url", ""))
+        is_live_db = self.LIVE_DB_MARKER in db_url.rsplit("/", 1)[-1]
+        if self.dp.runmode == RunMode.LIVE and not is_live_db:
+            raise OperationalException(
+                f"Echtgeld-Modus mit der Datenbank '{db_url}'. Echtgeld braucht eine eigene "
+                "Datenbank (tradesv3.live.sqlite): bitte mit BIKO_MODUS=live über install.sh "
+                "bzw. docker-compose.live.yml starten. Bot startet nicht."
+            )
+        if self.dp.runmode == RunMode.DRY_RUN and is_live_db:
+            raise OperationalException(
+                f"Testmodus mit der Echtgeld-Datenbank '{db_url}'. Das würde echte Trades "
+                "durcheinanderbringen. Bot startet nicht."
+            )
+        logger.info(f"Biko: Modus {self.dp.runmode.value}, Datenbank {db_url}")
 
     # --- Signale: definieren die Unterklassen -------------------------------------
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
