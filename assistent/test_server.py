@@ -104,5 +104,12 @@ class Test(unittest.TestCase):
             self.assertIn(b"<!doctype html>", r.read())
 
 
+    def test_schrift_wird_als_schrift_ausgeliefert_und_gecacht(self):
+        with urllib.request.urlopen(self.url + "/fonts/atkinson-latin.woff2") as r:
+            self.assertEqual(r.headers["Content-Type"], "font/woff2")
+            self.assertIn("max-age", r.headers["Cache-Control"])
+            self.assertEqual(r.read()[:4], b"wOF2")
+
+
 if __name__ == "__main__":
     unittest.main()
