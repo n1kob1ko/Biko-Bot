@@ -68,6 +68,17 @@
     return n === 1 ? `jede ${unit[0]}` : `alle ${n} ${unit[1]}`;
   };
 
+  const TF_MS = { m: 60e3, h: 3600e3, d: 86400e3, w: 7 * 86400e3 };
+  function nextCheck(tf) {
+    const m = /^(\d+)([mhdw])$/.exec(tf || '');
+    if (!m) return '–';
+    const step = Number(m[1]) * TF_MS[m[2]];
+    const mins = Math.max(1, Math.ceil((Math.ceil(Date.now() / step) * step - Date.now()) / 60e3));
+    if (mins < 60) return `in ${mins} Min.`;
+    const h = Math.floor(mins / 60);
+    return `in ${h} Std.${mins % 60 ? ` ${mins % 60} Min.` : ''}`;
+  }
+
   // ---------- API ----------
   class AuthError extends Error {}
   class OfflineError extends Error {}
@@ -166,6 +177,8 @@
   // ---------- Darstellung ----------
   function showLogin(message) {
     $('dash').hidden = true;
+    $('money').hidden = true;
+    $('rail').hidden = true;
     $('login').hidden = false;
     $('chips').innerHTML = '';
     Biko.setMood('winkt');
@@ -178,6 +191,8 @@
   function render(d) {
     $('login').hidden = true;
     $('dash').hidden = false;
+    $('money').hidden = false;
+    $('rail').hidden = false;
 
     const c = d.config;
     currency = c.stake_currency || 'EUR';
@@ -206,22 +221,48 @@
       delta.hidden = true;
     }
 
-    // Offene Trades
-    const tradesEl = $('trades');
-    if (!d.status.length) {
-      tradesEl.innerHTML = '<li class="empty">Gerade kein offener Trade. Biko wartet auf ein gutes Signal.</li>';
+    // Status-Kacheln
+    const state = (c.state || 'running').toLowerCase();
+    $('t-state').textContent = { running: 'Aktiv', paused: 'Kauft nichts', stopped: 'Gestoppt' }[state] || state;
+    $('t-hub').className = `tile-hub ${state === 'running' ? 'running' : 'paused'}`;
+    const sl = Math.abs(Number(c.stoploss) || 0);
+    $('t-risk').textContent = !sl ? '–' : sl <= 0.05 ? 'Niedrig' : sl <= 0.1 ? 'Mittel' : 'Hoch';
+    $('t-risk-sub').textContent = sl ? `Stopp bei −${new Intl.NumberFormat(LOCALE).format(sl * 100)} %` : '';
+    $('t-next').textContent = state === 'running' ? nextCheck(c.timeframe) : '–';
+    const tp = $('t-profit');
+    if (typeof ratio === 'number' && b.starting_capital) {
+      tp.textContent = pct(ratio);
+      tp.className = `t-value ${ratio > 0.0005 ? 'up' : ratio < -0.0005 ? 'down' : ''}`;
     } else {
-      tradesEl.innerHTML = d.status.map((t) => {
-        const sym = baseOf(t.pair);
-        const [name, color] = coinInfo(sym);
+      tp.textContent = '–';
+      tp.className = 't-value';
+    }
+
+    // Trades: offene zuerst, dann die letzten verkauften
+    const rows = [
+      ...d.status.map((t) => ({ t, open: true, ts: t.open_timestamp })),
+      ...d.trades.filter((t) => t.close_timestamp).sort((x, y) => y.close_timestamp - x.close_timestamp).slice(0, 5)
+        .map((t) => ({ t, open: false, ts: t.close_timestamp })),
+    ];
+    const tradesEl = $('trades');
+    if (!rows.length) {
+      tradesEl.innerHTML = '<li class="empty">Noch keine Trades. Biko wartet auf ein gutes Signal.</li>';
+    } else {
+      tradesEl.innerHTML = rows.map(({ t, open, ts }) => {
+        const [base, quote = currency] = String(t.pair).split('/');
+        const color = coinInfo(base)[1];
         const r = t.profit_ratio ?? 0;
+        const abs = t.profit_abs;
+        const amount = open ? money(t.stake_amount ?? 0) : (typeof abs === 'number' ? `${abs >= 0 ? '+' : '−'}${money(Math.abs(abs))}` : pct(r));
+        const stateCls = open ? 'open' : r >= 0 ? 'win' : 'loss';
+        const stateText = open ? `Offen · ${pct(r)}` : `Verkauft · ${pct(r)}`;
         return `<li class="row">
-          <div class="coin" data-color="${esc(color)}">${esc(sym.slice(0, 4))}</div>
+          <div class="coin" data-color="${esc(color)}">${esc(base.slice(0, 4))}</div>
           <div class="main">
-            <div class="name">${esc(name)}</div>
-            <div class="sub">${money(t.stake_amount ?? 0)} drin · gekauft ${esc(since(t.open_timestamp))}</div>
+            <div class="pair">${esc(base)}<span class="arrow"> → </span>${esc(quote)}</div>
+            <div class="state ${stateCls}">${esc(stateText)}</div>
           </div>
-          <span class="pill ${r >= 0 ? 'up' : 'down'}">${pct(r)}</span>
+          <div class="val"><div class="amount ${open ? '' : r >= 0 ? 'up' : 'down'}">${amount}</div><div class="sub">${esc(since(ts))}</div></div>
         </li>`;
       }).join('');
     }
@@ -253,11 +294,21 @@
     const every = tfText(c.timeframe);
     $('strategy-text').textContent = `${s.text}${every ? ` Schaut ${every} auf die Kurse.` : ''}`;
 
+    // Fakten
+    const facts = [
+      ['Börse', ex || '–'],
+      ['Modus', c.dry_run ? 'Spielgeld' : 'Echtgeld'],
+      ['Max. Trades', c.max_open_trades ?? '–'],
+    ];
+    $('facts').innerHTML = facts.map(([k, v]) => `<span class="fact">${esc(k)}: <b>${esc(v)}</b></span>`).join('');
+
     $('updated').textContent = DEMO ? 'Demo mit Beispieldaten' : `Aktualisiert ${new Date().toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   function renderOffline() {
     Biko.setMood('offline');
+    $('t-state').textContent = 'Offline';
+    $('t-hub').className = 'tile-hub offline';
     $('bubble').textContent = sayFor('offline');
     $('updated').textContent = 'Keine Verbindung, versuche es weiter …';
   }
@@ -329,17 +380,38 @@
       { pair: 'BTC/EUR', profit_ratio: 0.021, stake_amount: 83.2, open_timestamp: now - 26 * h },
       { pair: 'SOL/EUR', profit_ratio: -0.008, stake_amount: 82.5, open_timestamp: now - 3 * h },
     ] : [];
-    const closed = [{ pair: 'ETH/EUR', profit_ratio: mood === 'traurig' ? -0.031 : 0.064, close_timestamp: now - (['jubelt', 'traurig'].includes(mood) ? 5 * 60e3 : 3 * 86400e3) }];
+    const recent = ['jubelt', 'traurig'].includes(mood);
+    const closed = [
+      { pair: 'ETH/EUR', profit_ratio: mood === 'traurig' ? -0.031 : 0.064, profit_abs: mood === 'traurig' ? -2.58 : 5.31, close_timestamp: now - (recent ? 5 * 60e3 : 3 * 86400e3) },
+      { pair: 'BTC/EUR', profit_ratio: -0.012, profit_abs: -0.98, close_timestamp: now - 6 * 86400e3 },
+    ];
     const coins = [{ currency: 'EUR', balance: 352.1, est_stake: 352.1 }];
     if (open.length) coins.push({ currency: 'BTC', balance: 0.00089, est_stake: 84.9 }, { currency: 'SOL', balance: 0.52, est_stake: 81.8 });
     const total = coins.reduce((s, x) => s + x.est_stake, 0);
     return {
-      config: { exchange: 'kraken', dry_run: true, strategy: 'EmaTrendStrategy', timeframe: '4h', stake_currency: 'EUR', state: mood === 'pause' ? 'paused' : 'running' },
+      config: { exchange: 'kraken', dry_run: true, strategy: 'EmaTrendStrategy', timeframe: '4h', stake_currency: 'EUR', stoploss: -0.05, max_open_trades: 3, state: mood === 'pause' ? 'paused' : 'running' },
       balance: { total, starting_capital: 500, starting_capital_ratio: total / 500 - 1, currencies: coins },
       status: open,
       trades: closed,
     };
   }
+
+  // ---------- Navigation: aktiven Bereich markieren ----------
+  const navBtns = [...document.querySelectorAll('.nav-btn')];
+  const setActive = (id) => navBtns.forEach((b2) => b2.classList.toggle('active', b2.dataset.nav === id));
+  navBtns.forEach((b2) => b2.addEventListener('click', () => setActive(b2.dataset.nav)));
+  // aktiv = letzter Bereich, dessen Oberkante schon über der Bildschirmmitte liegt
+  function syncNav() {
+    if (window.innerWidth >= 900) return; // breites Raster: alles auf einen Blick, Klick reicht
+    let current = navBtns[0].dataset.nav;
+    for (const b2 of navBtns) {
+      const el = document.getElementById(b2.dataset.nav);
+      if (el && el.getBoundingClientRect().top < window.innerHeight * 0.4) current = b2.dataset.nav;
+    }
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = navBtns[navBtns.length - 1].dataset.nav;
+    setActive(current);
+  }
+  window.addEventListener('scroll', syncNav, { passive: true });
 
   // ---------- Start ----------
   Biko.mount($('biko'));

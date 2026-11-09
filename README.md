@@ -81,8 +81,9 @@ Telegram: Token von @BotFather, Chat-ID z. B. über @userinfobot, dann in `.env`
 ![Biko](docs/biko-app.png)
 
 Neben FreqUI (Profi-Ansicht, Port 8080) startet `docker compose up -d` auch die **Biko-App** auf Port 8081.
-Sie zeigt nur das Wichtigste: Guthaben, offene Trades, welche Coins im Konto liegen, welche Strategie läuft und ob Kraken oder Binance,
-Spielgeld oder Echtgeld. Darüber sitzt Biko und zeigt, was los ist:
+Sie zeigt nur das Wichtigste: Guthaben, vier Status-Kacheln (Bot-Status, Risiko, nächster Check, Gewinn bisher), die Trades
+(Paar, Betrag, Status, Zeit), welche Coins im Konto liegen, welche Strategie läuft und ob Kraken oder Binance, Spielgeld oder Echtgeld.
+Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Kacheln stehen im 2 × 2-Raster. Ganz oben sitzt Biko und zeigt, was los ist:
 
 | Biko … | wenn |
 |---|---|

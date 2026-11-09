@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#FFF6E8" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1C1830" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0B1030">
   <meta name="robots" content="noindex, nofollow">
   <title>Biko</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -12,19 +11,47 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <nav class="rail" id="rail" aria-label="Bereiche" hidden>
+    <a href="#home" class="nav-btn active" data-nav="home" aria-label="Übersicht">
+      <svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+      <span>Übersicht</span>
+    </a>
+    <a href="#status" class="nav-btn" data-nav="status" aria-label="Bot">
+      <svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="4"/><path d="M12 8V4.5M9.5 13h.01M14.5 13h.01M3 13v2M21 13v2"/></svg>
+      <span>Bot</span>
+    </a>
+    <a href="#trades-panel" class="nav-btn" data-nav="trades-panel" aria-label="Trades">
+      <svg viewBox="0 0 24 24"><path d="M5 8h12l-3-3M19 16H7l3 3"/></svg>
+      <span>Trades</span>
+    </a>
+    <a href="#konto" class="nav-btn" data-nav="konto" aria-label="Konto">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.5"/><path d="M5 19.5c1.2-3.2 3.8-5 7-5s5.8 1.8 7 5"/></svg>
+      <span>Konto</span>
+    </a>
+  </nav>
+
   <main class="app">
     <header class="top">
-      <div class="brand">Biko</div>
+      <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> Biko</div>
       <div class="chips" id="chips"></div>
     </header>
 
-    <section class="stage" aria-live="polite">
-      <div class="bubble" id="bubble">Hallo!</div>
-      <div class="biko-wrap" id="biko"></div>
+    <section class="panel hero-panel" id="home">
+      <div class="hero">
+        <div class="biko-wrap" id="biko"></div>
+        <div class="bubble" id="bubble" aria-live="polite">Hallo!</div>
+      </div>
+      <div class="money" id="money" hidden>
+        <div class="label">Guthaben</div>
+        <div class="big" id="total">–</div>
+        <div class="delta" id="delta"></div>
+      </div>
     </section>
 
     <!-- Login -->
-    <section class="card login" id="login" hidden>
+    <section class="panel login" id="login" hidden>
       <h1>Hallo, ich bin Biko!</h1>
       <p class="muted">Melde dich mit den Zugangsdaten deines Bots an.</p>
       <form id="login-form" autocomplete="on">
@@ -41,36 +68,39 @@
     </section>
 
     <!-- Übersicht -->
-    <div id="dash" hidden>
-      <section class="card money">
-        <div class="label">Guthaben</div>
-        <div class="big" id="total">–</div>
-        <div class="delta" id="delta"></div>
-      </section>
+    <div class="grid" id="dash" hidden>
 
-      <section class="card">
-        <h2>Gerade am Handeln</h2>
-        <ul class="trades" id="trades"></ul>
-      </section>
-
-      <section class="card">
-        <h2>Deine Coins</h2>
-        <div class="alloc" id="alloc" aria-hidden="true"></div>
-        <ul class="coins" id="coins"></ul>
-      </section>
-
-      <section class="card">
-        <h2>Strategie</h2>
-        <div class="strategy">
-          <div class="strategy-name" id="strategy-name">–</div>
-          <p id="strategy-text" class="muted"></p>
+      <section class="panel status-panel" id="status">
+        <h2>Bot</h2>
+        <div class="tiles">
+          <div class="tile"><div class="t-label">Bot-Status</div><div class="t-value" id="t-state">–</div></div>
+          <div class="tile"><div class="t-label">Risiko</div><div class="t-value" id="t-risk">–</div><div class="t-sub" id="t-risk-sub"></div></div>
+          <div class="tile"><div class="t-label">Nächster Check</div><div class="t-value" id="t-next">–</div></div>
+          <div class="tile"><div class="t-label">Gewinn bisher</div><div class="t-value" id="t-profit">–</div></div>
+          <div class="tile-hub" id="t-hub" aria-hidden="true"></div>
         </div>
       </section>
 
-      <footer class="foot">
-        <span id="updated"></span>
-        <button class="link" id="logout" type="button">Abmelden</button>
-      </footer>
+      <section class="panel trades-panel" id="trades-panel">
+        <h2>Trades</h2>
+        <ul class="trades" id="trades"></ul>
+      </section>
+
+      <section class="panel konto-panel" id="konto">
+        <h2>Konto</h2>
+        <div class="alloc" id="alloc" aria-hidden="true"></div>
+        <ul class="coins" id="coins"></ul>
+        <div class="facts" id="facts"></div>
+        <div class="strategy">
+          <div class="t-label">Strategie</div>
+          <div class="strategy-name" id="strategy-name">–</div>
+          <p id="strategy-text" class="muted"></p>
+        </div>
+        <footer class="foot">
+          <span id="updated"></span>
+          <button class="link" id="logout" type="button">Abmelden</button>
+        </footer>
+      </section>
     </div>
   </main>
   <script src="biko.js"></script>
