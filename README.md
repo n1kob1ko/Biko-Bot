@@ -1,0 +1,154 @@
+# Biko Bot: Freqtrade auf Kraken (Spot, Trendfolge 4h)
+
+Eigener Krypto-Trading-Bot auf Basis von [Freqtrade](https://www.freqtrade.io). Lernprojekt mit 200–500 € Kapital, nur Spot, kein Hebel. Ziel ist nicht "Gewinn > 0", sondern **besser als BTC halten**, nach Gebühren und Steuer.
+Geprüft gegen **Freqtrade 2026.10** (aktuelle stable, Python ≥ 3.12).
+
+## Inhalt
+
+```
+docker-compose.yml                    Freqtrade-Container (Image: freqtradeorg/freqtrade:stable)
+.env.example                          Vorlage für Secrets -> nach .env kopieren
+.gitignore / .cursorignore            .env, DB, Logs, Daten werden ignoriert
+user_data/config.json                 Kraken Spot, BTC/EUR ETH/EUR SOL/EUR, dry_run: true
+user_data/strategies/EmaTrendStrategy.py
+```
+
+## Was die Strategie macht
+
+| Teil | Umsetzung |
+|---|---|
+| Entry | EMA20 > EMA50 **und** Close > EMA200 (nur auf abgeschlossenen 4h-Kerzen) |
+| Exit | EMA20 < EMA50, kein ROI-Ausstieg, kein Trailing |
+| Stop-Loss | -5 %, als Stop-Order **an der Börse** (`stoploss_on_exchange`, Kraken unterstützt das im Spot) |
+| Positionsgröße | `custom_stake_amount`: Konto × 1 % ÷ (5 % Stop + 1 % Kostenpuffer). Bei 500 € ≈ 83 € pro Trade, Verlust beim Stop ≈ 5 € |
+| Protections | CooldownPeriod (8h), StoplossGuard (2 Stops in 2 Tagen → 1 Tag Pause), MaxDrawdown im `equity`-Modus (−3 % in 24h → 24h Pause) |
+| Kill-Switch | Ab −15 % Konto-Drawdown (geschlossene Trades) blockiert `confirm_trade_entry` alle neuen Entries, dauerhaft bis du es manuell freigibst |
+
+Hinweise:
+- **Protections stehen in der Strategie**, nicht in `config.json`. Das ist seit 2024.10 so, Config-Protections sind veraltet.
+- **Kein Edge-Modul** (gibt es seit 2025.6 nicht mehr), kein Hyperopt-Parameter, kein FreqAI.
+- Bei 3 offenen Trades sind ca. 50 % des Kontos investiert, der Rest bleibt in EUR.
+- Der Kill-Switch zählt nur realisierte Verluste. Offene Verluste sind durch den Stop auf ca. 1 % pro Trade begrenzt.
+- Manueller Notaus: Telegram `/stopentry` (keine neuen Trades), `/stop` (Bot stoppen), `/forceexit all`.
+
+## Einrichten
+
+```bash
+cp .env.example .env
+# .env ausfüllen: mindestens API_SERVER__PASSWORD, JWT_SECRET_KEY, WS_TOKEN
+# Zufallswert: python3 -c "import secrets; print(secrets.token_hex(32))"
+docker compose pull
+docker compose up -d          # startet im Dry-Run (echte Kurse, 500 € Spielgeld)
+docker compose logs -f
+```
+
+FreqUI: http://127.0.0.1:8080 (Port ist nur lokal gebunden; auf dem VPS per `ssh -L 8080:127.0.0.1:8080 user@vps`).
+
+Telegram: Token von @BotFather, Chat-ID z. B. über @userinfobot, dann in `.env` `FREQTRADE__TELEGRAM__ENABLED=true` setzen.
+
+**Kraken API-Key** (erst für Live): Query Funds, Query Open/Closed Orders & Trades, Create & Modify Orders, Cancel/Close Orders. **Kein Withdraw.** IP-Whitelist auf die feste VPS-IP.
+
+## Die drei wichtigsten Befehle
+
+Alle Befehle laufen im Container. `docker compose run --rm freqtrade <befehl>` startet einen Wegwerf-Container
+mit demselben `user_data`-Ordner. Die Config-Pfade sind Pfade **im** Container.
+
+### 1. `download-data`: historische Kerzen laden
+
+```bash
+docker compose run --rm freqtrade download-data \
+  --config /freqtrade/user_data/config.json \
+  --timeframes 4h \
+  --timerange 20200101-
+```
+
+- `--timeframes 4h` muss zum Strategie-Timeframe passen.
+- `--timerange 20200101-` heißt "ab 1.1.2020 bis heute". Ab 2020, weil die EMA200 auf 4h rund 600 Kerzen (≈ 100 Tage) Vorlauf braucht, bevor dein Testzeitraum 2021 beginnt.
+- Paare kommen aus der `pair_whitelist` der Config.
+- Daten landen in `user_data/data/kraken/` (Feather-Format).
+
+**Kraken-Besonderheit:** Kraken liefert über die API nur die letzten 720 Kerzen. Freqtrade lädt bei Kraken deshalb automatisch
+**Einzeltrades** und baut daraus Kerzen. Für mehrere Jahre BTC/EUR dauert das sehr lange (Stunden bis Tage).
+Schneller geht es mit Krakens offiziellem Trade-History-Download (CSV-Zip, wird etwa quartalsweise aktualisiert, im Kraken Support Center unter "Downloadable historical market data"):
+
+```bash
+# CSV-Dateien der Paare (z. B. XBTEUR.csv, ETHEUR.csv, SOLEUR.csv) nach
+# user_data/data/kraken/trades_csv/ entpacken, dann:
+docker compose run --rm freqtrade convert-trade-data \
+  --config /freqtrade/user_data/config.json \
+  --format-from kraken_csv --format-to feather
+
+docker compose run --rm freqtrade trades-to-ohlcv \
+  --config /freqtrade/user_data/config.json -t 4h
+
+# Danach die Lücke bis heute per API auffüllen:
+docker compose run --rm freqtrade download-data \
+  --config /freqtrade/user_data/config.json -t 4h
+```
+
+### 2. `backtesting`: Strategie auf Historie simulieren
+
+```bash
+docker compose run --rm freqtrade backtesting \
+  --config /freqtrade/user_data/config.json \
+  --strategy EmaTrendStrategy \
+  --timerange 20210101-20231231 \
+  --fee 0.001 \
+  --enable-protections \
+  --breakdown month
+```
+
+- `--fee 0.001` = 0,1 % **pro Seite** (Kauf und Verkauf werden je einmal belastet).
+  **Achtung:** Krakens Standardgebühren für kleine Volumen liegen laut meinem Stand deutlich höher
+  (Kraken Pro, unterste Stufe ca. 0,25 % Maker / 0,40 % Taker). Bitte auf kraken.com/features/fee-schedule
+  prüfen und zusätzlich mit dem echten Wert testen, z. B. `--fee 0.004`. Wenn die Strategie nur mit 0,1 % funktioniert, funktioniert sie nicht.
+- `--enable-protections` ist **nötig**, sonst ignoriert der Backtest die Protections.
+- `--breakdown month` zeigt Ergebnisse pro Monat, damit du siehst, ob der Gewinn aus einer einzigen Phase kommt.
+- Benchmark: Vergleiche das Ergebnis mit der Zeile "Market change" (Buy & Hold der Paare) und mit reinem BTC halten.
+
+**Out-of-Sample-Split** (nicht schummeln, den finalen Test nur einmal laufen lassen):
+
+| Phase | `--timerange` | Zweck |
+|---|---|---|
+| Entwickeln | `20210101-20231231` | Bull 2021, Crash 2022, Erholung 2023 |
+| Validieren | `20240101-20241231` | erst anschauen, wenn die Regeln fix sind |
+| Finaler Test | `20250101-` | einmal, am Ende |
+
+### 3. `lookahead-analysis`: prüft, ob die Strategie in die Zukunft schaut
+
+```bash
+docker compose run --rm freqtrade lookahead-analysis \
+  --config /freqtrade/user_data/config.json \
+  --strategy EmaTrendStrategy \
+  --timerange 20220101-20231231
+```
+
+- Führt einen Backtest aus und wiederholt dann jedes Signal mit **abgeschnittenen** Daten.
+  Ändert sich ein Signal oder Indikator, wenn die Zukunft fehlt, liegt Look-ahead-Bias vor.
+- Ergebnis: Tabelle mit `has_bias` pro Strategie. Muss `False` sein.
+- Braucht genug Trades (Standard: mindestens 10, über `--minimum-trade-amount` änderbar).
+- Limit-Orders werden dafür automatisch durch Market-Orders ersetzt, das ist so gewollt.
+
+**Dazu gehört `recursive-analysis`** (prüft, ob genug Vorlaufkerzen da sind, damit die EMA200 stabil ist):
+
+```bash
+docker compose run --rm freqtrade recursive-analysis \
+  --config /freqtrade/user_data/config.json \
+  --strategy EmaTrendStrategy \
+  --timerange 20230101-20231231 \
+  --startup-candle 200 400 600 1000
+```
+
+Die Abweichung der `ema_trend`-Werte sollte bei 600 Kerzen praktisch 0 % sein. Wenn nicht, `startup_candle_count` erhöhen.
+
+## Vor dem Live-Gang
+
+Must-have: Dry-Run als Default, Backtest mit realistischen Gebühren, Out-of-Sample- und Look-ahead-Prüfung, 1 % Risiko pro Trade, Stop an der Börse, Tageslimit und Drawdown-Stopp, API-Key ohne Auszahlung mit IP-Whitelist, Telegram-Alerts. Zusätzlich: Dry-Run 6–12 Wochen auf dem VPS und die Ergebnisse mit dem Backtest
+über denselben Zeitraum vergleichen. Große Abweichung = Fehler im Setup, nicht Pech.
+
+Live schalten: in `.env` `FREQTRADE__DRY_RUN=false` plus Key/Secret. Dabei `dry_run_wallet` ignorieren,
+Freqtrade nutzt dann das echte EUR-Guthaben.
+
+## Hinweis
+
+Keine Anlageberatung. Nur eigenes Geld, nicht für andere betreiben (in Österreich sonst ggf. lizenzpflichtige Portfolioverwaltung nach MiCAR).

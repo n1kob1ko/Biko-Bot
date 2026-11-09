@@ -1,0 +1,10 @@
+# Cursor darf diese Dateien weder lesen noch indizieren
+.env
+.env.*
+!.env.example
+user_data/config-private.json
+user_data/*.sqlite*
+user_data/logs/
+user_data/data/
+user_data/backtest_results/
+user_data/hyperopt_results/

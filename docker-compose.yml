@@ -1,0 +1,23 @@
+# Biko Bot: Freqtrade – Kraken Spot, Trendfolge 4h
+# Start (Dry-Run):  docker compose up -d
+# Logs:             docker compose logs -f
+services:
+  freqtrade:
+    # "stable" = letzte stabile Version. Für reproduzierbare Backtests auf eine
+    # feste Version pinnen, z. B. freqtradeorg/freqtrade:2026.10
+    image: freqtradeorg/freqtrade:stable
+    restart: unless-stopped
+    container_name: biko-bot
+    env_file: .env            # Secrets nur hier, nie in config.json
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+    # FreqUI/REST-API nur lokal erreichbar. Auf dem VPS per SSH-Tunnel öffnen:
+    #   ssh -L 8080:127.0.0.1:8080 user@vps
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: >
+      trade
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
+      --config /freqtrade/user_data/config.json
+      --strategy EmaTrendStrategy
