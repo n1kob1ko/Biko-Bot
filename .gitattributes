@@ -1,0 +1,2 @@
+# Shell-Skripte immer mit LF, sonst laufen sie auf dem Server nicht
+*.sh text eol=lf
