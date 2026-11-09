@@ -5,6 +5,8 @@ Geprüft gegen **Freqtrade 2026.10** (aktuelle stable, Python ≥ 3.12).
 
 > **Nur mal testen, ohne PC?** Siehe [ANLEITUNG-TESTEN.md](ANLEITUNG-TESTEN.md): per Telegram zuschauen oder mit einer Zeile auf einem eigenen Server installieren, immer im Testmodus mit Spielgeld.
 
+> **Neu: Biko Helfer.** Ein KI-Assistent fürs Handy (Deutsch und Chinesisch) liegt in [`assistent/`](assistent/README.md). Er ist unabhängig vom Trading-Bot.
+
 ## Inhalt
 
 ```

@@ -1,0 +1,18 @@
+# Biko Helfer: KI-Assistent fürs Handy. Läuft neben dem Trading-Bot, ist aber ein eigenes Programm.
+# Start:  docker compose up -d --build     Logs: docker compose logs -f
+services:
+  biko-helfer:
+    build: .
+    restart: unless-stopped
+    container_name: biko-helfer
+    env_file: .env              # ANTHROPIC_API_KEY und APP_PASSWORT, nie ins Git
+    volumes:
+      - "./daten:/data"          # Profil, Erinnerungen, Gespräch (bleibt bei Updates erhalten)
+    # Nur am Server selbst erreichbar. Fürs Handy per Tailscale freigeben (siehe README).
+    ports:
+      - "127.0.0.1:${HELFER_PORT:-8092}:8092"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

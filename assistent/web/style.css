@@ -1,0 +1,151 @@
+/* Biko Helfer: groß, hell, einfach. Große Knöpfe (mind. 56 px), große Schrift, starker Kontrast. */
+:root {
+  --bg: #FFF6E8;
+  --karte: #FFFFFF;
+  --ink: #2B2140;
+  --leise: #5E5672;
+  --linie: #EADBC2;
+  --gelb: #FFC94D;
+  --gelb-dunkel: #F2A535;
+  --gruen: #12855A;
+  --rot: #C23348;
+  --biko-blase: #FFF0C7;
+  --radius: 20px;
+  --schrift: 1;
+  --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { font-size: calc(19px * var(--schrift)); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+[hidden] { display: none !important; }
+h1 { font-size: 1.45rem; margin: 0; line-height: 1.2; }
+h2 { font-size: 1.15rem; margin: 0 0 .4rem; }
+.leise { color: var(--leise); margin: .2rem 0 0; }
+.klein { font-size: .85rem; margin-top: 1.2rem; }
+.fehler { color: var(--rot); font-weight: 600; min-height: 1.4em; }
+
+/* Ansichten */
+#app { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(110px + env(safe-area-inset-bottom)); }
+.kopf { display: flex; align-items: center; gap: 14px; margin: 8px 0 16px; }
+.biko { width: 72px; height: 72px; flex: none; animation: atmen 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+.biko.gross { width: 140px; height: 140px; }
+.biko.denkt { animation: tippen .5s ease-in-out infinite; }
+.biko.wackelt { width: 110px; height: 110px; animation: wackeln .9s ease-in-out infinite; }
+@keyframes atmen { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04, .97); } }
+@keyframes tippen { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-4px) rotate(-3deg); } }
+@keyframes wackeln { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+@media (prefers-reduced-motion: reduce) { .biko, .biko.denkt, .biko.wackelt { animation: none; } }
+
+/* Formulare */
+label { display: block; font-weight: 700; margin: .9rem 0 .35rem; }
+input, textarea, select {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 2px solid var(--linie);
+  border-radius: 14px;
+  padding: 14px;
+  min-height: 56px;
+}
+textarea { resize: vertical; }
+input:focus, textarea:focus, select:focus { outline: 3px solid var(--gelb-dunkel); outline-offset: 1px; border-color: var(--gelb-dunkel); }
+.karte { background: var(--karte); border-radius: var(--radius); padding: 16px; margin: 0 0 16px; box-shadow: 0 2px 0 var(--linie); }
+.tage { border: 0; padding: 0; margin: .9rem 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.tage legend { font-weight: 700; margin-bottom: .35rem; padding: 0; }
+.tage label { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 10px 12px; border: 2px solid var(--linie); border-radius: 12px; font-weight: 600; }
+.tage input, .schalter input { width: 26px; height: 26px; min-height: 0; margin: 0; accent-color: var(--gelb-dunkel); }
+.schalter { display: flex; align-items: center; gap: 12px; }
+
+/* Knöpfe */
+.knopf {
+  font: inherit; font-weight: 700;
+  min-height: 60px; padding: 0 22px;
+  border-radius: 16px; border: 2px solid var(--linie);
+  background: #fff; color: var(--ink);
+  cursor: pointer; width: 100%; margin-top: 10px;
+  transition: transform 140ms ease-out;
+}
+.knopf:active { transform: scale(.97); }
+.knopf.haupt { background: var(--gelb); border-color: var(--gelb-dunkel); }
+.knopf:disabled { opacity: .55; }
+.knopf.hoert { background: var(--rot); border-color: var(--rot); color: #fff; }
+.eingabe-knoepfe { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.eingabe-knoepfe .knopf { margin-top: 10px; }
+
+/* Gespräch */
+.verlauf { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.blase { max-width: 88%; padding: 12px 16px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.blase.biko-sagt { background: var(--biko-blase); align-self: flex-start; border-bottom-left-radius: 6px; }
+.blase.ich { background: #fff; align-self: flex-end; border: 2px solid var(--linie); border-bottom-right-radius: 6px; }
+.blase.fehler-blase { background: #FDE3E6; color: var(--rot); align-self: flex-start; }
+.blase .vorlesen { display: block; margin-top: 6px; background: none; border: 0; font: inherit; font-size: .9rem; color: var(--leise); padding: 6px 0; cursor: pointer; text-decoration: underline; }
+.eingabe { position: sticky; bottom: calc(96px + env(safe-area-inset-bottom)); background: var(--bg); padding-top: 6px; }
+
+/* Nachricht */
+.nachricht-text { font-size: 1.15rem; background: var(--biko-blase); padding: 14px; border-radius: 14px; white-space: pre-wrap; }
+
+/* Erinnerungen */
+.liste { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
+.liste li { background: var(--karte); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; box-shadow: 0 2px 0 var(--linie); }
+.liste .zeit { font-size: 1.4rem; font-weight: 800; }
+.liste .tage-text { color: var(--leise); font-size: .9rem; }
+.liste .weg { min-height: 56px; min-width: 56px; border-radius: 14px; border: 2px solid var(--linie); background: #fff; font: inherit; cursor: pointer; }
+
+
+/* Alarm */
+.alarm {
+  position: fixed; inset: 0; z-index: 10;
+  background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; text-align: center;
+}
+.alarm-titel { font-weight: 700; color: var(--leise); margin: 12px 0 0; }
+.alarm-text { font-size: 2rem; font-weight: 800; margin: 8px 0 20px; max-width: 18ch; }
+.alarm .knopf { max-width: 420px; }
+
+/* Anmelden */
+.login { max-width: 460px; margin: 0 auto; padding: 40px 16px; text-align: center; }
+.login form { text-align: left; margin-top: 16px; }
+
+/* Leiste unten */
+.leiste {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: #fff; border-top: 2px solid var(--linie);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+}
+.leiste button {
+  font: inherit; font-size: .85rem; font-weight: 700; color: var(--leise);
+  background: none; border: 0; border-radius: 14px;
+  min-height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  cursor: pointer;
+}
+.leiste button span { font-size: 1.6rem; line-height: 1; }
+.leiste button[aria-current="page"] { background: var(--biko-blase); color: var(--ink); }
+
+/* Sprache wechseln: immer oben rechts */
+.sprache-knopf {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px; z-index: 5;
+  font: inherit; font-weight: 800; font-size: .95rem;
+  min-height: 48px; padding: 0 16px; border-radius: 999px;
+  border: 2px solid var(--gelb-dunkel); background: #fff; color: var(--ink); cursor: pointer;
+}
+.kopf { padding-right: 96px; }
+
+/* Vorschläge zum Antippen, solange noch nichts geredet wurde */
+.vorschlaege { display: grid; gap: 10px; margin-bottom: 14px; }
+.vorschlag {
+  font: inherit; text-align: left; padding: 14px 16px; min-height: 56px;
+  background: #fff; border: 2px dashed var(--gelb-dunkel); border-radius: 16px; color: var(--ink); cursor: pointer;
+}
+.blase.denkt-blase { background: var(--biko-blase); align-self: flex-start; color: var(--leise); font-style: italic; }
+.liste .leer-zeile { display: block; color: var(--leise); }
