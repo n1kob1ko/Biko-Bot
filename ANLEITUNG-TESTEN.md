@@ -144,6 +144,35 @@ In der App kannst du den Bot pausieren ("nichts Neues kaufen"), wieder weiterlau
 
 ---
 
+## Weg C: Eigener Bot auf Nikos Server (nur Spielgeld)
+
+Statt eines eigenen Servers bekommst du einen eigenen Bot auf Nikos Server: eigenes Login, eigenes Maskottchen,
+eigene Einstellungen und eigene Trades. Mit Nikos Bot ist nichts geteilt außer dem Server selbst.
+**Nur zum Testen mit Spielgeld.** Für echtes Geld brauchst du dein eigenes Konto und deinen eigenen Server (Weg B), damit deine Börsen-Schlüssel nicht bei jemand anderem liegen.
+
+**Niko am Server** (Name statt `cousin` frei wählbar, nur Kleinbuchstaben, Zahlen und `-`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/install.sh | BIKO_NAME=cousin bash
+```
+
+- Das Skript legt `/opt/cousin-bot` an, sucht freie Ports (z. B. 8082/8083) und fragt nach Börse, Maskottchen und dessen Namen.
+- Bei "App am Handy über Tailscale einrichten?" mit `j` antworten. Der zweite Bot bekommt eine eigene Adresse mit Port, z. B. `https://biko.tail1234.ts.net:8443`.
+- Am Ende stehen Adresse und Benutzer da, das Passwort in `/opt/cousin-bot/ZUGANGSDATEN.txt` (`cat /opt/cousin-bot/ZUGANGSDATEN.txt`).
+- Aktualisieren: dieselbe Zeile mit demselben `BIKO_NAME` nochmal. Nikos eigener Bot wird wie bisher ohne `BIKO_NAME` aktualisiert.
+- Der Server hat wenig Arbeitsspeicher. Wird es eng (`free -h`), bei Hetzner unter "Rescale" einen größeren Typ wählen, alles bleibt drauf.
+
+**Server mit dem Cousin teilen (Tailscale, einmalig):**
+
+1. Cousin: App "Tailscale" am Handy installieren und mit **seinem eigenen** Konto anmelden.
+2. Niko: am PC https://login.tailscale.com/admin/machines öffnen, beim Server `biko` auf `…` → **Share** und einen Einladungslink erzeugen. Den Link an den Cousin schicken.
+3. Cousin: Link am Handy öffnen und annehmen. Dann sieht seine Tailscale-App den Server.
+4. Cousin: Tailscale einschalten, die Adresse seines Bots (mit `:8443`) im Browser öffnen, mit seinem Benutzer und Passwort anmelden, "Zum Home-Bildschirm".
+
+Über das Teilen kommt er nur an den Server heran, nicht an Nikos andere Geräte. Nikos App erreicht er technisch auch, kommt aber ohne Nikos Passwort nicht hinein.
+
+---
+
 ## Rechtliches, kurz
 
 - **Testmodus (Weg A und B):** Es wird kein Geld verwaltet, nur Spielgeld simuliert. Unproblematisch.
