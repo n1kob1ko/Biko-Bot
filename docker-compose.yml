@@ -21,8 +21,9 @@ services:
       --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
       --config /freqtrade/user_data/${BOT_CONFIG:-config.json}
       --config /freqtrade/user_data/biko-settings.json
-      --strategy EmaTrendStrategy
-    # biko-settings.json (Coins, Takt, Risiko, max. Trades) schreibt die Biko-App.
+    # Die Strategie steht in der Config ("strategy"), nicht als --strategy hier: so kann die
+    # Biko-App sie über biko-settings.json wechseln (ein --strategy würde die Config überstimmen).
+    # biko-settings.json (Strategie, Coins, Takt, Risiko, max. Trades) schreibt die Biko-App.
     # Der Einstellungsdienst legt die Datei beim ersten Start mit Standardwerten an.
     depends_on:
       - biko-settings

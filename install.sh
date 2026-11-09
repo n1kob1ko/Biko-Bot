@@ -78,7 +78,7 @@ if [ ! -f .env ]; then
     { print }
   ' .env.example > .env
   chmod 600 .env
-  printf 'Biko Bot\nBiko-App: %s (einfache Ansicht, nur über SSH-Tunnel)\nFreqUI:   %s (Profi-Ansicht, nur über SSH-Tunnel)\nBenutzer: biko\nPasswort: %s\n' "$APP_URL" "$URL" "$PASSWORT" > ZUGANGSDATEN.txt
+  printf 'Biko Bot\nBiko-App: %s (einfache Ansicht, über Tailscale oder SSH-Tunnel)\nFreqUI:   %s (Profi-Ansicht, nur über SSH-Tunnel)\nBenutzer: biko\nPasswort: %s\n' "$APP_URL" "$URL" "$PASSWORT" > ZUGANGSDATEN.txt
   chmod 600 ZUGANGSDATEN.txt
   echo "[OK] .env angelegt (Telegram: $TG_AN)"
 else
@@ -112,11 +112,12 @@ else
   echo "[OK] Börse: Kraken"
 fi
 
-# Einstellungen der Biko-App (Coins, Takt, Risiko, max. Trades). Nur beim ersten Mal anlegen,
+# Einstellungen der Biko-App (Strategie, Coins, Takt, Risiko, max. Trades). Nur beim ersten Mal anlegen,
 # danach ändert man sie in der App. Freqtrade lädt die Datei als zweite --config.
 if [ ! -f user_data/biko-settings.json ]; then
   cat > user_data/biko-settings.json <<'JSON'
 {
+  "strategy": "EmaTrendStrategy",
   "timeframe": "4h",
   "max_open_trades": 3,
   "exchange": { "pair_whitelist": ["BTC/EUR", "ETH/EUR", "SOL/EUR"] },

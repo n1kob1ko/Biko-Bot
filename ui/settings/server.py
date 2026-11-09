@@ -5,7 +5,7 @@ Biko-Einstellungsdienst: speichert die Einstellungen aus der Biko-App und lädt 
   Der Dienst prüft es, indem er damit /api/v1/show_config beim Bot abfragt.
 - Schreibt nur user_data/biko-settings.json (wird von Freqtrade als zweite --config geladen)
   und ruft danach /api/v1/reload_config auf.
-- Nur erlaubte Werte (Coins aus fester Liste, Takt, Risiko bis 3 %, 1 bis 6 Trades).
+- Nur erlaubte Werte (Strategie und Coins aus fester Liste, Takt, Risiko bis 3 %, 1 bis 6 Trades).
   Stop-Loss, Kill-Switch und Testmodus lassen sich hier bewusst NICHT ändern.
 Nur Python-Standardbibliothek.
 """
@@ -21,11 +21,19 @@ FREQTRADE = os.environ.get("FREQTRADE_URL", "http://freqtrade:8080")
 SETTINGS = os.environ.get("BIKO_SETTINGS", "/freqtrade/user_data/biko-settings.json")
 PORT = int(os.environ.get("PORT", "8090"))
 
+# Klassennamen in user_data/strategies. Alle erben von BikoBase (gleiche Risikoschranken).
+STRATEGIES = ["EmaTrendStrategy", "BreakoutStrategy", "DipBuyStrategy"]
 COINS = ["BTC", "ETH", "SOL", "XRP", "ADA", "LINK", "DOT", "AVAX", "LTC", "DOGE"]
 TIMEFRAMES = ["15m", "1h", "4h"]
 RISKS = [0.005, 0.01, 0.02, 0.03]
 MAX_TRADES = (1, 6)
-DEFAULT = {"coins": ["BTC", "ETH", "SOL"], "timeframe": "4h", "risk_per_trade": 0.01, "max_open_trades": 3}
+DEFAULT = {
+    "strategy": "EmaTrendStrategy",
+    "coins": ["BTC", "ETH", "SOL"],
+    "timeframe": "4h",
+    "risk_per_trade": 0.01,
+    "max_open_trades": 3,
+}
 
 
 def read_settings(stake="EUR"):
@@ -36,7 +44,9 @@ def read_settings(stake="EUR"):
         return dict(DEFAULT)
     pairs = raw.get("exchange", {}).get("pair_whitelist", [])
     coins = [p.split("/")[0] for p in pairs if isinstance(p, str)]
+    strategy = raw.get("strategy")
     return {
+        "strategy": strategy if strategy in STRATEGIES else DEFAULT["strategy"],
         "coins": [c for c in coins if c in COINS] or DEFAULT["coins"],
         "timeframe": raw.get("timeframe", DEFAULT["timeframe"]),
         "risk_per_trade": raw.get("biko", {}).get("risk_per_trade", DEFAULT["risk_per_trade"]),
@@ -47,6 +57,7 @@ def read_settings(stake="EUR"):
 def write_settings(s, stake):
     data = {
         "_hinweis": "Wird von der Biko-App geschrieben. Von Hand ändern geht auch, danach Bot neu laden.",
+        "strategy": s["strategy"],
         "timeframe": s["timeframe"],
         "max_open_trades": s["max_open_trades"],
         "exchange": {"pair_whitelist": [f"{c}/{stake}" for c in s["coins"]]},
@@ -64,6 +75,9 @@ def write_settings(s, stake):
 def validate(body):
     if not isinstance(body, dict):
         raise ValueError("Ungültige Daten.")
+    strategy = body.get("strategy")
+    if strategy not in STRATEGIES:
+        raise ValueError("Unbekannte Strategie.")
     coins = body.get("coins")
     if not isinstance(coins, list) or not coins:
         raise ValueError("Mindestens ein Coin muss ausgewählt sein.")
@@ -79,7 +93,7 @@ def validate(body):
     mot = body.get("max_open_trades")
     if not isinstance(mot, int) or isinstance(mot, bool) or not MAX_TRADES[0] <= mot <= MAX_TRADES[1]:
         raise ValueError("Gleichzeitige Trades: 1 bis 6.")
-    return {"coins": coins, "timeframe": tf, "risk_per_trade": risk, "max_open_trades": mot}
+    return {"strategy": strategy, "coins": coins, "timeframe": tf, "risk_per_trade": risk, "max_open_trades": mot}
 
 
 def freqtrade(path, auth, method="GET"):
@@ -129,16 +143,27 @@ class Handler(BaseHTTPRequestHandler):
         stake = cfg.get("stake_currency", "EUR")
         self.reply(200, {
             "settings": read_settings(stake),
-            "options": {"coins": COINS, "timeframes": TIMEFRAMES, "risks": RISKS, "max_open_trades": list(MAX_TRADES)},
+            "options": {
+                "strategies": STRATEGIES,
+                "coins": COINS,
+                "timeframes": TIMEFRAMES,
+                "risks": RISKS,
+                "max_open_trades": list(MAX_TRADES),
+            },
             "stake_currency": stake,
             "stoploss": cfg.get("stoploss"),
+            # Was der Bot gerade wirklich fährt (nach einem Neuladen gleich den Einstellungen)
+            "active": {"strategy": cfg.get("strategy"), "timeframe": cfg.get("timeframe")},
         })
 
     def do_POST(self):
         if self.path != "/settings-api/settings":
             return self.reply(404, {"detail": "Nicht gefunden."})
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > 4096:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self.reply(400, {"detail": "Ungültige Anfrage."})
+        if not 0 <= length <= 4096:
             return self.reply(413, {"detail": "Zu groß."})
         try:
             body = json.loads(self.rfile.read(length) or b"null")
