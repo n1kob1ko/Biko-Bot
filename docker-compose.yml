@@ -5,12 +5,24 @@
 # Mehrere Bots auf einem Server: jeder hat seinen eigenen Ordner (z. B. /opt/biko-bot, /opt/cousin-bot)
 # und in seiner .env eigene Werte für INSTANZ, API_PORT und APP_PORT (legt install.sh mit BIKO_NAME=... an).
 # Ohne diese Werte gilt: biko, 8080, 8081.
+#
+# Testmodus vs. Echtgeld: install.sh startet mit docker-compose.testmodus.yml (Spielgeld) oder,
+# wenn in der .env BIKO_MODUS=live steht, mit docker-compose.live.yml (eigene Live-Datenbank).
+
+# Docker-Logs begrenzen, sonst läuft die kleine Server-Platte irgendwann voll
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   freqtrade:
-    # "stable" = letzte stabile Version. Für reproduzierbare Backtests auf eine
-    # feste Version pinnen, z. B. freqtradeorg/freqtrade:2026.10
-    image: freqtradeorg/freqtrade:stable
+    # Feste Version statt "stable": ein Update soll nie unbemerkt mitten im Echtgeld-Betrieb
+    # passieren. Neue Version: erst im Testmodus laufen lassen, dann hier hochsetzen (siehe TODO.md).
+    image: freqtradeorg/freqtrade:2026.10
     restart: unless-stopped
+    logging: *logging
     container_name: ${INSTANZ:-biko}-bot
     env_file: .env            # Secrets nur hier, nie in config.json
     volumes:
@@ -42,6 +54,28 @@ services:
       - "./user_data:/freqtrade/user_data"
       - "./ui/settings/server.py:/app/server.py:ro"
     command: ["python", "-u", "/app/server.py"]
+    logging: *logging
+
+  # Wächter: prüft alle 5 Minuten, ob der Bot noch arbeitet (Alarm per Telegram und optional
+  # an healthchecks.io), und sichert einmal am Tag die Trade-Datenbanken nach user_data/backups.
+  biko-waechter:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    container_name: ${INSTANZ:-biko}-waechter
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./scripts/waechter.py:/app/waechter.py:ro"
+    environment:
+      BOT_NAME: ${INSTANZ:-biko}
+      BOT_USER: ${FREQTRADE__API_SERVER__USERNAME:-}
+      BOT_PASS: ${FREQTRADE__API_SERVER__PASSWORD:-}
+      TELEGRAM_TOKEN: ${FREQTRADE__TELEGRAM__TOKEN:-}
+      TELEGRAM_CHAT_ID: ${FREQTRADE__TELEGRAM__CHAT_ID:-}
+      HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
+    command: ["python", "-u", "/app/waechter.py"]
+    depends_on:
+      - freqtrade
+    logging: *logging
 
   # Biko App: einfache Handy-Oberfläche mit Maskottchen
   # Öffnen: http://127.0.0.1:8081  (auf dem VPS per ssh -L 8081:127.0.0.1:8081 user@vps)
@@ -55,5 +89,6 @@ services:
     volumes:
       - "./ui/web:/usr/share/nginx/html:ro"
       - "./ui/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+    logging: *logging
     ports:
       - "127.0.0.1:${APP_PORT:-8081}:80"

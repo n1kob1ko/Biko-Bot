@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Biko Bot: Ein-Zeilen-Installation auf einem eigenen Linux-Server (Ubuntu/Debian).
-# Startet IMMER im Testmodus (Dry-Run, nur Spielgeld, keine Börsen-Keys).
+# Startet im Testmodus (Dry-Run, nur Spielgeld, keine Börsen-Keys). Echtgeld nur, wenn in der .env
+# BIKO_MODUS=live steht und die Prüfungen unten passen (siehe TODO.md).
 #
 #   curl -fsSL https://raw.githubusercontent.com/n1kob1ko/biko-bot/main/install.sh | sudo bash
 #
@@ -40,7 +41,7 @@ zufall() {
 }
 
 echo "=============================================="
-echo "  Biko Bot - Installation (Testmodus, Spielgeld)"
+echo "  Biko Bot - Installation"
 echo "  Bot: $INSTANZ  ->  $ZIEL"
 echo "=============================================="
 
@@ -221,9 +222,47 @@ fi
 mkdir -p user_data/logs user_data/data
 chown -R 1000:1000 user_data
 
-# 4. Starten, immer mit Testmodus-Datei
+# 4. Modus: Testmodus (Standard) oder Echtgeld (BIKO_MODUS=live in der .env, siehe TODO.md)
+schritt "Modus prüfen"
+MODUS="$(env_get BIKO_MODUS)"
+[ -n "$MODUS" ] || MODUS="test"
+# Offene Echtgeld-Trades in der Live-Datenbank zählen (0, wenn es sie nicht gibt)
+live_offen() {
+  [ -f user_data/tradesv3.live.sqlite ] && command -v python3 >/dev/null 2>&1 || { echo 0; return; }
+  python3 -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute("select count(*) from trades where is_open=1").fetchone()[0])' \
+    user_data/tradesv3.live.sqlite 2>/dev/null || echo 0
+}
+case "$MODUS" in
+  live)
+    [ "$INSTANZ" = "biko" ] || fehler "Echtgeld nur für den eigenen Bot (biko). Andere Bots auf diesem Server bleiben im Testmodus."
+    [ -n "$(env_get FREQTRADE__EXCHANGE__KEY)" ] && [ -n "$(env_get FREQTRADE__EXCHANGE__SECRET)" ] \
+      || fehler "BIKO_MODUS=live, aber FREQTRADE__EXCHANGE__KEY/SECRET fehlen in der .env."
+    [ "$(env_get FREQTRADE__TELEGRAM__ENABLED)" = "true" ] && [ -n "$(env_get FREQTRADE__TELEGRAM__TOKEN)" ] \
+      || fehler "Echtgeld nur mit Telegram-Meldungen. Bitte FREQTRADE__TELEGRAM__* in der .env ausfüllen."
+    if [ ! -f user_data/tradesv3.live.sqlite ] && [ "${BIKO_LIVE_OK:-}" != "ja" ]; then
+      echo
+      echo "  !!! ACHTUNG: Ab jetzt handelt der Bot mit ECHTEM GELD auf deinem Börsenkonto. !!!"
+      echo "  Vorher die Liste in TODO.md (Abschnitt 'Vor dem ersten echten Euro') abhaken."
+      [ "$(frage 'Zum Bestätigen LIVE eintippen: ')" = "LIVE" ] || fehler "Abgebrochen, nichts geändert. Für Testmodus: BIKO_MODUS=test in der .env."
+    fi
+    COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.live.yml)
+    echo "[OK] ECHTGELD-Modus (Datenbank tradesv3.live.sqlite)"
+    ;;
+  test)
+    OFFEN="$(live_offen)"
+    if [ "${OFFEN:-0}" != "0" ]; then
+      echo "Warnung: In der Echtgeld-Datenbank sind noch $OFFEN Trade(s) offen. Im Testmodus kümmert sich"
+      echo "der Bot NICHT um sie (der Stop-Loss an der Börse bleibt aber stehen). Besser erst verkaufen."
+      [ "$(frage 'Trotzdem in den Testmodus wechseln? (j/N): ')" = "j" ] || fehler "Abgebrochen. Für Echtgeld: BIKO_MODUS=live in der .env."
+    fi
+    COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.testmodus.yml)
+    echo "[OK] Testmodus (Spielgeld)"
+    ;;
+  *) fehler "BIKO_MODUS in der .env muss test oder live sein (ist: $MODUS)." ;;
+esac
+
+# 5. Starten
 schritt "Bot starten (der erste Download ist ca. 1 GB)"
-COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.testmodus.yml)
 "${COMPOSE[@]}" pull
 # --force-recreate: sonst behält die Biko-App nach einem Update die alte nginx.conf
 # (eingebundene Datei) und neue Bereiche wie /settings-api/ fehlen.
@@ -239,7 +278,7 @@ if ! curl -fs "$URL/api/v1/ping" >/dev/null 2>&1; then
   fehler "Der Bot antwortet nicht. Die Meldungen oben bitte an Niko schicken."
 fi
 
-# 5. App am Handy: privat über Tailscale (optional)
+# 6. App am Handy: privat über Tailscale (optional)
 #    Die App bleibt am Server nur auf 127.0.0.1 gebunden. "tailscale serve" macht sie mit HTTPS
 #    ausschließlich für die eigenen Tailscale-Geräte erreichbar, nicht für das Internet.
 #    Ohne Frage: BIKO_TAILSCALE=ja (optional TS_AUTHKEY=tskey-... statt Anmelde-Link)
@@ -287,7 +326,11 @@ esac
 
 echo
 echo "=============================================="
-echo "  Läuft! $MASK_NAME handelt NUR mit Spielgeld."
+if [ "$MODUS" = "live" ]; then
+  echo "  Läuft! $MASK_NAME handelt mit ECHTEM GELD."
+else
+  echo "  Läuft! $MASK_NAME handelt NUR mit Spielgeld."
+fi
 echo
 if [ -n "$TS_URL" ]; then
   echo "  App:      $TS_URL  (am Handy, Tailscale-App muss an sein)"
@@ -296,6 +339,7 @@ else
 fi
 echo "  Login:    Benutzer $BENUTZER_JETZT, Passwort steht in $ZIEL/ZUGANGSDATEN.txt"
 echo "  Logs:     cd $ZIEL && docker compose logs --tail 100"
+echo "  Notaus:   sudo $ZIEL/scripts/notaus.sh   (nichts Neues kaufen, alles verkaufen)"
 echo "  Stoppen:  cd $ZIEL && docker compose down"
 if [ "$INSTANZ" != "biko" ]; then
   echo

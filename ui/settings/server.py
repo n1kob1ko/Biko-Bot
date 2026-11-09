@@ -177,6 +177,20 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return self.reply(400, {"detail": str(e)})
         stake = cfg.get("stake_currency", "EUR")
+        # Echtgeld: Strategie oder Takt nicht wechseln, solange Trades offen sind. Sonst würden
+        # laufende Trades plötzlich nach anderen Regeln verkauft (z. B. +8 % ROI vom Rücksetzer).
+        if not cfg.get("dry_run", True):
+            changes = s["strategy"] != cfg.get("strategy") or s["timeframe"] != cfg.get("timeframe")
+            if changes:
+                try:
+                    open_trades = freqtrade("/api/v1/status", auth)
+                except (urllib.error.URLError, OSError, ValueError):
+                    return self.reply(502, {"detail": "Bot antwortet nicht."})
+                if open_trades:
+                    return self.reply(409, {"detail": (
+                        "Im Echtgeld-Modus geht ein Wechsel von Strategie oder Takt erst, "
+                        "wenn kein Trade mehr offen ist."
+                    )})
         write_settings(s, stake)
         try:
             freqtrade("/api/v1/reload_config", auth, method="POST")

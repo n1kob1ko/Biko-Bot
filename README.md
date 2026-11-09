@@ -15,7 +15,10 @@ user_data/config.json                 Kraken Spot, BTC/EUR ETH/EUR SOL/EUR, dry_
 user_data/config.binance.json         dasselbe für Binance Spot
 user_data/strategies/EmaTrendStrategy.py
 docker-compose.testmodus.yml          erzwingt Dry-Run und leere Keys (für Tester)
-install.sh                            Ein-Zeilen-Installation auf Ubuntu/Debian-Server, immer Testmodus
+docker-compose.live.yml               Echtgeld-Modus mit eigener Datenbank (nur über install.sh + BIKO_MODUS=live)
+install.sh                            Ein-Zeilen-Installation auf Ubuntu/Debian-Server, Standard Testmodus
+scripts/                              waechter.py (Alarm + Backup), notaus.sh, steuer_export.py, server-haerten.sh, backtest.sh
+TODO.md                               Weg zum Echtgeld: was fertig ist, was du noch machen musst, feste Regeln
 ANLEITUNG-TESTEN.md                   Anleitung für Tester ohne PC (Telegram/Handy)
 ```
 
@@ -228,11 +231,15 @@ Die Abweichung der `ema_trend`-Werte sollte bei 600 Kerzen praktisch 0 % sein. W
 
 ## Vor dem Live-Gang
 
-Must-have: Dry-Run als Default, Backtest mit realistischen Gebühren, Out-of-Sample- und Look-ahead-Prüfung, 1 % Risiko pro Trade, Stop an der Börse, Tageslimit und Drawdown-Stopp, API-Key ohne Auszahlung mit IP-Whitelist, Telegram-Alerts. Zusätzlich: Dry-Run 6–12 Wochen auf dem VPS und die Ergebnisse mit dem Backtest
-über denselben Zeitraum vergleichen. Große Abweichung = Fehler im Setup, nicht Pech.
+Die komplette Liste steht in **[TODO.md](TODO.md)**: was im Code schon für Echtgeld gebaut ist, was du noch machen musst
+(Telegram, SSH-Schlüssel, Server härten, Backtests, 8 Wochen Testmodus, API-Key) und die festen Regeln, wann live gegangen
+und wann wieder gestoppt wird.
 
-Live schalten: in `.env` `FREQTRADE__DRY_RUN=false` plus Key/Secret. Dabei `dry_run_wallet` ignorieren,
-Freqtrade nutzt dann das echte EUR-Guthaben.
+Kurzfassung: Echtgeld geht **nur** über `BIKO_MODUS=live` in der `.env` plus `install.sh`. Das Skript prüft Keys und Telegram,
+fragt beim ersten Mal nach und startet den Bot mit einer **eigenen Datenbank** (`tradesv3.live.sqlite`). Spielgeld- und
+Echtgeld-Trades kommen nie in dieselbe Datenbank, der Bot verweigert sonst den Start. Der Dienst `biko-waechter` meldet per
+Telegram, wenn der Bot hängt oder ein Trade ohne Stop an der Börse ist, und sichert die Datenbank täglich.
+Notaus: `sudo /opt/biko-bot/scripts/notaus.sh`. Steuer: `python3 scripts/steuer_export.py <jahr>`.
 
 ## Hinweis
 
