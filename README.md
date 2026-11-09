@@ -99,8 +99,10 @@ Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Ka
   Von Hand: `sudo tailscale up` und `sudo tailscale serve --bg 8081`.
 - Ohne Tailscale: http://127.0.0.1:8081, auf dem VPS per `ssh -L 8081:127.0.0.1:8081 user@vps`. Anmelden mit denselben Zugangsdaten wie FreqUI
   (`FREQTRADE__API_SERVER__USERNAME`/`PASSWORD` aus der `.env`, bei `install.sh` in `ZUGANGSDATEN.txt`).
-- Nur lesen: Die App kann nichts kaufen, verkaufen oder umstellen. nginx lässt nur lesende Aufrufe (GET) und das Anmelden an den Freqtrade-Container durch,
-  alles andere wird mit 403 abgelehnt. Die App lädt nichts von fremden Servern und hat kein Tracking.
+- Eingreifen: In der Bot-Kachel gibt es **"Pause: nichts Neues kaufen"** bzw. **"Weiter handeln"** (Freqtrade `/stopentry` und `/start`),
+  bei jedem offenen Trade **"Verkaufen"** (sofort zum Marktpreis, `/forceexit`). Jede Aktion fragt vorher nach.
+  Von Hand kaufen, den Bot ganz stoppen oder Trades löschen geht über die App absichtlich nicht: nginx lässt außer Lesen (GET), Anmelden
+  und diesen drei Aktionen nichts zum Bot durch (403). Die App lädt nichts von fremden Servern und hat kein Tracking.
 - Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
 - "Zum Home-Bildschirm hinzufügen" geht, dann sieht Biko aus wie eine eigene App. Den Port bitte **nicht** direkt ins Internet freigeben.
 - Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.

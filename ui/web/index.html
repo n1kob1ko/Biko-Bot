@@ -79,6 +79,7 @@
           <div class="tile"><div class="t-label">Gewinn bisher</div><div class="t-value" id="t-profit">–</div></div>
           <div class="tile-hub" id="t-hub" aria-hidden="true"></div>
         </div>
+        <button class="action" id="toggle-run" type="button" hidden></button>
       </section>
 
       <section class="panel trades-panel" id="trades-panel">
@@ -103,6 +104,17 @@
       </section>
     </div>
   </main>
+  <!-- Sicherheitsabfrage vor jeder Aktion -->
+  <dialog class="confirm" id="confirm">
+    <form method="dialog">
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-text" class="muted"></p>
+      <div class="confirm-buttons">
+        <button value="no" class="btn-ghost">Abbrechen</button>
+        <button value="yes" class="btn-main" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
   <script src="biko.js"></script>
   <script src="app.js"></script>
 </body>

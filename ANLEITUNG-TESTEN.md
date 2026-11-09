@@ -140,7 +140,7 @@ Tailscale verbindet dein Handy und deinen Server zu einem kleinen privaten Netz.
    (Tailscale-App muss an sein) und mit Benutzer und Passwort aus `ZUGANGSDATEN.txt` anmelden.
 6. Tipp: Im Browser-Menü "Zum Home-Bildschirm" wählen. Dann ist Biko wie eine App mit eigenem Symbol da.
 
-Die App kann nur anzeigen, nichts kaufen oder verkaufen.
+In der App kannst du den Bot pausieren ("nichts Neues kaufen"), wieder weiterlaufen lassen und einen offenen Trade sofort verkaufen. Jede Aktion fragt vorher nach. Von Hand kaufen geht absichtlich nicht.
 
 ---
 
