@@ -132,11 +132,56 @@ if ! curl -fs "$URL/api/v1/ping" >/dev/null 2>&1; then
   fehler "Der Bot antwortet nicht. Die Meldungen oben bitte an Niko schicken."
 fi
 
+# 5. Biko-App am Handy: privat über Tailscale (optional)
+#    Die App bleibt am Server nur auf 127.0.0.1 gebunden. "tailscale serve" macht sie mit HTTPS
+#    ausschließlich für die eigenen Tailscale-Geräte erreichbar, nicht für das Internet.
+#    Ohne Frage: BIKO_TAILSCALE=ja (optional TS_AUTHKEY=tskey-... statt Anmelde-Link)
+schritt "Biko-App am Handy (Tailscale)"
+TS_URL=""
+TS="${BIKO_TAILSCALE:-}"
+if [ -z "$TS" ]; then
+  if command -v tailscale >/dev/null 2>&1 && tailscale serve status 2>/dev/null | grep -q '8081'; then
+    TS="ja"   # schon eingerichtet
+  else
+    TS="$(frage 'Biko-App am Handy über Tailscale einrichten? (j/N): ')"
+  fi
+fi
+case "$TS" in
+  j|J|ja|Ja|JA|y|Y|yes|1)
+    if ! command -v tailscale >/dev/null 2>&1; then
+      echo "Tailscale wird installiert ..."
+      curl -fsSL https://tailscale.com/install.sh | sh || fehler "Tailscale-Installation fehlgeschlagen."
+    fi
+    systemctl enable --now tailscaled >/dev/null 2>&1 || true
+    if ! tailscale status >/dev/null 2>&1; then
+      if [ -n "${TS_AUTHKEY:-}" ]; then
+        tailscale up --authkey "$TS_AUTHKEY" --hostname biko
+      else
+        echo "Gleich erscheint ein Link. Öffne ihn und melde dich mit DEMSELBEN Konto an wie in der Tailscale-App am Handy."
+        tailscale up --hostname biko
+      fi
+    fi
+    echo "Biko-App für deine Tailscale-Geräte freigeben ..."
+    echo "(Falls ein Link zum Aktivieren von HTTPS erscheint: öffnen, bestätigen, dann geht es weiter.)"
+    tailscale serve --bg 8081 \
+      || echo "Hinweis: Freigabe hat nicht geklappt. Später nochmal: sudo tailscale serve --bg 8081"
+    TS_URL="$(tailscale serve status 2>/dev/null | grep -o 'https://[^ ]*' | head -n1 || true)"
+    [ -n "$TS_URL" ] && echo "[OK] Biko-App am Handy: $TS_URL"
+    ;;
+  *)
+    echo "[--] Übersprungen. Später einrichten: install.sh nochmal ausführen und mit j antworten."
+    ;;
+esac
+
 echo
 echo "=============================================="
 echo "  Läuft! Der Bot handelt NUR mit Spielgeld."
 echo
-echo "  Biko-App: $APP_URL (vom eigenen PC: ssh -L 8081:127.0.0.1:8081 <server>)"
+if [ -n "$TS_URL" ]; then
+  echo "  Biko-App: $TS_URL  (am Handy, Tailscale-App muss an sein)"
+else
+  echo "  Biko-App: $APP_URL (vom eigenen PC: ssh -L 8081:127.0.0.1:8081 <server>)"
+fi
 echo "  Telegram: schreib dem Bot /status oder /profit"
 echo "  Logs:     cd $ZIEL && docker compose logs --tail 100"
 echo "  Stoppen:  cd $ZIEL && docker compose down"

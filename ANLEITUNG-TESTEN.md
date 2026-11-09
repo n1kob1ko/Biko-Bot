@@ -124,8 +124,23 @@ In Termius verbinden und eintippen:
 | Letzte Meldungen anzeigen (bei Problemen an Niko schicken) | `cd /opt/biko-bot && docker compose logs --tail 100` |
 | Server ganz loswerden | beim Anbieter den Server löschen (dann kostet er nichts mehr) |
 
-Hinweis: Die Biko-App (Port 8081, einfache Ansicht mit Maskottchen) und FreqUI (Port 8080) sind aus Sicherheitsgründen nur auf dem Server selbst erreichbar, nicht aus dem Internet.
-Mit dem Handy bedienst du den Bot deshalb über Telegram.
+Hinweis: Die Biko-App (Port 8081, einfache Ansicht mit Maskottchen) und FreqUI (Port 8080) sind aus Sicherheitsgründen nicht offen im Internet.
+Am Handy öffnest du die Biko-App privat über Tailscale (siehe unten). Bedienen (stoppen usw.) geht über Telegram.
+
+### Biko-App am Handy (Tailscale)
+
+Tailscale verbindet dein Handy und deinen Server zu einem kleinen privaten Netz. Nur deine eigenen Geräte sehen die App, sonst niemand. Kostenlos für private Nutzung.
+
+1. **Handy:** App "Tailscale" aus dem App Store / Play Store installieren, öffnen und anmelden (z. B. mit Google oder Apple). Verbindung einschalten.
+2. **Server:** Die Installationszeile von oben nochmal ausführen (oder beim ersten Mal gleich so beantworten).
+   Bei "Biko-App am Handy über Tailscale einrichten? (j/N)" mit `j` antworten.
+3. Es erscheint ein Link (`https://login.tailscale.com/...`). Den Link am Handy öffnen und mit **demselben Konto** wie in Schritt 1 bestätigen.
+4. Falls noch ein Link zum Aktivieren von HTTPS erscheint: ebenfalls öffnen und bestätigen.
+5. Am Ende zeigt das Skript die Adresse, z. B. `https://biko.tail1234.ts.net`. Am Handy im Browser öffnen
+   (Tailscale-App muss an sein) und mit Benutzer und Passwort aus `ZUGANGSDATEN.txt` anmelden.
+6. Tipp: Im Browser-Menü "Zum Home-Bildschirm" wählen. Dann ist Biko wie eine App mit eigenem Symbol da.
+
+Die App kann nur anzeigen, nichts kaufen oder verkaufen.
 
 ---
 

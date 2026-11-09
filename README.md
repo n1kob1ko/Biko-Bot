@@ -93,11 +93,16 @@ Am Handy gibt es unten eine Icon-Leiste, am großen Bildschirm links, und die Ka
 | hält ein Pause-Schild | der Bot gestoppt ist oder keine neuen Trades kauft (`/stopentry`) |
 | schaut verwirrt | die App den Bot nicht erreicht |
 
-- Öffnen: http://127.0.0.1:8081, auf dem VPS per `ssh -L 8081:127.0.0.1:8081 user@vps`. Anmelden mit denselben Zugangsdaten wie FreqUI
+- **Am Handy (empfohlen): privat über Tailscale.** `install.sh` fragt "Biko-App am Handy über Tailscale einrichten?". Mit `j` installiert es
+  Tailscale auf dem Server und gibt die App per `tailscale serve` frei: HTTPS-Adresse wie `https://biko.<dein-netz>.ts.net`, nur für deine eigenen
+  Tailscale-Geräte sichtbar, nicht für das Internet. Anleitung fürs Handy: [ANLEITUNG-TESTEN.md](ANLEITUNG-TESTEN.md#biko-app-am-handy-tailscale).
+  Von Hand: `sudo tailscale up` und `sudo tailscale serve --bg 8081`.
+- Ohne Tailscale: http://127.0.0.1:8081, auf dem VPS per `ssh -L 8081:127.0.0.1:8081 user@vps`. Anmelden mit denselben Zugangsdaten wie FreqUI
   (`FREQTRADE__API_SERVER__USERNAME`/`PASSWORD` aus der `.env`, bei `install.sh` in `ZUGANGSDATEN.txt`).
-- Nur lesen: Die App kann nichts kaufen, verkaufen oder umstellen. Sie spricht ausschließlich mit dem eigenen Bot (nginx leitet `/api/` an den Freqtrade-Container weiter), lädt nichts von fremden Servern und hat kein Tracking.
+- Nur lesen: Die App kann nichts kaufen, verkaufen oder umstellen. nginx lässt nur lesende Aufrufe (GET) und das Anmelden an den Freqtrade-Container durch,
+  alles andere wird mit 403 abgelehnt. Die App lädt nichts von fremden Servern und hat kein Tracking.
 - Ohne Bot ansehen: `ui/web` mit einem beliebigen Webserver ausliefern und `?demo` anhängen, z. B. `python3 -m http.server -d ui/web 8000` → http://127.0.0.1:8000/?demo. Antippen von Biko wechselt die Stimmung, `?demo=schlaeft` usw. springt direkt hin.
-- Am Handy: "Zum Home-Bildschirm hinzufügen" geht. Den Port bitte **nicht** ins Internet freigeben; für unterwegs ein VPN wie Tailscale/WireGuard zum eigenen Server nutzen.
+- "Zum Home-Bildschirm hinzufügen" geht, dann sieht Biko aus wie eine eigene App. Den Port bitte **nicht** direkt ins Internet freigeben.
 - Jede Person betreibt ihre eigene Instanz mit eigenem Konto und eigenem API-Key. Die App ist kein Dienst für andere.
 
 ## Die drei wichtigsten Befehle
