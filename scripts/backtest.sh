@@ -11,6 +11,9 @@
 # Kosten: FEE=0.005 pro Seite = Kraken-Taker 0,40 % + 0,10 % für Spread und Slippage (Stop-Loss im
 # Crash, Market-Orders). Zum Vergleich mit FEE=0.0025 (nur Maker) laufen lassen. Wenn die Strategie
 # nur mit kleinen Gebühren gewinnt, ist sie für Echtgeld nicht gut genug.
+# Kill-Switch: Im Backtest standardmäßig AUS (KILLSWITCH=an schaltet ihn ein). Sonst friert der
+# Backtest nach dem ersten -15 % für den Rest des Zeitraums ein (so geschehen am 9.11.2026: der
+# Trendfolger hat ab Sep 2022 nie wieder gehandelt). Im Live- und Testmodus ist er immer an.
 # Daten: vorher einmal laden (siehe README, Kraken braucht die CSV-Variante).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,12 +31,13 @@ case "$PHASE" in
 esac
 BOERSE="kraken"; [ "$CONFIG" = "config.binance.json" ] && BOERSE="binance"
 
-FT=(docker compose run --rm -T freqtrade)
+KS="false"; [ "${KILLSWITCH:-aus}" = "an" ] && KS="true"
+FT=(docker compose run --rm -T -e FREQTRADE__BIKO__KILL_SWITCH="$KS" freqtrade)
 CFG=(--config "/freqtrade/user_data/$CONFIG")
 
-echo "==> Backtest $STRATEGIE, $ZEIT, Takt $TAKT, Gebühr $FEE pro Seite ($BOERSE)"
+echo "==> Backtest $STRATEGIE, $ZEIT, Takt $TAKT, Gebühr $FEE pro Seite ($BOERSE), Kill-Switch ${KILLSWITCH:-aus}"
 "${FT[@]}" backtesting "${CFG[@]}" --strategy "$STRATEGIE" --timeframe "$TAKT" \
-  --timerange "$ZEIT" --fee "$FEE" --enable-protections --breakdown month --export trades
+  --timerange "$ZEIT" --fee "$FEE" --enable-protections --breakdown month year --export trades
 
 echo "==> Vergleich mit BTC halten (vor und nach 27,5 % Steuer)"
 docker compose run --rm -T -v "$(pwd)/scripts:/scripts:ro" --entrypoint python freqtrade \

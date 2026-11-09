@@ -79,6 +79,18 @@ class BikoBase(IStrategy):
     max_account_drawdown = 0.15  # Kill-Switch
 
     @property
+    def kill_switch_enabled(self) -> bool:
+        """
+        biko.kill_switch (Standard: an). Nur für Backtests abschalten (scripts/backtest.sh macht das),
+        sonst friert der Backtest nach dem ersten -15 % für den Rest des Zeitraums ein und man sieht
+        nicht, was die Strategie wirklich kann. Im Live- und Testmodus bleibt er immer an.
+        """
+        dp = getattr(self, "dp", None)
+        if dp is not None and dp.runmode in (RunMode.LIVE, RunMode.DRY_RUN):
+            return True
+        return bool(self.config.get("biko", {}).get("kill_switch", True))
+
+    @property
     def risk_per_trade(self) -> float:
         """Risiko pro Trade aus der Biko-App (biko.risk_per_trade), begrenzt auf 0,25 bis 3 %."""
         try:
@@ -218,6 +230,8 @@ class BikoBase(IStrategy):
         side: str,
         **kwargs,
     ) -> bool:
+        if not self.kill_switch_enabled:
+            return True
         drawdown = self._max_closed_drawdown()
         if drawdown >= self.max_account_drawdown:
             # Bewusst dauerhaft: Freigabe nur durch manuelle Prüfung
