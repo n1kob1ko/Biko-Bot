@@ -23,6 +23,7 @@
     const minuten = jetzt.getHours() * 60 + jetzt.getMinutes();
     for (const er of erinnerungen) {
       if (!er.aktiv || !er.tage.includes(tag)) continue;
+      if (er.datum && er.datum !== datum(jetzt)) continue; // einmalige Erinnerung: nur an ihrem Tag
       const [h, m] = er.zeit.split(':').map(Number);
       const seit = minuten - (h * 60 + m);
       if (seit < 0 || seit > NACHHOLEN_MIN) continue;
@@ -30,6 +31,19 @@
       if (nochmal ? spaeter[er.id] <= jetzt.getTime() : !gezeigt.has(gezeigtSchluessel(er, jetzt))) return er;
     }
     return null;
+  }
+
+  // Wann kommt die Erinnerung? Kurz in Worten: "jeden Tag", "Mo, Mi", "heute", "morgen", "einmal am 24.12." (Vorlage mit {t} und {m})
+  function wannText(er, texte, jetzt) {
+    if (er.datum) {
+      if (er.datum === datum(jetzt)) return texte.heute;
+      const morgen = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() + 1);
+      if (er.datum === datum(morgen)) return texte.morgen;
+      const [, monat, tag] = er.datum.split('-').map(Number);
+      return texte.einmal_am.replace('{t}', tag).replace('{m}', monat);
+    }
+    if (er.tage.length === 7) return texte.jeden_tag;
+    return er.tage.map((x) => texte.tage[x]).join(texte.tage_trenner || ', ');
   }
 
   // Chinesische Schriftzeichen im Text -> chinesische Stimme, sonst deutsche
@@ -76,5 +90,5 @@
     return Math.round(ms * 0.8);
   }
 
-  return { faelligeErinnerung, gezeigtSchluessel, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
+  return { faelligeErinnerung, gezeigtSchluessel, wannText, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
 });

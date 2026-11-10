@@ -10,8 +10,24 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 |---|---|
 | **Reden / 聊天** | Fragen stellen oder einfach plaudern. Der große gelbe Knopf ist ein Mikrofon wie bei einer WeChat-Sprachnachricht: drücken, sprechen, der Satz wird von selbst abgeschickt. Tippen geht genauso. Antworten kann man sich vorlesen lassen. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
 | **Nachricht / 消息** | Kurz sagen, an wen und was. Biko schreibt eine nette Nachricht, die man kopiert und in WeChat, WhatsApp oder SMS einfügt. |
-| **Erinnern / 提醒** | Uhrzeit und Text (z. B. Tablette). Zur Uhrzeit erscheint ein großer Hinweis mit Ton, bis "Erledigt" gedrückt wird. Löschen fragt zuerst nach. |
-| **Einstellen / 设置** | Für die Familie: Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
+| **Einstellen / 设置** | Für die Familie: nachsehen, was Biko sich gemerkt hat, dazu Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
+
+**Erinnerungen haben keinen eigenen Bereich und kein Formular.** Man sagt es Biko einfach im Gespräch:
+
+- "Erinnere mich jeden Tag um 8 an die Herztablette." / "每天早上八点提醒我吃药。"
+- "Erinnere mich morgen um 15 Uhr an den Arzt." oder "in 20 Minuten an den Herd."
+- "Woran erinnerst du mich?" und "Vergiss die Erinnerung an die Tablette."
+
+Biko schreibt es sich im Hintergrund selbst auf und bestätigt in einem Satz. Unter seiner Antwort steht klein
+"Gemerkt" mit Tag und Uhrzeit, damit man sieht, dass es wirklich notiert ist. Zur Uhrzeit erscheint ein großer
+Hinweis mit Ton, bis "Erledigt" gedrückt wird. Fehlt die Uhrzeit, fragt Biko nach. In "Einstellen" steht nur
+eine Liste zum Nachsehen und Löschen (Löschen fragt zuerst nach).
+
+Grundsatz für alles Weitere: **Funktionen laufen über das Gespräch, nicht über Formulare.**
+
+Technisch: Biko hat dafür zwei Werkzeuge (`erinnerung_merken` und `erinnerung_loeschen` in `server.py`). Der Server
+prüft jede Eingabe (Uhrzeit, Datum nicht in der Vergangenheit, höchstens 30 Stück) und speichert sie in
+`erinnerungen.json`. Mit jeder Antwort bekommt die App die aktuelle Liste und was gerade gemerkt oder gestrichen wurde.
 
 Oben rechts wechselt ein kleines Menü die ganze Oberfläche zwischen Deutsch und Chinesisch. Beim ersten Öffnen
 nimmt die App die Sprache des Handys. Sie folgt auch dem hellen oder dunklen Modus des Handys.
@@ -91,9 +107,9 @@ App wie auf einem iPhone. Playwright einmalig: `npm install --no-save playwright
 | `index.html` | Seitenaufbau und die Icons (Phosphor, MIT) als eingebettete Sammlung |
 | `style.css` | Aussehen, hell und dunkel, alle Maße und Farben als Variablen |
 | `texte.js` | alle Texte auf Deutsch und Chinesisch |
-| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, Knopfart, Gummiband, Flugbogen) |
+| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, "wann" in Worten, Knopfart, Gummiband, Flugbogen) |
 | `bewegung.js` | alle Bewegungen an einer Stelle |
-| `app.js` | Verhalten: Sprache, Reden, Nachricht, Erinnerungen, Einstellungen |
+| `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt" unter der Antwort), Nachricht, fällige Erinnerung, Einstellungen |
 | `biko.js`, `biko.css` | das Maskottchen aus der Trading-App, dazu die Stimmungen "hört zu" und "ist da" |
 | `fonts/` | Atkinson Hyperlegible Next (für schwache Augen gezeichnet, OFL). Chinesisch nutzt die Schrift des Handys. |
 
@@ -115,15 +131,15 @@ Die Oberfläche folgt 20 festen Regeln. Wer etwas ändert, hält sie bitte ein:
 | 8 | Erfolg pulsiert einmal | Kopiert, Gespeichert, Erledigt (`puls`) |
 | 9 | Wege auf dem Bildschirm laufen ease-in-out | Kissen, Knauf, Flug, Biko groß nach klein |
 | 10 | Aufklappendes beginnt bei 0,95 | Sprachmenü |
-| 11 | Auf geht es vom Auslöser aus | Sprachmenü am Knopf, Blatt aus dem Plus-Knopf |
-| 12 | Zu geht es zum Auslöser zurück | dieselben Bewegungen rückwärts |
+| 11 | Auf geht es vom Auslöser aus | Sprachmenü am Knopf |
+| 12 | Zu geht es zum Auslöser zurück | dieselbe Bewegung rückwärts |
 | 13 | Nichts federt | keine Kurven mit Überschwingen |
-| 14 | Solange der Finger hält, wird nichts nachgezogen | Blatt folgt beim Ziehen direkt |
+| 14 | Solange der Finger hält, wird nichts nachgezogen | Schalter "immer vorlesen" folgt beim Ziehen direkt (`schalterZiehen`) |
 | 15 | Ausgänge sind 20 % kürzer | `--t-aus`, `ausgang()` |
 | 16 | Alt und Neu überlappen kurz | Bereichswechsel, Vorschläge beim ersten Senden (`geist`) |
 | 17 | Masken für Aufdecken und Farbwechsel | fertige Nachricht (`aufdecken`), Schriftgröße (`clip-path`) |
 | 18 | Symbole blenden mit Unschärfe über | `.wechsel` (Mikrofon, Senden, Stopp, Haken) |
-| 19 | Gummiband über die Grenze hinaus | Blatt nach oben ziehen (`gummiband`) |
+| 19 | Gummiband über die Grenze hinaus | Schalter über sein Ende hinaus ziehen (`gummiband`) |
 | 20 | Dasselbe Element wandert, statt zwei zu tauschen | ein Kissen in der Leiste, ein Biko im Reden-Bereich |
 
 Bei "Bewegung reduzieren" am Handy bleibt von allem nur das Ein- und Ausblenden.

@@ -1,10 +1,12 @@
 """
 Biko Assistent: kleiner KI-Helfer für den Alltag, vor allem für ältere Menschen.
 
-Drei Funktionen in der ersten Version:
+Funktionen:
   1. Reden und fragen   (POST /api/chat)       Gespräch mit Biko, merkt sich die letzten Nachrichten
   2. Nachricht schreiben (POST /api/nachricht) macht aus ein paar Stichworten eine nette SMS/WhatsApp
-  3. Erinnerungen       (GET/POST /api/erinnerungen) Medikamente, Termine; die App meldet sich zur Uhrzeit
+  3. Erinnerungen       Biko schreibt sie sich im Gespräch selbst auf ("erinnere mich um 8 an die Tablette"),
+                        über Werkzeuge, die Claude aufruft. Die App meldet sich zur Uhrzeit.
+                        GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
 
 Dazu ein Profil (GET/POST /api/profil): Name, Diät-Regeln, Notizen. Biko liest es bei jeder Antwort mit.
 
@@ -23,7 +25,7 @@ import tempfile
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -60,7 +62,7 @@ So sprichst du:
 - Antworte immer in der Sprache, in der die Person dich anspricht (meist Deutsch oder Chinesisch). Auf Chinesisch: vereinfachte Schriftzeichen,
   einfache Alltagssprache.
   Wenn unklar: {sprache}.
-- Einfache, warme Sprache (auf Deutsch gern österreichisch freundlich) (österreichisch freundlich ist gut), kurze Sätze, keine Fachwörter, keine Anglizismen.
+- Einfache, warme Sprache (auf Deutsch gern österreichisch freundlich), kurze Sätze, keine Fachwörter, keine Anglizismen.
 - Du sprichst die Person mit "{anrede}" an.
 - Kurze Antworten: meistens 2 bis 5 Sätze. Bei Anleitungen nummerierte Schritte, höchstens 5.
 - Kein Markdown außer einfachen nummerierten Listen. Keine Tabellen, keine Überschriften, keine Emojis außer ganz selten einem.
@@ -88,6 +90,20 @@ Gesundheit:
 Sicherheit:
 - Warne vor Betrug, wenn etwas danach klingt (Anrufe von "Polizei" oder "Bank", Gewinnspiele, "Enkeltrick", Links in SMS).
   Nie Passwörter, PINs oder TANs weitergeben.
+
+Erinnerungen:
+- Wenn die Person an etwas erinnert werden möchte ("erinnere mich", "vergiss nicht", "weck mich", "提醒我"), schreibst du es dir
+  mit dem Werkzeug erinnerung_merken auf. Behaupte nie, du hättest dir etwas gemerkt, ohne das Werkzeug benutzt zu haben.
+- Fehlt die Uhrzeit, frag kurz nach ("Um wie viel Uhr?") und rate nicht. "In 20 Minuten" rechnest du selbst aus.
+- Einmalig (heute, morgen, am Freitag, in einer Stunde): mit Datum. Regelmäßig (jeden Tag, jeden Montag): mit Wochentagen.
+  Ist unklar, ob einmal oder regelmäßig, frag kurz nach.
+- Bestätige danach in einem kurzen Satz mit Tag und Uhrzeit. Die Nummer einer Erinnerung sagst du nie dazu.
+- Du kannst dich nur melden, solange diese App am Handy offen ist. Bei Wichtigem wie Medikamenten oder Terminen sagst du
+  das in einem Satz dazu und empfiehlst zusätzlich den Wecker des Handys.
+- Will die Person etwas nicht mehr, löschst du es mit erinnerung_loeschen. Zum Ändern: löschen und neu merken.
+- Auf "Woran erinnerst du mich?" liest du die Liste unten in einfachen Worten vor.
+Das hast du dir schon gemerkt:
+{erinnerungen}
 
 Was du über die Person weißt (von der Familie eingetragen):
 - Diät-Regeln: {diaet}
@@ -159,13 +175,32 @@ WEBSUCHE = {
 }
 
 
-def frage_claude(system, messages, max_tokens=4000, websuche=False):
-    """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung."""
-    extra = {"tools": [WEBSUCHE]} if websuche else {}
+def claude_anfrage(**kw):
+    """Der eine Aufruf der Claude-API. Die Tests ersetzen ihn durch ein Drehbuch."""
+    return client().beta.messages.create(**kw)
+
+
+def werkzeug_ergebnis(block, werkzeuge):
+    """Führt ein von Claude gewünschtes Werkzeug aus. Fehler gehen als Text zurück, damit Claude nachfragen kann."""
+    try:
+        if block.name not in werkzeuge:
+            raise ValueError("Dieses Werkzeug gibt es nicht.")
+        inhalt = werkzeuge[block.name]["tun"](block.input if isinstance(block.input, dict) else {})
+        return {"type": "tool_result", "tool_use_id": block.id, "content": inhalt}
+    except ValueError as e:
+        return {"type": "tool_result", "tool_use_id": block.id, "content": f"Fehler: {e}", "is_error": True}
+
+
+def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None):
+    """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung.
+    `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen."""
+    werkzeuge = werkzeuge or {}
+    tools = ([WEBSUCHE] if websuche else []) + [w["schema"] for w in werkzeuge.values()]
+    extra = {"tools": tools} if tools else {}
     messages = list(messages)
     try:
-        for _ in range(4):  # pause_turn: lange Websuche wird fortgesetzt
-            r = client().beta.messages.create(
+        for _ in range(8):  # Werkzeug-Aufrufe und lange Websuchen (pause_turn) werden fortgesetzt
+            r = claude_anfrage(
                 model=MODELL,
                 max_tokens=max_tokens,
                 system=system,
@@ -177,9 +212,13 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False):
                 fallbacks="default",
                 **extra,
             )
-            if r.stop_reason != "pause_turn":
+            if r.stop_reason == "pause_turn":
+                messages = messages + [{"role": "assistant", "content": r.content}]
+            elif r.stop_reason == "tool_use":
+                ergebnisse = [werkzeug_ergebnis(b, werkzeuge) for b in r.content if b.type == "tool_use"]
+                messages = messages + [{"role": "assistant", "content": r.content}, {"role": "user", "content": ergebnisse}]
+            else:
                 break
-            messages = messages + [{"role": "assistant", "content": r.content}]
     except anthropic.AuthenticationError:
         raise RuntimeError("Der Schlüssel für die KI fehlt oder stimmt nicht. Bitte Niko Bescheid geben.")
     except anthropic.RateLimitError:
@@ -207,6 +246,8 @@ def system_prompt():
         name_satz=p["name"].strip() or "einer Person, deren Namen du noch nicht kennst",
         anrede="Sie" if p.get("anrede") == "Sie" else "du",
         sprache=SPRACHEN.get(p.get("sprache"), "Deutsch"),
+        erinnerungen="\n".join(f"- Nummer {e['id']}: {erinnerung_wann(e)}: {e['text']}" for e in erinnerungen_lesen())
+                     or "- noch nichts",
         diaet=p["diaet"].strip() or "keine eingetragen",
         notizen=p["notizen"].strip() or "keine",
         datum=f"{tage[t.weekday()]}, {t.day}.{t.month}.{t.year}",
@@ -223,11 +264,17 @@ def chat(text):
     verlauf = verlauf[-MAX_VERLAUF:]
     while verlauf and verlauf[0]["role"] != "user":   # muss mit der Person beginnen
         verlauf.pop(0)
-    antwort = frage_claude(system_prompt(), verlauf, websuche=True)
+    vorher = erinnerungen_lesen()
+    antwort = frage_claude(system_prompt(), verlauf, websuche=True, werkzeuge=WERKZEUGE)
     verlauf.append({"role": "assistant", "content": antwort})
     with _lock:
         schreiben("verlauf", verlauf[-MAX_VERLAUF:])
-    return antwort
+    # Was Biko sich in dieser Antwort wirklich aufgeschrieben oder gestrichen hat: die App zeigt es unter der Antwort
+    nachher = erinnerungen_lesen()
+    alt, neu = {e["id"] for e in vorher}, {e["id"] for e in nachher}
+    return {"antwort": antwort, "erinnerungen": nachher,
+            "gemerkt": [e for e in nachher if e["id"] not in alt],
+            "vergessen": [e for e in vorher if e["id"] not in neu]}
 
 
 def nachricht(an, was):
@@ -239,14 +286,98 @@ UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 TAGE = {"mo", "di", "mi", "do", "fr", "sa", "so"}
 
 
+MAX_ERINNERUNGEN = 30
+TAG_NAMEN = {"mo": "Montag", "di": "Dienstag", "mi": "Mittwoch", "do": "Donnerstag", "fr": "Freitag",
+             "sa": "Samstag", "so": "Sonntag"}
+
+
 def erinnerung_pruefen(e):
-    zeit = str(e.get("zeit", ""))
-    text = str(e.get("text", "")).strip()[:120]
+    """Eine Erinnerung: jeden Tag oder an Wochentagen (`tage`), oder einmalig an einem `datum` (JJJJ-MM-TT)."""
+    zeit = str(e.get("zeit") or "")
+    text = str(e.get("text") or "").strip()[:120]
     tage = [t for t in e.get("tage", []) if t in TAGE] if isinstance(e.get("tage"), list) else []
     if not UHRZEIT.match(zeit) or not text:
         raise ValueError("Bitte Uhrzeit (z. B. 08:00) und einen Text angeben.")
+    datum = e.get("datum") or None
+    if datum is not None:
+        try:
+            datum = date.fromisoformat(str(datum)).isoformat()
+        except ValueError:
+            raise ValueError("Das Datum bitte als JJJJ-MM-TT angeben, z. B. 2026-11-24.")
     return {"id": str(e.get("id") or uuid.uuid4().hex[:10]), "zeit": zeit, "text": text,
-            "tage": tage or sorted(TAGE), "aktiv": bool(e.get("aktiv", True))}
+            "tage": sorted(TAGE) if datum or not tage else tage, "aktiv": bool(e.get("aktiv", True)), "datum": datum}
+
+
+def erinnerungen_lesen():
+    """Alle Erinnerungen. Einmalige, deren Tag vorbei ist, fallen weg."""
+    heute = jetzt().strftime("%Y-%m-%d")
+    return [e for e in lesen("erinnerungen", []) if not e.get("datum") or e["datum"] >= heute]
+
+
+def erinnerung_wann(e):
+    if e.get("datum"):
+        return f"einmal am {e['datum']} um {e['zeit']}"
+    if len(e["tage"]) == 7:
+        return f"jeden Tag um {e['zeit']}"
+    return f"jeden {', '.join(TAG_NAMEN[t] for t in TAGE_REIHE if t in e['tage'])} um {e['zeit']}"
+
+
+TAGE_REIHE = ["mo", "di", "mi", "do", "fr", "sa", "so"]
+
+
+# ---------- Werkzeuge: so schreibt sich Biko Erinnerungen selbst auf ----------
+
+def erinnerung_merken(eingabe):
+    neu = erinnerung_pruefen({k: eingabe.get(k) for k in ("text", "zeit", "datum", "tage")})
+    j = jetzt()
+    if neu["datum"] and (neu["datum"], neu["zeit"]) < (j.strftime("%Y-%m-%d"), j.strftime("%H:%M")):
+        raise ValueError(f"Dieser Zeitpunkt ist schon vorbei. Jetzt ist {j.strftime('%Y-%m-%d %H:%M')}.")
+    with _lock:
+        liste = erinnerungen_lesen()
+        if len(liste) >= MAX_ERINNERUNGEN:
+            raise ValueError(f"Es sind schon {MAX_ERINNERUNGEN} Erinnerungen gespeichert. Erst muss eine gelöscht werden.")
+        schreiben("erinnerungen", sorted(liste + [neu], key=lambda e: e["zeit"]))
+    return f"Gespeichert: {erinnerung_wann(neu)}: {neu['text']}"
+
+
+def erinnerung_loeschen(eingabe):
+    nr = str(eingabe.get("id") or "")
+    with _lock:
+        liste = erinnerungen_lesen()
+        weg = [e for e in liste if e["id"] == nr]
+        if not weg:
+            raise ValueError("Unter dieser Nummer ist nichts gespeichert. Die Nummern stehen in deiner Liste.")
+        schreiben("erinnerungen", [e for e in liste if e["id"] != nr])
+    return f"Gelöscht: {erinnerung_wann(weg[0])}: {weg[0]['text']}"
+
+
+WERKZEUGE = {
+    "erinnerung_merken": {"tun": erinnerung_merken, "schema": {
+        "name": "erinnerung_merken",
+        "description": "Schreibt eine Erinnerung auf. Die App meldet sich dann zur Uhrzeit groß mit Ton. "
+                       "Für einmalige Erinnerungen `datum` setzen, für regelmäßige `tage` (weglassen heißt jeden Tag).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Woran erinnert wird, kurz und in der Sprache der Person, z. B. 'Blutdrucktablette nehmen'."},
+                "zeit": {"type": "string", "description": "Uhrzeit im 24-Stunden-Format HH:MM, z. B. 08:00."},
+                "datum": {"type": "string", "description": "Nur für einmalige Erinnerungen: der Tag als JJJJ-MM-TT."},
+                "tage": {"type": "array", "items": {"type": "string", "enum": TAGE_REIHE},
+                         "description": "Nur für regelmäßige Erinnerungen an bestimmten Wochentagen."},
+            },
+            "required": ["text", "zeit"],
+        },
+    }},
+    "erinnerung_loeschen": {"tun": erinnerung_loeschen, "schema": {
+        "name": "erinnerung_loeschen",
+        "description": "Streicht eine gemerkte Erinnerung. Die Nummer steht in deiner Liste der Erinnerungen.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "Nummer der Erinnerung aus der Liste."}},
+            "required": ["id"],
+        },
+    }},
+}
 
 
 # ---------- HTTP ----------
@@ -361,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
             if pfad == "/api/profil":
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
-                return self.senden(200, lesen("erinnerungen", []))
+                return self.senden(200, erinnerungen_lesen())
             if pfad == "/api/verlauf":
                 return self.senden(200, lesen("verlauf", [])[-MAX_VERLAUF:])
             return self.senden(404, {"fehler": "Gibt es nicht."})
@@ -379,7 +510,7 @@ class Handler(BaseHTTPRequestHandler):
                 text = str(daten.get("text", "")).strip()
                 if not text or len(text) > MAX_TEXT:
                     raise ValueError("Bitte etwas Kürzeres schreiben.")
-                return self.senden(200, {"antwort": chat(text)})
+                return self.senden(200, chat(text))
             if pfad == "/api/nachricht":
                 was = str(daten.get("was", "")).strip()
                 an = str(daten.get("an", "")).strip()[:80]
@@ -399,7 +530,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, neu)
             if pfad == "/api/erinnerungen":
                 liste = daten.get("erinnerungen")
-                if not isinstance(liste, list) or len(liste) > 30:
+                if not isinstance(liste, list) or len(liste) > MAX_ERINNERUNGEN:
                     raise ValueError("Höchstens 30 Erinnerungen.")
                 liste = sorted((erinnerung_pruefen(e) for e in liste), key=lambda e: e["zeit"])
                 with _lock:

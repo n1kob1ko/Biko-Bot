@@ -122,14 +122,16 @@ test('Vorschlag antippen stellt die Frage', async (t) => {
 
 test('Das Kissen in der Leiste wandert zum gewählten Bereich', async (t) => {
   const p = await angemeldet(t);
-  await zu(p, 'erinnern');
+  await zu(p, 'einstellen');
   await p.waitForTimeout(500);
   const mitte = async (sel) => { const b = await p.locator(sel).boundingBox(); return b.x + b.width / 2; };
   const kissen = await mitte('.leiste-kissen');
-  const knopf = await mitte('.leiste button[data-ziel=erinnern]');
+  const knopf = await mitte('.leiste button[data-ziel=einstellen]');
   assert.ok(Math.abs(kissen - knopf) < 2, `Kissen ${kissen} liegt nicht unter dem Knopf ${knopf}`);
   assert.equal(await p.locator('.leiste-kissen').count(), 1, 'es gibt genau ein Kissen, das wandert');
-  assert.equal(await p.isVisible('[data-ansicht=erinnern]'), true);
+  assert.equal(await p.isVisible('[data-ansicht=einstellen]'), true);
+  assert.deepEqual(await p.locator('.leiste button').evaluateAll((l) => l.map((b) => b.dataset.ziel)), ['reden', 'nachricht', 'einstellen'],
+    'einen eigenen Bereich für Erinnerungen gibt es nicht mehr');
   await p.waitForTimeout(300);
   assert.equal(await p.isVisible('[data-ansicht=reden]'), false);
 });
@@ -147,37 +149,9 @@ test('Sprachmenü geht am Knopf auf und stellt auf Chinesisch um', async (t) => 
   assert.equal(await p.getAttribute('html', 'lang'), 'zh-CN');
 });
 
-test('Neue Erinnerung: Blatt geht aus dem Plus-Knopf auf, Speichern legt sie an', async (t) => {
-  const p = await angemeldet(t);
-  await zu(p, 'erinnern');
-  assert.equal(await p.isVisible('#blatt'), false);
-  await p.click('#erinnerung-neu');
-  await p.waitForSelector('#blatt[open]');
-  const ursprung = await p.evaluate(() => getComputedStyle(document.querySelector('#blatt .blatt-inhalt')).transformOrigin);
-  assert.notEqual(ursprung, '', 'das Blatt weiß, von wo es aufgeht');
-  await p.fill('#erinnerung-zeit', '08:00');
-  await p.fill('#erinnerung-text', 'Blutdrucktablette');
-  await p.click('#erinnerung-form button[type=submit]');
-  await p.waitForSelector('#erinnerungen li.erinnerung');
-  assert.match(await p.textContent('#erinnerungen li.erinnerung'), /08:00.*Blutdrucktablette/s);
-  await p.waitForTimeout(400);
-  assert.equal(await p.isVisible('#blatt'), false);
-});
-
-test('Blatt schließt mit Escape und gibt den Fokus an den Plus-Knopf zurück', async (t) => {
-  const p = await angemeldet(t);
-  await zu(p, 'erinnern');
-  await p.click('#erinnerung-neu');
-  await p.waitForSelector('#blatt[open]');
-  await p.keyboard.press('Escape');
-  await p.waitForTimeout(400);
-  assert.equal(await p.isVisible('#blatt'), false);
-  assert.equal(await p.evaluate(() => document.activeElement.id), 'erinnerung-neu');
-});
-
 test('Erinnerung geht groß auf, bei "Erledigt" freut sich Biko', async (t) => {
   const p = await angemeldet(t);
-  await zu(p, 'erinnern');
+  await zu(p, 'einstellen');
   await p.click('#ton-test');
   await p.waitForSelector('#alarm:not([hidden])');
   assert.match(await p.textContent('#alarm-text'), /Erinnerung/);
@@ -222,7 +196,7 @@ test('Schriftgröße "Sehr groß" macht die Schrift größer', async (t) => {
 
 test('Keine Emojis und keine Gedankenstriche in der Oberfläche', async (t) => {
   const p = await angemeldet(t);
-  for (const ziel of ['reden', 'nachricht', 'erinnern', 'einstellen']) {
+  for (const ziel of ['reden', 'nachricht', 'einstellen']) {
     await zu(p, ziel);
     await p.waitForTimeout(250);
     const text = await p.innerText('body');
@@ -249,9 +223,9 @@ test('Dunkler Modus: Text bleibt gut lesbar (Kontrast mindestens 4,5 zu 1)', asy
 
 test('"Bewegung reduzieren": nichts fliegt oder wandert, es wird nur ein- und ausgeblendet', async (t) => {
   const p = await angemeldet(t, { reducedMotion: 'reduce' });
-  await zu(p, 'erinnern');
-  await p.click('#erinnerung-neu');
-  await p.waitForSelector('#blatt[open]');
+  await zu(p, 'nachricht');
+  await p.click('#sprache-knopf');
+  await p.waitForSelector('#sprache-menue:not([hidden])');
   const bewegt = await p.evaluate(() => document.getAnimations()
     .filter((a) => !a.effect.target.closest('.biko'))
     .flatMap((a) => a.effect.getKeyframes())
@@ -261,7 +235,7 @@ test('"Bewegung reduzieren": nichts fliegt oder wandert, es wird nur ein- und au
 
 test('Tippflächen sind groß genug (mindestens 48 px)', async (t) => {
   const p = await angemeldet(t);
-  for (const ziel of ['reden', 'nachricht', 'erinnern', 'einstellen']) {
+  for (const ziel of ['reden', 'nachricht', 'einstellen']) {
     await zu(p, ziel);
     await p.waitForTimeout(250);
     const zuKlein = await p.evaluate(() => [...document.querySelectorAll('#app button, #sprache-knopf')]
@@ -291,28 +265,6 @@ test('Fehler vom Server: Biko sagt es und der Text bleibt im Feld', async (t) =>
   assert.equal((await p.inputValue('#chat-text')).length, 2100);
 });
 
-test('Blatt folgt dem Finger ohne Verzögerung, gibt nach oben nach und schließt beim Wegziehen', async (t) => {
-  const p = await angemeldet(t);
-  await zu(p, 'erinnern');
-  await p.click('#erinnerung-neu');
-  await p.waitForSelector('#blatt[open]');
-  await p.waitForTimeout(400);
-  const griff = await p.locator('.blatt-griff').boundingBox();
-  const x = griff.x + griff.width / 2, y = griff.y + griff.height / 2;
-  const versatz = () => p.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector('.blatt-inhalt')).transform).m42);
-  await p.mouse.move(x, y);
-  await p.mouse.down();
-  await p.mouse.move(x, y + 40);
-  assert.equal(Math.round(await versatz()), 40, 'folgt sofort, ohne Übergang');
-  await p.mouse.move(x, y - 300);
-  const hoch = await versatz();
-  assert.ok(hoch < 0 && hoch > -60, `Gummiband nach oben: ${hoch}`);
-  await p.mouse.move(x, y + 160);
-  await p.mouse.up();
-  await p.waitForTimeout(400);
-  assert.equal(await p.isVisible('#blatt'), false);
-});
-
 test('Fällige Erinnerung geht von selbst auf, "später" schließt sie und sie kommt nicht sofort wieder', async (t) => {
   const p = await angemeldet(t, { uhr: '2026-01-05T08:01:00' });
   const vorher = await erinnerungenHolen(p);
@@ -339,7 +291,7 @@ test('Löschen fragt zuerst nach', async (t) => {
     await erinnerungenSetzen(p, [{ id: 'x1', zeit: '09:30', text: 'Augentropfen' }]);
     await p.reload();
     await p.waitForSelector('#app:not([hidden])');
-    await zu(p, 'erinnern');
+    await zu(p, 'einstellen');
     await p.click('li.erinnerung .weg');
     assert.equal(await p.isVisible('li.erinnerung .sicher'), true);
     await p.click('li.erinnerung .sicher .nein');
@@ -348,8 +300,100 @@ test('Löschen fragt zuerst nach', async (t) => {
     await p.click('li.erinnerung .weg');
     await p.click('li.erinnerung .sicher .ja');
     await p.waitForSelector('li.erinnerung', { state: 'detached' });
-    assert.match(await p.textContent('#erinnerungen'), /Noch keine Erinnerungen/);
+    assert.match(await p.textContent('#erinnerungen'), /Noch nichts gemerkt/);
   } finally {
     await erinnerungenSetzen(p, vorher);
   }
+});
+
+test('Erinnerung im Gespräch: Biko schreibt sie sich auf, zeigt "Gemerkt" und meldet sich zur Uhrzeit', async (t) => {
+  const p = await angemeldet(t, { uhr: '2026-01-05T07:59:00' });
+  const vorher = await erinnerungenHolen(p);
+  try {
+    await erinnerungenSetzen(p, []);
+    await p.reload();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.fill('#chat-text', 'Erinnere mich jeden Tag um 8 an die Herztablette');
+    await p.click('#chat-knopf');
+    await p.waitForSelector('.blase.biko-sagt');
+    assert.match(await p.textContent('.notiz'), /Gemerkt.*Herztablette.*08:00/s);
+    assert.equal(await p.isVisible('#alarm'), false);
+    // ohne Neuladen und ohne Formular: die App kennt die Erinnerung sofort und meldet sich, sobald es 8 Uhr ist
+    await p.clock.setFixedTime(new Date('2026-01-05T08:00:00'));
+    await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await p.waitForSelector('#alarm:not([hidden])');
+    assert.equal(await p.textContent('#alarm-text'), 'Herztablette');
+    await p.click('#alarm-ok');
+    await p.waitForSelector('#alarm', { state: 'hidden' });
+    await zu(p, 'einstellen');
+    assert.match(await p.textContent('#erinnerungen li.erinnerung'), /08:00.*Herztablette/s);
+    assert.equal(await p.locator('#erinnerung-form, #erinnerung-neu').count(), 0, 'kein Formular mehr');
+  } finally {
+    await erinnerungenSetzen(p, vorher);
+  }
+});
+
+test('Tägliche Erinnerung, deren Uhrzeit heute schon vorbei ist, platzt nicht sofort herein', async (t) => {
+  const p = await angemeldet(t, { uhr: '2026-01-05T08:30:00' });
+  const vorher = await erinnerungenHolen(p);
+  try {
+    await erinnerungenSetzen(p, []);
+    await p.reload();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.fill('#chat-text', 'Erinnere mich jeden Tag um 8 an die Herztablette');
+    await p.click('#chat-knopf');
+    await p.waitForSelector('.notiz');
+    await p.waitForTimeout(400);
+    assert.equal(await p.isVisible('#alarm'), false, 'heute ist 8 Uhr vorbei: Biko meldet sich erst morgen');
+    await p.reload();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.waitForTimeout(300);
+    assert.equal(await p.isVisible('#alarm'), false, 'auch nach dem Neuladen nicht');
+    // am nächsten Morgen meldet er sich
+    await p.clock.setFixedTime(new Date('2026-01-06T08:00:00'));
+    await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await p.waitForSelector('#alarm:not([hidden])');
+  } finally {
+    await erinnerungenSetzen(p, vorher);
+  }
+});
+
+test('Biko streicht eine Erinnerung auf Zuruf und zeigt das an', async (t) => {
+  const p = await angemeldet(t);
+  const vorher = await erinnerungenHolen(p);
+  try {
+    await erinnerungenSetzen(p, [{ id: 'x1', zeit: '09:30', text: 'Augentropfen' }]);
+    await p.reload();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.fill('#chat-text', 'Vergiss die Augentropfen');
+    await p.click('#chat-knopf');
+    await p.waitForSelector('.blase.biko-sagt');
+    assert.match(await p.textContent('.notiz'), /Gestrichen.*Augentropfen/s);
+    await zu(p, 'einstellen');
+    assert.equal(await p.locator('li.erinnerung').count(), 0);
+  } finally {
+    await erinnerungenSetzen(p, vorher);
+  }
+});
+
+test('Schalter lässt sich ziehen: folgt dem Finger ohne Verzögerung und gibt am Rand nach', async (t) => {
+  const p = await angemeldet(t);
+  await zu(p, 'einstellen');
+  await p.waitForTimeout(500);
+  assert.equal(await p.getAttribute('#vorlesen', 'aria-checked'), 'false');
+  await p.locator('#vorlesen').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  const b = await p.locator('#vorlesen .knauf').boundingBox();
+  const x = b.x + b.width / 2, y = b.y + b.height / 2;
+  const versatz = () => p.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector('#vorlesen .knauf')).transform).m41);
+  await p.mouse.move(x, y);
+  await p.mouse.down();
+  await p.mouse.move(x + 10, y);
+  assert.equal(Math.round(await versatz()), 10, 'folgt sofort, ohne Übergang');
+  await p.mouse.move(x + 120, y);
+  const weit = await versatz();
+  assert.ok(weit > 20 && weit < 30, `Gummiband am rechten Rand: ${weit}`);
+  await p.mouse.up();
+  assert.equal(await p.getAttribute('#vorlesen', 'aria-checked'), 'true');
+  await p.waitForTimeout(300);
+  assert.equal(Math.round(await versatz()), 20);
 });
