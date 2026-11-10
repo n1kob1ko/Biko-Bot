@@ -14,7 +14,7 @@ Eingerichtet wird die App von jemandem aus der Familie (Profil, Diät-Regeln, Pa
 
 1. **Jemanden zum Reden haben.** Das ist das Wichtigste. Sprechen und Vorlesen stehen deshalb vorne.
 2. Alles fragen können, so wie Niko KI nutzt: Angebote und Deals, Wetter, Kochen mit Diät-Regeln.
-3. Kurze Nachrichten schreiben lassen (für WeChat, WhatsApp, SMS).
+3. Kurze Nachrichten schreiben lassen (für WeChat, WhatsApp, SMS). Man sagt es Biko, der Text steht dann im Gespräch.
 4. An Dinge erinnern, vor allem an Medikamente. Man sagt es Biko, er schreibt es sich selbst auf.
 
 ## Grundsatz: Funktionen laufen über das Gespräch
@@ -23,6 +23,11 @@ Nikos Korrektur vom 10.11.2026: keine eigenen Bereiche mit Formularen für einze
 will, sagt es Biko ("erinnere mich an ..."), und Biko erledigt es im Hintergrund. Die Oberfläche zeigt nur,
 dass es passiert ist ("Gemerkt" unter der Antwort), und bietet der Familie eine Liste zum Nachsehen.
 Bevor eine neue Funktion einen Knopf oder ein Formular bekommt, zuerst fragen: Kann Biko das im Gespräch?
+
+Seit dem ersten Live-Test (10.11.2026) gilt das auch für Nachrichten und Links: "Schreib Anna, dass ..." stellt den
+fertigen Text mit "Kopieren" ins Gespräch, und findet Biko kein genaues Angebot, stellt er den Prospekt als Knopf
+dazu, statt die Person zum Suchen zu schicken. Die Leiste hat drei Bereiche: Reden, Verlauf, Einstellen.
+Der Verlauf ist kein Formular, sondern nur die Liste früherer Gespräche zum Wiederöffnen.
 
 ## Wie es sich anfühlen soll
 

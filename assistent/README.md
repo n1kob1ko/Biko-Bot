@@ -9,7 +9,7 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 | Bereich | Was passiert |
 |---|---|
 | **Reden / 聊天** | Fragen stellen oder einfach plaudern. Der große gelbe Knopf ist ein Mikrofon wie bei einer WeChat-Sprachnachricht: drücken, sprechen, der Satz wird von selbst abgeschickt. Tippen geht genauso. Antworten kann man sich vorlesen lassen. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
-| **Nachricht / 消息** | Kurz sagen, an wen und was. Biko schreibt eine nette Nachricht, die man kopiert und in WeChat, WhatsApp oder SMS einfügt. |
+| **Verlauf / 记录** | Frühere Gespräche zum Nachlesen und Weiterreden, dazu der Knopf "Neues Gespräch". |
 | **Einstellen / 设置** | Für die Familie: nachsehen, was Biko sich gemerkt hat, dazu Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
 
 **Erinnerungen haben keinen eigenen Bereich und kein Formular.** Man sagt es Biko einfach im Gespräch:
@@ -23,18 +23,37 @@ Biko schreibt es sich im Hintergrund selbst auf und bestätigt in einem Satz. Un
 Hinweis mit Ton, bis "Erledigt" gedrückt wird. Fehlt die Uhrzeit, fragt Biko nach. In "Einstellen" steht nur
 eine Liste zum Nachsehen und Löschen (Löschen fragt zuerst nach).
 
+**Nachrichten für andere** gehen genauso: "Schreib Anna, dass ich am Sonntag komme." Biko schreibt den fertigen
+Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden mit", wenn das Handy das kann).
+Danach fügt man ihn in WeChat, WhatsApp oder SMS ein. Biko verschickt selbst nichts. "Mach sie kürzer" oder
+"lieber mit Sie" ändert den Text im selben Gespräch.
+
+**Angebote und Links:** Bei Fragen nach Angeboten sucht Biko zuerst selbst und gründlich (mehrere Suchen, er darf
+Trefferseiten auch öffnen). Adressen schreibt er nie in den Text, sondern stellt sie als großen Knopf unter die
+Antwort. Findet er nichts Genaues, sagt er das in einem Satz und stellt den Link zum aktuellen Prospekt des
+Geschäfts ins Gespräch, damit man selbst schauen kann. Nur `https`-Adressen werden zu einem Knopf.
+
+**Gespräche:** Jede Sitzung ist ein eigenes Gespräch. Öffnet man die App am selben Tag wieder, steht das letzte
+Gespräch wieder da und man redet einfach weiter. An einem neuen Tag begrüßt Biko von vorn, das alte Gespräch steht
+dann im Bereich "Verlauf". Dort kann man jedes Gespräch wieder öffnen oder löschen (Löschen fragt zuerst nach).
+"Neues Gespräch" gibt es im Verlauf und oben neben dem kleinen Biko. Es bleiben die letzten 40 Gespräche.
+
 Grundsatz für alles Weitere: **Funktionen laufen über das Gespräch, nicht über Formulare.**
 
-Technisch: Biko hat dafür zwei Werkzeuge (`erinnerung_merken` und `erinnerung_loeschen` in `server.py`). Der Server
-prüft jede Eingabe (Uhrzeit, Datum nicht in der Vergangenheit, höchstens 30 Stück) und speichert sie in
-`erinnerungen.json`. Mit jeder Antwort bekommt die App die aktuelle Liste und was gerade gemerkt oder gestrichen wurde.
+Technisch: Biko hat dafür vier Werkzeuge in `server.py`, die Claude selbst aufruft: `erinnerung_merken`,
+`erinnerung_loeschen`, `nachricht_zeigen` und `link_zeigen`. Der Server prüft jede Eingabe (Uhrzeit, Datum nicht in
+der Vergangenheit, höchstens 30 Erinnerungen, Links nur mit `https`). Mit jeder Antwort bekommt die App, was Biko
+gerade getan hat: gemerkt, gestrichen, Nachricht geschrieben, Links. Das steht auch im gespeicherten Gespräch
+(`gespraeche.json`), damit es beim Wiederöffnen wieder da ist. Zum Suchen nutzt Biko die Websuche und das Öffnen
+von Seiten der Claude-API (`web_search`, `web_fetch`). Im Server-Log steht pro Antwort nur, welche Werkzeuge
+benutzt wurden, nie der Inhalt.
 
 Oben rechts wechselt ein kleines Menü die ganze Oberfläche zwischen Deutsch und Chinesisch. Beim ersten Öffnen
 nimmt die App die Sprache des Handys. Sie folgt auch dem hellen oder dunklen Modus des Handys.
 
 Biko selbst zeigt, was gerade passiert: er winkt zur Begrüßung, lauscht beim Sprechen, tippt beim Nachdenken
-und freut sich, wenn eine Erinnerung erledigt ist. Jedes Öffnen beginnt mit dem Startbild; Biko weiß trotzdem
-noch, worüber zuletzt gesprochen wurde (die letzten 30 Nachrichten, bis "Gespräch vergessen" gedrückt wird).
+und freut sich, wenn eine Erinnerung erledigt ist. Bei jeder Antwort liest er die letzten 30 Nachrichten des
+offenen Gesprächs mit.
 
 ### Bewusste Grenzen
 
@@ -76,13 +95,15 @@ Das sind Schätzungen, die echten Zahlen stehen in der Anthropic-Konsole. Wer sp
 
 ## Daten
 
-Alles liegt in `assistent/daten/` am eigenen Server: `profil.json`, `erinnerungen.json`, `verlauf.json`
-(die letzten 30 Nachrichten). Die Texte gehen zum Beantworten an die Claude-API von Anthropic, sonst nirgends hin.
-"Gespräch vergessen" in den Einstellungen löscht den Verlauf. Das Server-Log enthält keine Inhalte.
+Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
+`erinnerungen.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+(`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
+Claude-API von Anthropic, sonst nirgends hin. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen
+Verlauf, einzelne Gespräche löscht man im Bereich "Verlauf". Das Server-Log enthält keine Inhalte.
 
 ## Eine Person pro Installation
 
-Version 1 hat ein Profil und ein Gespräch. Für eine zweite Person den Ordner kopieren und mit anderem Port
+Es gibt ein Profil und einen gemeinsamen Verlauf. Für eine zweite Person den Ordner kopieren und mit anderem Port
 starten (`HELFER_PORT=8093` in der `.env`, anderer `container_name`). Mehrere Personen in einer Installation
 sind ein möglicher nächster Schritt.
 
@@ -107,9 +128,9 @@ App wie auf einem iPhone. Playwright einmalig: `npm install --no-save playwright
 | `index.html` | Seitenaufbau und die Icons (Phosphor, MIT) als eingebettete Sammlung |
 | `style.css` | Aussehen, hell und dunkel, alle Maße und Farben als Variablen |
 | `texte.js` | alle Texte auf Deutsch und Chinesisch |
-| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, "wann" in Worten, Knopfart, Gummiband, Flugbogen) |
+| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, "wann" in Worten, weiterreden oder neu beginnen, sichere Links, Knopfart, Gummiband, Flugbogen) |
 | `bewegung.js` | alle Bewegungen an einer Stelle |
-| `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt" unter der Antwort), Nachricht, fällige Erinnerung, Einstellungen |
+| `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt", Nachricht zum Kopieren und Links unter der Antwort), Verlauf, fällige Erinnerung, Einstellungen |
 | `biko.js`, `biko.css` | das Maskottchen aus der Trading-App, dazu die Stimmungen "hört zu" und "ist da" |
 | `fonts/` | Atkinson Hyperlegible Next (für schwache Augen gezeichnet, OFL). Chinesisch nutzt die Schrift des Handys. |
 
@@ -137,7 +158,7 @@ Die Oberfläche folgt 20 festen Regeln. Wer etwas ändert, hält sie bitte ein:
 | 14 | Solange der Finger hält, wird nichts nachgezogen | Schalter "immer vorlesen" folgt beim Ziehen direkt (`schalterZiehen`) |
 | 15 | Ausgänge sind 20 % kürzer | `--t-aus`, `ausgang()` |
 | 16 | Alt und Neu überlappen kurz | Bereichswechsel, Vorschläge beim ersten Senden (`geist`) |
-| 17 | Masken für Aufdecken und Farbwechsel | fertige Nachricht (`aufdecken`), Schriftgröße (`clip-path`) |
+| 17 | Masken für Aufdecken und Farbwechsel | Nachricht, die Biko ins Gespräch stellt (`aufdecken`), Schriftgröße (`clip-path`) |
 | 18 | Symbole blenden mit Unschärfe über | `.wechsel` (Mikrofon, Senden, Stopp, Haken) |
 | 19 | Gummiband über die Grenze hinaus | Schalter über sein Ende hinaus ziehen (`gummiband`) |
 | 20 | Dasselbe Element wandert, statt zwei zu tauschen | ein Kissen in der Leiste, ein Biko im Reden-Bereich |

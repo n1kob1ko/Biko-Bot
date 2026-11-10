@@ -25,6 +25,7 @@ def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None
 
 ECHTE_SCHLEIFE = server.frage_claude   # die echte Werkzeug-Schleife, für die Tests mit Drehbuch
 server.frage_claude = falsche_ki
+server.protokoll = lambda t: None   # hält die Testausgabe ruhig
 
 
 def text(t):
@@ -95,16 +96,175 @@ class Test(unittest.TestCase):
         self.assertIn("Oma Li", letzte["system"])
         self.assertIn("wenig Zucker", letzte["system"])
         self.assertIn("Chinesisch", letzte["system"])
-        self.rufe("/api/chat", {"text": "Und Obst?"}, cookie=c)
-        self.assertEqual([m["role"] for m in GEFRAGT[-1]["messages"]][-3:], ["user", "assistant", "user"])
-        self.assertEqual(self.rufe("/api/verlauf/loeschen", {}, cookie=c)[0], 200)
-        self.assertEqual(self.rufe("/api/verlauf", cookie=c)[1], [])
 
-    def test_nachricht(self):
+    # ---------- Gespräche: der Verlauf besteht aus mehreren Sitzungen ----------
+
+    def test_gespraech_wird_gespeichert_und_laesst_sich_wieder_oeffnen(self):
         c = self.anmelden()
-        status, j, _ = self.rufe("/api/nachricht", {"an": "Enkel", "was": "danke"}, cookie=c)
-        self.assertEqual((status, j["nachricht"]), (200, "Antwort von Biko"))
-        self.assertFalse(GEFRAGT[-1]["websuche"])
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        j1 = self.rufe("/api/chat", {"text": "Darf ich Kuchen essen?"}, cookie=c)[1]
+        gid = j1["gespraech"]["id"]
+        j2 = self.rufe("/api/chat", {"text": "Und Obst?", "gespraech": gid}, cookie=c)[1]
+        self.assertEqual(j2["gespraech"]["id"], gid)
+        # Claude bekommt das ganze Gespräch, als einfachen Text
+        self.assertEqual([(m["role"], m["content"]) for m in GEFRAGT[-1]["messages"]],
+                         [("user", "Darf ich Kuchen essen?"), ("assistant", "Antwort von Biko"), ("user", "Und Obst?")])
+        liste = self.rufe("/api/gespraeche", cookie=c)[1]
+        self.assertEqual([(g["id"], g["titel"], g["anzahl"]) for g in liste], [(gid, "Darf ich Kuchen essen?", 4)])
+        self.assertNotIn("nachrichten", liste[0])
+        g = self.rufe("/api/gespraech?id=" + gid, cookie=c)[1]
+        self.assertEqual([(m["von"], m["text"]) for m in g["nachrichten"]],
+                         [("ich", "Darf ich Kuchen essen?"), ("biko", "Antwort von Biko"),
+                          ("ich", "Und Obst?"), ("biko", "Antwort von Biko")])
+
+    def test_neues_gespraech_beginnt_ohne_das_alte(self):
+        c = self.anmelden()
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        alt = self.rufe("/api/chat", {"text": "Erstes Gespräch"}, cookie=c)[1]["gespraech"]["id"]
+        neu = self.rufe("/api/chat", {"text": "Zweites Gespräch"}, cookie=c)[1]["gespraech"]["id"]
+        self.assertNotEqual(alt, neu)
+        self.assertEqual([m["content"] for m in GEFRAGT[-1]["messages"]], ["Zweites Gespräch"])
+        # das zuletzt benutzte Gespräch steht oben
+        self.assertEqual([g["id"] for g in self.rufe("/api/gespraeche", cookie=c)[1]], [neu, alt])
+        self.rufe("/api/chat", {"text": "Nochmal im ersten", "gespraech": alt}, cookie=c)
+        self.assertEqual([g["id"] for g in self.rufe("/api/gespraeche", cookie=c)[1]], [alt, neu])
+        # eine unbekannte Nummer beginnt einfach ein neues Gespräch
+        drittes = self.rufe("/api/chat", {"text": "Drittes", "gespraech": "gibt-es-nicht"}, cookie=c)[1]["gespraech"]["id"]
+        self.assertNotIn(drittes, (alt, neu, "gibt-es-nicht"))
+
+    def test_gespraech_loeschen_und_alles_vergessen(self):
+        c = self.anmelden()
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        a = self.rufe("/api/chat", {"text": "A"}, cookie=c)[1]["gespraech"]["id"]
+        b = self.rufe("/api/chat", {"text": "B"}, cookie=c)[1]["gespraech"]["id"]
+        status, rest, _ = self.rufe("/api/gespraech/loeschen", {"id": a}, cookie=c)
+        self.assertEqual((status, [g["id"] for g in rest]), (200, [b]))
+        self.assertEqual(self.rufe("/api/gespraech?id=" + a, cookie=c)[0], 404)
+        self.assertEqual(self.rufe("/api/verlauf/loeschen", {}, cookie=c)[0], 200)
+        self.assertEqual(self.rufe("/api/gespraeche", cookie=c)[1], [])
+
+    def test_langer_titel_wird_gekuerzt_und_alte_gespraeche_fallen_weg(self):
+        c = self.anmelden()
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        for i in range(server.MAX_GESPRAECHE + 2):
+            self.rufe("/api/chat", {"text": f"Frage {i} " + "sehr lang " * 20}, cookie=c)
+        liste = self.rufe("/api/gespraeche", cookie=c)[1]
+        self.assertEqual(len(liste), server.MAX_GESPRAECHE)
+        self.assertTrue(liste[0]["titel"].startswith(f"Frage {server.MAX_GESPRAECHE + 1} "))
+        self.assertLessEqual(len(liste[0]["titel"]), 61)
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+
+    def test_altes_gespraech_aus_der_ersten_version_wird_uebernommen(self):
+        c = self.anmelden()
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        os.remove(server._pfad("gespraeche"))
+        server.schreiben("verlauf", [{"role": "user", "content": "Hallo Biko"}, {"role": "assistant", "content": "Hallo!"}])
+        liste = self.rufe("/api/gespraeche", cookie=c)[1]
+        self.assertEqual([(g["titel"], g["anzahl"]) for g in liste], [("Hallo Biko", 2)])
+        g = self.rufe("/api/gespraech?id=" + liste[0]["id"], cookie=c)[1]
+        self.assertEqual([(m["von"], m["text"]) for m in g["nachrichten"]], [("ich", "Hallo Biko"), ("biko", "Hallo!")])
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+
+    # ---------- Nachricht und Links: Biko stellt sie direkt ins Gespräch ----------
+
+    def test_biko_schreibt_eine_nachricht_fuer_jemanden_ins_gespraech(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("nachricht_zeigen", {"an": "Anna", "text": "Liebe Anna, danke für die Blumen!"})),
+            antwort("end_turn", text("Hier ist die Nachricht für Anna.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Schreib Anna danke für die Blumen"}, cookie=c)[1]
+        self.assertEqual(j["nachrichten"], [{"an": "Anna", "text": "Liebe Anna, danke für die Blumen!"}])
+        self.assertLessEqual({"nachricht_zeigen", "link_zeigen"}, {w["name"] for w in anfragen[0]["tools"]})
+        self.assertFalse(anfragen[1]["messages"][-1]["content"][0].get("is_error"))
+        # der Entwurf bleibt im gespeicherten Gespräch sichtbar
+        g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
+        self.assertEqual(g["nachrichten"][-1]["nachrichten"], j["nachrichten"])
+        # den eigenen Bereich mit Formular gibt es nicht mehr
+        self.assertEqual(self.rufe("/api/nachricht", {"an": "Enkel", "was": "danke"}, cookie=c)[0], 404)
+
+    def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("nachricht_zeigen", {"an": "Anna", "text": "Liebe Anna, danke für die Blumen!"})),
+            antwort("end_turn", text("Hier ist die Nachricht für Anna.")),
+            antwort("end_turn", text("Gern.")),
+        )
+        gid = self.rufe("/api/chat", {"text": "Schreib Anna danke für die Blumen"}, cookie=c)[1]["gespraech"]["id"]
+        self.rufe("/api/chat", {"text": "Mach sie kürzer", "gespraech": gid}, cookie=c)
+        m = anfragen[2]["messages"]
+        self.assertEqual([x["role"] for x in m], ["user", "assistant", "user", "assistant", "user"])
+        aufruf, ergebnis = m[1]["content"][0], m[2]["content"][0]
+        self.assertEqual((aufruf["type"], aufruf["name"], aufruf["input"]["text"]),
+                         ("tool_use", "nachricht_zeigen", "Liebe Anna, danke für die Blumen!"))
+        self.assertEqual((ergebnis["type"], ergebnis["tool_use_id"]), ("tool_result", aufruf["id"]))
+        self.assertEqual((m[3]["content"], m[4]["content"]), ("Hier ist die Nachricht für Anna.", "Mach sie kürzer"))
+
+    def test_leere_nachricht_geht_als_fehler_an_biko_zurueck(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(antwort("tool_use", werkzeug("nachricht_zeigen", {"an": "Anna", "text": "  "})),
+                                 antwort("end_turn", text("Was soll ich Anna schreiben?")))
+        j = self.rufe("/api/chat", {"text": "Schreib Anna"}, cookie=c)[1]
+        self.assertTrue(anfragen[1]["messages"][-1]["content"][0]["is_error"])
+        self.assertEqual(j["nachrichten"], [])
+
+    def test_biko_stellt_einen_link_zum_prospekt_ins_gespraech(self):
+        c = self.anmelden()
+        self.drehbuch(
+            antwort("tool_use", werkzeug("link_zeigen", {"titel": "Billa Flugblatt", "url": "https://www.billa.at/flugblatt"})),
+            antwort("end_turn", text("Genaues habe ich nicht gefunden. Schau am besten selbst ins Flugblatt.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Gibt es Angebote für Kaffee?"}, cookie=c)[1]
+        self.assertEqual(j["links"], [{"titel": "Billa Flugblatt", "url": "https://www.billa.at/flugblatt"}])
+        g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
+        self.assertEqual(g["nachrichten"][-1]["links"], j["links"])
+
+    def test_nur_sichere_links_kommen_ins_gespraech(self):
+        c = self.anmelden()
+        for url in ("http://unsicher.example/prospekt", "javascript:alert(1)", "https://", "kein link", "https://leer zeichen.example"):
+            anfragen = self.drehbuch(antwort("tool_use", werkzeug("link_zeigen", {"titel": "Prospekt", "url": url})),
+                                     antwort("end_turn", text("Schau im Geschäft nach.")))
+            j = self.rufe("/api/chat", {"text": "Angebote?"}, cookie=c)[1]
+            self.assertTrue(anfragen[1]["messages"][-1]["content"][0]["is_error"], url)
+            self.assertEqual(j["links"], [], url)
+
+    def test_biko_darf_gruendlich_suchen_und_seiten_oeffnen(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(antwort("end_turn", text("Bei Billa gibt es Kaffee um 30 % günstiger.")))
+        self.rufe("/api/chat", {"text": "Gibt es Angebote für Kaffee?"}, cookie=c)
+        werkzeuge = {w["name"]: w for w in anfragen[0]["tools"]}
+        self.assertGreaterEqual(werkzeuge["web_search"]["max_uses"], 5)
+        self.assertEqual(werkzeuge["web_fetch"]["type"], "web_fetch_20260209")
+        self.assertIn("link_zeigen", anfragen[0]["system"])
+        self.assertIn("nachricht_zeigen", anfragen[0]["system"])
+
+    def test_lehnt_die_ki_das_oeffnen_von_seiten_ab_antwortet_biko_trotzdem(self):
+        import anthropic
+        c = self.anmelden()
+        anfragen = []
+        abgelehnt = SimpleNamespace(status_code=400, headers={}, request=None)   # so sieht die Antwort "400" für das SDK aus
+
+        def api(**kw):
+            anfragen.append(kw)
+            if any(w["name"] == "web_fetch" for w in kw["tools"]):
+                raise anthropic.BadRequestError("tools.1: unknown tool type", body=None, response=abgelehnt)
+            return antwort("end_turn", text("Bei Billa gibt es Kaffee günstiger."))
+
+        alt_schleife, alt_api = server.frage_claude, server.claude_anfrage
+        server.frage_claude, server.claude_anfrage = ECHTE_SCHLEIFE, api
+        self.addCleanup(lambda: (setattr(server, "frage_claude", alt_schleife), setattr(server, "claude_anfrage", alt_api),
+                                 setattr(server, "_seiten_oeffnen", True)))
+        status, j, _ = self.rufe("/api/chat", {"text": "Gibt es Angebote für Kaffee?"}, cookie=c)
+        self.assertEqual((status, j["antwort"]), (200, "Bei Billa gibt es Kaffee günstiger."))
+        self.assertEqual(len(anfragen), 2)
+        self.assertIn("web_search", {w["name"] for w in anfragen[1]["tools"]})
+        # beim nächsten Mal fragt Biko gleich ohne, statt wieder zu scheitern
+        self.rufe("/api/chat", {"text": "Und Tee?"}, cookie=c)
+        self.assertEqual(len(anfragen), 3)
+        # ein anderer Fehler in der Anfrage wird nicht versteckt
+        server.claude_anfrage = lambda **kw: (_ for _ in ()).throw(
+            anthropic.BadRequestError("messages: zu lang", body=None, response=abgelehnt))
+        self.assertEqual(self.rufe("/api/chat", {"text": "Hallo"}, cookie=c)[0], 503)
 
     def test_erinnerungen_pruefen(self):
         c = self.anmelden()
@@ -204,10 +364,15 @@ class Test(unittest.TestCase):
         self.assertTrue(GEFRAGT[-1]["werkzeuge"])
         self.leeren(c)
 
-    def test_nachricht_bekommt_keine_werkzeuge(self):
+    def test_was_biko_sich_gemerkt_hat_steht_auch_im_gespeicherten_gespraech(self):
         c = self.anmelden()
-        self.rufe("/api/nachricht", {"an": "Enkel", "was": "danke"}, cookie=c)
-        self.assertFalse(GEFRAGT[-1]["werkzeuge"])
+        self.leeren(c)
+        self.drehbuch(antwort("tool_use", werkzeug("erinnerung_merken", {"text": "Tablette", "zeit": "08:00"})),
+                      antwort("end_turn", text("Gemerkt.")))
+        j = self.rufe("/api/chat", {"text": "Erinnere mich um 8 an die Tablette"}, cookie=c)[1]
+        letzte = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]["nachrichten"][-1]
+        self.assertEqual([e["text"] for e in letzte["gemerkt"]], ["Tablette"])
+        self.leeren(c)
 
     def test_einmalige_erinnerung_von_gestern_verschwindet(self):
         c = self.anmelden()

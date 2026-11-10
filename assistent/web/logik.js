@@ -46,6 +46,35 @@
     return er.tage.map((x) => texte.tage[x]).join(texte.tage_trenner || ', ');
   }
 
+  // Gespräche: am selben Tag redet man im letzten weiter, an einem neuen Tag beginnt von selbst ein neues
+  function weiterreden(zuletzt, jetzt) {
+    const d = new Date(zuletzt || NaN);
+    return !isNaN(d) && datum(d) === datum(jetzt);
+  }
+
+  // Wann war ein Gespräch? "heute, 08:05", "gestern, 21:40", sonst der Tag (Vorlage mit {t} und {m})
+  function wannWar(zuletzt, jetzt, texte) {
+    const d = new Date(zuletzt || NaN);
+    if (isNaN(d)) return '';
+    const uhr = `${zwei(d.getHours())}:${zwei(d.getMinutes())}`;
+    const trenner = texte.zeit_trenner || ', ';
+    if (datum(d) === datum(jetzt)) return texte.heute + trenner + uhr;
+    const gestern = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() - 1);
+    if (datum(d) === datum(gestern)) return texte.gestern + trenner + uhr;
+    return texte.tag_kurz.replace('{t}', d.getDate()).replace('{m}', d.getMonth() + 1);
+  }
+
+  // Ein Link wird nur zum Knopf, wenn er sicher ist (https). Liefert den Namen der Seite, sonst ''.
+  function linkSeite(url) {
+    const m = /^https:\/\/([a-z0-9.-]+\.[a-z]{2,})(?:[/?#]\S*)?$/i.exec(String(url || ''));
+    return m ? m[1].toLowerCase().replace(/^www\./, '') : '';
+  }
+
+  // Was vorgelesen wird: die Antwort und danach die Nachrichten, die Biko für jemanden geschrieben hat
+  function vorleseText(antwort, nachrichten) {
+    return [antwort, ...(nachrichten || []).map((n) => n.text)].join('\n\n');
+  }
+
   // Chinesische Schriftzeichen im Text -> chinesische Stimme, sonst deutsche
   function spracheVonText(text) {
     return /[一-鿿]/.test(text) ? 'zh-CN' : 'de-AT';
@@ -90,5 +119,5 @@
     return Math.round(ms * 0.8);
   }
 
-  return { faelligeErinnerung, gezeigtSchluessel, wannText, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
+  return { faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
 });

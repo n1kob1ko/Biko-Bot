@@ -106,6 +106,42 @@ test('Ausgänge sind 20 % kürzer als Eingänge', () => {
   assert.equal(L.ausgang(320), 256);
 });
 
+test('Am selben Tag redet man im letzten Gespräch weiter, an einem neuen Tag beginnt ein neues', () => {
+  const jetzt = um('15:00', '2026-11-10');
+  assert.equal(L.weiterreden('2026-11-10T08:30:00+01:00', jetzt), true);
+  assert.equal(L.weiterreden(um('00:05', '2026-11-10').toISOString(), jetzt), true);
+  assert.equal(L.weiterreden(um('23:55', '2026-11-09').toISOString(), jetzt), false);
+  assert.equal(L.weiterreden('', jetzt), false);
+  assert.equal(L.weiterreden(undefined, jetzt), false);
+  assert.equal(L.weiterreden('kein Datum', jetzt), false);
+});
+
+test('Wann ein Gespräch war, steht kurz da: heute und gestern mit Uhrzeit, sonst der Tag', () => {
+  const texte = { heute: 'heute', gestern: 'gestern', tag_kurz: '{t}.{m}.', zeit_trenner: ', ' };
+  const jetzt = um('15:00', '2026-11-10');
+  assert.equal(L.wannWar(um('08:05', '2026-11-10').toISOString(), jetzt, texte), 'heute, 08:05');
+  assert.equal(L.wannWar(um('21:40', '2026-11-09').toISOString(), jetzt, texte), 'gestern, 21:40');
+  assert.equal(L.wannWar(um('21:40', '2026-11-03').toISOString(), jetzt, texte), '3.11.');
+  assert.equal(L.wannWar(um('21:40', '2026-11-03').toISOString(), jetzt, { ...texte, tag_kurz: '{m}月{t}日' }), '11月3日');
+  assert.equal(L.wannWar(um('08:05', '2026-11-10').toISOString(), jetzt, { ...texte, heute: '今天', zeit_trenner: ' ' }), '今天 08:05');
+  assert.equal(L.wannWar('kein Datum', jetzt, texte), '');
+});
+
+test('Links: nur sichere Adressen werden zu einem Knopf, gezeigt wird der Name der Seite', () => {
+  assert.equal(L.linkSeite('https://www.billa.at/flugblatt'), 'billa.at');
+  assert.equal(L.linkSeite('https://flugblatt.hofer.at/woche?x=1'), 'flugblatt.hofer.at');
+  assert.equal(L.linkSeite('http://www.billa.at/flugblatt'), '');
+  assert.equal(L.linkSeite('javascript:alert(1)'), '');
+  assert.equal(L.linkSeite('billa.at'), '');
+  assert.equal(L.linkSeite(undefined), '');
+});
+
+test('Vorgelesen wird Bikos Antwort und danach die Nachricht, die er geschrieben hat', () => {
+  assert.equal(L.vorleseText('Hier ist die Nachricht.', [{ an: 'Anna', text: 'Liebe Anna, danke!' }]), 'Hier ist die Nachricht.\n\nLiebe Anna, danke!');
+  assert.equal(L.vorleseText('Nur die Antwort.', []), 'Nur die Antwort.');
+  assert.equal(L.vorleseText('Nur die Antwort.'), 'Nur die Antwort.');
+});
+
 test('Jeder deutsche Text hat eine chinesische Fassung und umgekehrt', () => {
   assert.deepEqual(Object.keys(T.zh).sort(), Object.keys(T.de).sort());
 });

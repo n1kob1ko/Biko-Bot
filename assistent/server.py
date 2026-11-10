@@ -1,12 +1,15 @@
 """
 Biko Assistent: kleiner KI-Helfer für den Alltag, vor allem für ältere Menschen.
 
-Funktionen:
-  1. Reden und fragen   (POST /api/chat)       Gespräch mit Biko, merkt sich die letzten Nachrichten
-  2. Nachricht schreiben (POST /api/nachricht) macht aus ein paar Stichworten eine nette SMS/WhatsApp
-  3. Erinnerungen       Biko schreibt sie sich im Gespräch selbst auf ("erinnere mich um 8 an die Tablette"),
-                        über Werkzeuge, die Claude aufruft. Die App meldet sich zur Uhrzeit.
-                        GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
+Funktionen, alle über das Gespräch (POST /api/chat):
+  1. Reden und fragen   Biko antwortet, sucht bei Bedarf im Internet und merkt sich das Gespräch.
+  2. Gespräche          Jede Sitzung ist ein eigenes Gespräch. Man kann ein neues beginnen und frühere wieder
+                        öffnen (GET /api/gespraeche, GET /api/gespraech?id=..., POST /api/gespraech/loeschen).
+  3. Nachrichten        "Schreib Anna, dass ..." – Biko stellt den fertigen Text zum Kopieren ins Gespräch.
+  4. Links              Findet Biko etwas im Internet, stellt er den Link als Knopf ins Gespräch.
+  5. Erinnerungen       Biko schreibt sie sich im Gespräch selbst auf ("erinnere mich um 8 an die Tablette").
+                        Die App meldet sich zur Uhrzeit. GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
+Nachrichten, Links und Erinnerungen sind Werkzeuge, die Claude selbst aufruft.
 
 Dazu ein Profil (GET/POST /api/profil): Name, Diät-Regeln, Notizen. Biko liest es bei jeder Antwort mit.
 
@@ -28,6 +31,7 @@ import uuid
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -38,7 +42,9 @@ WEB = Path(os.environ.get("WEB_DIR", Path(__file__).parent / "web"))
 PASSWORT = os.environ.get("APP_PASSWORT", "")
 MODELL = os.environ.get("ASSISTENT_MODELL", "claude-opus-5-5")
 ZEITZONE = ZoneInfo(os.environ.get("TZ", "Europe/Vienna"))
-MAX_VERLAUF = 30          # so viele Nachrichten merkt sich Biko im Gespräch
+MAX_VERLAUF = 30          # so viele Nachrichten eines Gesprächs liest Biko bei jeder Antwort mit
+MAX_GESPRAECHE = 40       # so viele Gespräche bleiben im Verlauf, das älteste fällt weg
+MAX_GESPEICHERT = 200     # so viele Nachrichten bleiben pro Gespräch gespeichert
 MAX_TEXT = 2000           # längere Eingaben werden abgelehnt
 COOKIE = "biko_assistent"
 COOKIE_TAGE = 365
@@ -66,12 +72,18 @@ So sprichst du:
 - Du sprichst die Person mit "{anrede}" an.
 - Kurze Antworten: meistens 2 bis 5 Sätze. Bei Anleitungen nummerierte Schritte, höchstens 5.
 - Kein Markdown außer einfachen nummerierten Listen. Keine Tabellen, keine Überschriften, keine Emojis außer ganz selten einem.
-- Du kannst im Internet suchen. Nutze das für aktuelle Dinge: Angebote und Deals, Preise vergleichen,
+- Du kannst im Internet suchen und Seiten öffnen. Nutze das für aktuelle Dinge: Angebote und Deals, Preise vergleichen,
   Öffnungszeiten, Wetter, Nachrichten, Veranstaltungen. Für Plaudern und allgemeines Wissen suchst du nicht.
-- Bei Deals: nenne höchstens 3 gute Angebote mit Geschäft, Preis und wie lange es gilt, am liebsten in der Nähe
+- Bei Angeboten suchst du immer zuerst selbst und gründlich, bevor du antwortest: mehrere Suchen mit Produkt, Geschäft und
+  "Aktion diese Woche", auch auf Seiten, die Flugblätter durchsuchbar machen (zum Beispiel aktionsfinder.at, marktguru.at,
+  wogibtswas.at). Öffne eine Trefferseite, wenn in der Vorschau kein Preis steht. Schick die Person nicht einfach zum Prospekt.
+- Nenne höchstens 3 gute Angebote mit Geschäft, Preis und wie lange es gilt, am liebsten in der Nähe
   (Wien bzw. Österreich, Geschäfte wie Billa, Spar, Hofer, Lidl, dm, Bipa, MediaMarkt, asiatische Supermärkte
-  wie am Naschmarkt) oder seriöse Online-Shops.
-  Sag dazu, dass sich Preise ändern können. Keine langen Links vorlesen: nenne den Namen des Geschäfts.
+  wie am Naschmarkt) oder seriöse Online-Shops. Sag dazu, dass sich Preise ändern können.
+- Internet-Adressen schreibst du nie in den Text deiner Antwort. Du zeigst sie mit dem Werkzeug link_zeigen: dann steht unter
+  deiner Antwort ein Knopf zum Antippen. Nimm nur Adressen, die du in den Suchergebnissen wirklich gesehen hast, nie ausgedachte.
+  Zeig den Link zur Quelle, wenn du ein Angebot nennst. Findest du trotz Suche nichts Genaues, sag das ehrlich in einem Satz
+  und zeig den direkten Link zum aktuellen Prospekt oder Flugblatt des Geschäfts, damit die Person selbst schauen kann.
 - Wenn du etwas trotz Suche nicht sicher weißt, sag das ehrlich. Erfinde nichts.
 
 Ehrlichkeit:
@@ -90,6 +102,16 @@ Gesundheit:
 Sicherheit:
 - Warne vor Betrug, wenn etwas danach klingt (Anrufe von "Polizei" oder "Bank", Gewinnspiele, "Enkeltrick", Links in SMS).
   Nie Passwörter, PINs oder TANs weitergeben.
+
+Nachrichten für andere:
+- Wenn die Person jemandem etwas schreiben will ("schreib Anna, dass ...", "wie sage ich dem Arzt ab?"), schreibst du die
+  fertige Nachricht in ihrem Namen, in der Ich-Form, freundlich, natürlich und kurz (1 bis 4 Sätze), so wie sie selbst
+  schreiben würde: an Enkel locker und herzlich, an Ärzte oder Ämter höflich mit "Sie". In der Sprache der Person, außer
+  sie wünscht eine andere.
+- Zeig die Nachricht mit dem Werkzeug nachricht_zeigen. Dann steht sie unter deiner Antwort mit einem Knopf zum Kopieren.
+  Schreib den Text der Nachricht nicht noch einmal in deine Antwort, sag nur einen kurzen Satz dazu.
+- Du kannst selbst nichts verschicken. Die Person kopiert den Text und fügt ihn in WeChat, WhatsApp oder SMS ein.
+- Fehlt, was drinstehen soll, frag kurz nach. Soll etwas geändert werden, zeigst du die ganze neue Fassung.
 
 Erinnerungen:
 - Wenn die Person an etwas erinnert werden möchte ("erinnere mich", "vergiss nicht", "weck mich", "提醒我"), schreibst du es dir
@@ -110,15 +132,6 @@ Was du über die Person weißt (von der Familie eingetragen):
 - Notizen: {notizen}
 
 Heute ist {datum}, es ist {uhrzeit} Uhr."""
-
-NACHRICHT_SYSTEM = """Du hilfst einem älteren Menschen, eine kurze Nachricht (SMS oder WhatsApp) zu schreiben.
-Die Person sagt dir grob, an wen und was. Schreibe in der Sprache, in der die Person dir schreibt,
-außer sie wünscht eine andere. Du schreibst die fertige Nachricht in ihrem Namen, in der Ich-Form,
-freundlich, natürlich und kurz (1 bis 4 Sätze), so wie diese Person selbst schreiben würde. Passend zur Person:
-an Enkel locker und herzlich, an Ärzte oder Ämter höflich mit "Sie".
-Gib NUR den Text der Nachricht zurück, ohne Anführungszeichen, ohne Erklärung, ohne Betreff.
-Notizen über die Person: {notizen}"""
-
 
 # ---------- Daten ----------
 
@@ -166,13 +179,19 @@ def client():
     return _client
 
 
-# Websuche für Deals, Öffnungszeiten, aktuelle Fragen. Läuft bei Anthropic, höchstens 3 Suchen pro Frage.
-WEBSUCHE = {
-    "type": "web_search_20260209",
-    "name": "web_search",
-    "max_uses": 3,
-    "user_location": {"type": "approximate", "city": "Wien", "country": "AT", "timezone": "Europe/Vienna"},
-}
+# Websuche für Deals, Öffnungszeiten, aktuelle Fragen. Läuft bei Anthropic. Mit web_fetch kann Biko eine
+# Trefferseite auch öffnen, zum Beispiel wenn der Preis nicht in der Vorschau steht.
+WEBSUCHE = [
+    {"type": "web_search_20260209", "name": "web_search", "max_uses": 5,
+     "user_location": {"type": "approximate", "city": "Wien", "country": "AT", "timezone": "Europe/Vienna"}},
+    {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 3},
+]
+_seiten_oeffnen = True   # wird False, falls die API das Öffnen von Seiten ablehnt: dann sucht Biko nur
+
+
+def protokoll(text):
+    """Eine Zeile ins Server-Protokoll. Nie Inhalte aus Gesprächen, nur was technisch passiert ist."""
+    print(text, flush=True)
 
 
 def claude_anfrage(**kw):
@@ -194,24 +213,41 @@ def werkzeug_ergebnis(block, werkzeuge):
 def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None):
     """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung.
     `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen."""
+    global _seiten_oeffnen
     werkzeuge = werkzeuge or {}
-    tools = ([WEBSUCHE] if websuche else []) + [w["schema"] for w in werkzeuge.values()]
-    extra = {"tools": tools} if tools else {}
+    web = [w for w in WEBSUCHE if _seiten_oeffnen or w["name"] != "web_fetch"] if websuche else []
+    tools = web + [w["schema"] for w in werkzeuge.values()]
     messages = list(messages)
+    benutzt = []
+
+    def anfrage(tools):
+        return claude_anfrage(
+            model=MODELL,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages,
+            # Alltagsgespräch: wenig Nachdenken reicht, ist schneller und günstiger
+            output_config={"effort": "low"},
+            # Falls eine Sicherheitsprüfung die Anfrage ablehnt, springt ein anderes Modell ein
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            **({"tools": tools} if tools else {}),
+        )
+
     try:
-        for _ in range(8):  # Werkzeug-Aufrufe und lange Websuchen (pause_turn) werden fortgesetzt
-            r = claude_anfrage(
-                model=MODELL,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-                # Alltagsgespräch: wenig Nachdenken reicht, ist schneller und günstiger
-                output_config={"effort": "low"},
-                # Falls eine Sicherheitsprüfung die Anfrage ablehnt, springt ein anderes Modell ein
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-                **extra,
-            )
+        for runde in range(1, 9):  # Werkzeug-Aufrufe und lange Websuchen (pause_turn) werden fortgesetzt
+            try:
+                r = anfrage(tools)
+            except anthropic.BadRequestError:
+                # Lehnt die API die Anfrage ab, solange "Seiten öffnen" dabei ist, versucht Biko es einmal nur mit
+                # der Suche: lieber eine Antwort ohne geöffnete Seite als gar keine.
+                ohne = [w for w in tools if w.get("name") != "web_fetch"]
+                if runde > 1 or len(ohne) == len(tools):
+                    raise
+                r = anfrage(ohne)
+                tools, _seiten_oeffnen = ohne, False
+                protokoll("Seiten öffnen (web_fetch) wurde abgelehnt, Biko sucht ab jetzt ohne.")
+            benutzt += [b.name for b in r.content if b.type in ("tool_use", "server_tool_use")]
             if r.stop_reason == "pause_turn":
                 messages = messages + [{"role": "assistant", "content": r.content}]
             elif r.stop_reason == "tool_use":
@@ -224,10 +260,11 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
     except anthropic.RateLimitError:
         raise RuntimeError("Gerade sind zu viele Anfragen. Bitte in einer Minute nochmal probieren.")
     except anthropic.APIStatusError as e:
-        print("Claude-Fehler:", e.status_code, e.message, flush=True)
+        protokoll(f"Claude-Fehler: {e.status_code} {e.message}")
         raise RuntimeError("Biko kann gerade nicht antworten. Bitte gleich nochmal probieren.")
     except anthropic.APIConnectionError:
         raise RuntimeError("Keine Verbindung zur KI. Ist das Internet am Server da?")
+    protokoll(f"Claude: {runde} Anfragen, Ende {r.stop_reason}, Werkzeuge: {', '.join(benutzt) or 'keine'}")
     if r.stop_reason == "refusal":
         return "Dabei kann ich leider nicht helfen. Magst du mich etwas anderes fragen?"
     text = "".join(b.text for b in r.content if b.type == "text").strip()
@@ -257,29 +294,149 @@ def system_prompt():
 
 # ---------- Funktionen ----------
 
-def chat(text):
+# ---------- Gespräche: jede Sitzung für sich, zum Weiterreden und Nachlesen ----------
+
+def titel_aus(text):
+    t = " ".join(str(text).split())
+    return t if len(t) <= 60 else t[:60] + "…"
+
+
+def gespraech_neu(nachrichten):
+    zeit = jetzt().isoformat(timespec="seconds")
+    erste = next((m["text"] for m in nachrichten if m["von"] == "ich"), "")
+    return {"id": secrets.token_hex(4), "titel": titel_aus(erste), "begonnen": zeit, "zuletzt": zeit,
+            "nachrichten": nachrichten}
+
+
+def gespraeche_lesen():
+    """Alle Gespräche, das zuletzt benutzte zuerst. Nur mit _lock aufrufen.
+    Der eine Verlauf der ersten Version wird beim ersten Mal als ein Gespräch übernommen."""
+    liste = lesen("gespraeche", None)
+    if liste is None:
+        alt = [{"von": "ich" if m.get("role") == "user" else "biko", "text": m["content"]}
+               for m in lesen("verlauf", []) if isinstance(m, dict) and isinstance(m.get("content"), str)]
+        liste = [gespraech_neu(alt)] if alt else []
+        schreiben("gespraeche", liste)
+        _pfad("verlauf").unlink(missing_ok=True)
+    return liste
+
+
+def gespraech_finden(liste, nr):
+    return next((g for g in liste if g["id"] == nr), None)
+
+
+def uebersicht(g):
+    return {"id": g["id"], "titel": g["titel"], "zuletzt": g["zuletzt"], "anzahl": len(g["nachrichten"])}
+
+
+def fuer_claude(nachrichten):
+    """Das bisherige Gespräch so, wie Claude es lesen soll. Eine Nachricht, die Biko für jemanden geschrieben hat,
+    steht wieder als Werkzeug-Aufruf da: so weiß er bei "mach sie kürzer" noch, was drinstand."""
+    nachrichten = nachrichten[-(MAX_VERLAUF - 1):]
+    while nachrichten and nachrichten[0]["von"] != "ich":   # muss mit der Person beginnen
+        nachrichten = nachrichten[1:]
+    messages = []
+    for i, m in enumerate(nachrichten):
+        if m["von"] == "ich":
+            messages.append({"role": "user", "content": m["text"]})
+            continue
+        entwuerfe = m.get("nachrichten") or []
+        if entwuerfe:
+            messages.append({"role": "assistant", "content": [
+                {"type": "tool_use", "id": f"frueher_{i}_{k}", "name": "nachricht_zeigen", "input": e}
+                for k, e in enumerate(entwuerfe)]})
+            messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": f"frueher_{i}_{k}", "content": NACHRICHT_GEZEIGT}
+                for k in range(len(entwuerfe))]})
+        messages.append({"role": "assistant", "content": m["text"]})
+    return messages
+
+
+NACHRICHT_GEZEIGT = "Die Nachricht steht jetzt unter deiner Antwort, mit einem Knopf zum Kopieren."
+LINK = re.compile(r"^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/\S*)?$")
+MAX_ZEIGEN = 3   # so viele Nachrichten und so viele Links passen unter eine Antwort
+
+
+def zeige_werkzeuge():
+    """Die zwei Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
+    entwuerfe, links = [], []
+
+    def nachricht_zeigen(eingabe):
+        text = str(eingabe.get("text") or "").strip()[:1500]
+        if not text:
+            raise ValueError("Der Text der Nachricht fehlt. Frag nach, was drinstehen soll.")
+        if len(entwuerfe) >= MAX_ZEIGEN:
+            raise ValueError(f"Höchstens {MAX_ZEIGEN} Nachrichten pro Antwort.")
+        entwuerfe.append({"an": " ".join(str(eingabe.get("an") or "").split())[:80], "text": text})
+        return NACHRICHT_GEZEIGT
+
+    def link_zeigen(eingabe):
+        url = str(eingabe.get("url") or "").strip()
+        if len(url) > 500 or not LINK.match(url):
+            raise ValueError("Das ist keine sichere Internet-Adresse. Sie muss vollständig sein und mit https:// beginnen.")
+        if len(links) >= MAX_ZEIGEN:
+            raise ValueError(f"Höchstens {MAX_ZEIGEN} Links pro Antwort.")
+        if url not in [l["url"] for l in links]:
+            titel = " ".join(str(eingabe.get("titel") or "").split())[:60]
+            links.append({"titel": titel or urlparse(url).hostname, "url": url})
+        return "Der Link steht jetzt als Knopf unter deiner Antwort."
+
+    werkzeuge = {
+        "nachricht_zeigen": {"tun": nachricht_zeigen, "schema": {
+            "name": "nachricht_zeigen",
+            "description": "Stellt eine fertige Nachricht, die die Person jemandem schicken will, unter deine Antwort, "
+                           "mit einem Knopf zum Kopieren. Verschickt nichts.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "an": {"type": "string", "description": "Für wen die Nachricht ist, z. B. 'Anna' oder 'Dr. Huber'."},
+                    "text": {"type": "string", "description": "Die ganze Nachricht, fertig zum Verschicken, ohne Anführungszeichen."},
+                },
+                "required": ["text"],
+            },
+        }},
+        "link_zeigen": {"tun": link_zeigen, "schema": {
+            "name": "link_zeigen",
+            "description": "Stellt einen Link als großen Knopf unter deine Antwort, zum Beispiel zur Quelle eines Angebots "
+                           "oder zum aktuellen Prospekt eines Geschäfts. Nur Adressen aus deinen Suchergebnissen.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "titel": {"type": "string", "description": "Kurze Beschriftung in der Sprache der Person, z. B. 'Billa Flugblatt'."},
+                    "url": {"type": "string", "description": "Die vollständige Adresse, beginnt mit https://"},
+                },
+                "required": ["titel", "url"],
+            },
+        }},
+    }
+    return werkzeuge, entwuerfe, links
+
+
+def chat(text, gespraech_nr=""):
     with _lock:
-        verlauf = lesen("verlauf", [])
-    verlauf.append({"role": "user", "content": text})
-    verlauf = verlauf[-MAX_VERLAUF:]
-    while verlauf and verlauf[0]["role"] != "user":   # muss mit der Person beginnen
-        verlauf.pop(0)
+        g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
+    messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": text}]
+    zeigen, entwuerfe, links = zeige_werkzeuge()
     vorher = erinnerungen_lesen()
-    antwort = frage_claude(system_prompt(), verlauf, websuche=True, werkzeuge=WERKZEUGE)
-    verlauf.append({"role": "assistant", "content": antwort})
-    with _lock:
-        schreiben("verlauf", verlauf[-MAX_VERLAUF:])
-    # Was Biko sich in dieser Antwort wirklich aufgeschrieben oder gestrichen hat: die App zeigt es unter der Antwort
+    antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen})
+    # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
     nachher = erinnerungen_lesen()
     alt, neu = {e["id"] for e in vorher}, {e["id"] for e in nachher}
-    return {"antwort": antwort, "erinnerungen": nachher,
-            "gemerkt": [e for e in nachher if e["id"] not in alt],
-            "vergessen": [e for e in vorher if e["id"] not in neu]}
-
-
-def nachricht(an, was):
-    system = NACHRICHT_SYSTEM.format(notizen=profil()["notizen"].strip() or "keine")
-    return frage_claude(system, [{"role": "user", "content": f"An: {an or 'jemanden'}\nWas ich sagen will: {was}"}], 600)
+    getan = {"gemerkt": [e for e in nachher if e["id"] not in alt],
+             "vergessen": [e for e in vorher if e["id"] not in neu],
+             "nachrichten": entwuerfe, "links": links}
+    zeit = jetzt().isoformat(timespec="seconds")
+    with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
+        liste = gespraeche_lesen()
+        g = gespraech_finden(liste, gespraech_nr) or gespraech_neu([])
+        g["nachrichten"] = (g["nachrichten"] + [
+            {"von": "ich", "text": text, "zeit": zeit},
+            {"von": "biko", "text": antwort, "zeit": zeit, **{k: v for k, v in getan.items() if v}},
+        ])[-MAX_GESPEICHERT:]
+        g["titel"] = g["titel"] or titel_aus(text)
+        g["zuletzt"] = zeit
+        schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
+    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -409,7 +566,6 @@ ZH = {
     "Bitte anmelden.": "请先登录。",
     "Gibt es nicht.": "不存在。",
     "Bitte etwas Kürzeres schreiben.": "请写短一点。",
-    "Was soll in der Nachricht stehen?": "消息里要写什么？",
     "Höchstens 30 Erinnerungen.": "最多 30 个提醒。",
     "Zu viele Versuche. Bitte in 15 Minuten nochmal.": "尝试次数太多。请 15 分钟后再试。",
     "Am Server ist noch kein Passwort eingestellt (APP_PASSWORT).": "服务器还没有设置密码（APP_PASSWORT）。",
@@ -493,8 +649,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
                 return self.senden(200, erinnerungen_lesen())
-            if pfad == "/api/verlauf":
-                return self.senden(200, lesen("verlauf", [])[-MAX_VERLAUF:])
+            if pfad == "/api/gespraeche":
+                with _lock:
+                    return self.senden(200, [uebersicht(g) for g in gespraeche_lesen()])
+            if pfad == "/api/gespraech":
+                nr = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+                with _lock:
+                    g = gespraech_finden(gespraeche_lesen(), nr)
+                return self.senden(200, g) if g else self.senden(404, {"fehler": "Gibt es nicht."})
             return self.senden(404, {"fehler": "Gibt es nicht."})
         return self.datei(pfad)
 
@@ -510,16 +672,16 @@ class Handler(BaseHTTPRequestHandler):
                 text = str(daten.get("text", "")).strip()
                 if not text or len(text) > MAX_TEXT:
                     raise ValueError("Bitte etwas Kürzeres schreiben.")
-                return self.senden(200, chat(text))
-            if pfad == "/api/nachricht":
-                was = str(daten.get("was", "")).strip()
-                an = str(daten.get("an", "")).strip()[:80]
-                if not was or len(was) > MAX_TEXT:
-                    raise ValueError("Was soll in der Nachricht stehen?")
-                return self.senden(200, {"nachricht": nachricht(an, was)})
+                return self.senden(200, chat(text, str(daten.get("gespraech") or "")))
+            if pfad == "/api/gespraech/loeschen":
+                with _lock:
+                    rest = [g for g in gespraeche_lesen() if g["id"] != str(daten.get("id") or "")]
+                    schreiben("gespraeche", rest)
+                return self.senden(200, [uebersicht(g) for g in rest])
             if pfad == "/api/verlauf/loeschen":
                 with _lock:
-                    schreiben("verlauf", [])
+                    schreiben("gespraeche", [])
+                    _pfad("verlauf").unlink(missing_ok=True)
                 return self.senden(200, {"ok": True})
             if pfad == "/api/profil":
                 neu = {k: str(daten.get(k, "")).strip()[:1500] for k in STANDARD_PROFIL}

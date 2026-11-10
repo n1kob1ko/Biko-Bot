@@ -24,6 +24,9 @@
 
   let profil = {};
   let erinnerungen = [];
+  let gespraeche = [];  // Übersicht aller Gespräche, das zuletzt benutzte zuerst
+  let gespraechNr = ''; // das offene Gespräch; leer heißt: mit der nächsten Frage beginnt ein neues
+  let sitzung = 0;      // zählt hoch, sobald ein anderes Gespräch gezeigt wird: eine späte Antwort gehört dann nicht mehr hierher
   let angemeldet = false;
   let aktiv = 'reden'; // der gezeigte Bereich
   const spracheKnopf = $('#sprache-knopf'), spracheMenue = $('#sprache-menue');
@@ -54,11 +57,12 @@
     $$('.blase .vorlesen').forEach((k) => { k.lastElementChild.textContent = t(k.dataset.zustand === 'laeuft' ? 'stopp' : 'vorlesen'); });
     $$('.blase.denkt .nur-vorlesen').forEach((el) => { el.textContent = t('denkt'); });
     $$('.notiz').forEach(notizFuellen);
-    zustand($('#nachricht-kopieren'), 'ruhe', 'kopieren');
+    $$('.entwurf').forEach(entwurfTexte);
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
     vorschlaegeZeigen();
     erinnerungenZeigen();
+    gespraecheZeigen();
   }
   // Knopf mit Zustand: Symbol und Beschriftung wechseln zusammen
   function zustand(knopf, art, textSchluessel) {
@@ -150,12 +154,18 @@
       return;
     }
     if (!s.angemeldet) { loginZeigen(); return; }
-    [profil, erinnerungen] = await Promise.all([api('/api/profil'), api('/api/erinnerungen')]);
+    [profil, erinnerungen, gespraeche] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche')]);
     angemeldet = true;
     $('#login').hidden = true;
     $('#app').hidden = false;
     profilInsFormular();
     texteSetzen();
+    // Am selben Tag steht das letzte Gespräch wieder da. An einem neuen Tag begrüßt Biko von vorn,
+    // das alte Gespräch steht dann im Verlauf.
+    const letztes = gespraeche[0];
+    if (letztes && L.weiterreden(letztes.zuletzt, new Date())) {
+      try { gespraechZeigen(await api('/api/gespraech?id=' + encodeURIComponent(letztes.id))); } catch (err) { startbild(); }
+    } else startbild();
     kopfRichten();
     kissenRichten(false);
     stimmung('winkt', 2600); // Biko grüßt kurz und ist dann einfach da
@@ -203,8 +213,48 @@
   }
   leiste.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-ziel]');
-    if (b) wechseln(b.dataset.ziel);
+    if (!b) return;
+    if (b.dataset.ziel === 'gespraeche') gespraecheLaden(); // die Liste ist sofort da und wird im Hintergrund aufgefrischt
+    wechseln(b.dataset.ziel);
   });
+
+  // Löschen fragt immer erst nach: ein falscher Tipp soll keine Erinnerung und kein Gespräch kosten.
+  // `sicher` enthält die Frage (p) und die Knöpfe .nein und .ja, `tun` löscht wirklich.
+  function sicherVerdrahten(sicher, ausloeser, frage, tun) {
+    const text = $('p', sicher), ja = $('.ja', sicher), nein = $('.nein', sicher);
+    const zu = () => { sicher.hidden = true; ausloeser.setAttribute('aria-expanded', 'false'); };
+    ausloeser.setAttribute('aria-expanded', 'false');
+    ausloeser.addEventListener('click', () => {
+      sicher.hidden = !sicher.hidden;
+      ausloeser.setAttribute('aria-expanded', String(!sicher.hidden));
+      if (sicher.hidden) return;
+      text.textContent = frage();
+      B.spiele(sicher, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease' });
+      nein.focus({ preventScroll: true });
+    });
+    nein.addEventListener('click', () => { zu(); ausloeser.focus(); });
+    ja.addEventListener('click', async () => {
+      ja.disabled = true;
+      try { await tun(); zu(); } catch (err) { text.textContent = err.message; }
+      ja.disabled = false;
+    });
+    return sicher;
+  }
+  // Eine Zeile in einer Liste bekommt ihren Löschen-Knopf und die Nachfrage dazu
+  function loeschKnopf(name, frage, tun) {
+    const weg = neu('button', 'weg druck');
+    weg.type = 'button';
+    weg.innerHTML = icon('loeschen');
+    weg.setAttribute('aria-label', `${t('loeschen')}: ${name}`);
+    const sicher = neu('div', 'sicher');
+    const ja = neu('button', 'knopf druck ja', t('loeschen')), nein = neu('button', 'knopf druck nein', t('behalten'));
+    ja.type = nein.type = 'button';
+    sicher.append(neu('p'), nein, ja);
+    sicher.hidden = true;
+    return [weg, sicherVerdrahten(sicher, weg, () => t(frage), tun)];
+  }
+  const verschwinden = (el) => B.spiele(el, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.97)' }],
+    { duration: L.ausgang(220), easing: 'ease', fill: 'forwards' });
 
   // ---------- Vorlesen ----------
   const kannVorlesen = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -256,9 +306,12 @@
     feld.style.height = feld.scrollHeight + 'px';
     knopfZeigen();
   }
-  const nachUnten = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: B.reduziert() ? 'auto' : 'smooth' });
+  let still = false; // ein ganzes Gespräch wird auf einmal aufgebaut: nicht bei jeder Blase rollen
+  const nachUnten = () => { if (!still) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: B.reduziert() ? 'auto' : 'smooth' }); };
+  const ganzNachUnten = () => window.scrollTo(0, document.documentElement.scrollHeight);
 
-  function blase(text, art) {
+  // `lesetext`: was der Vorlesen-Knopf vorliest, wenn es mehr ist als der Text der Blase
+  function blase(text, art, lesetext) {
     const d = neu('div', 'blase ' + art);
     d.appendChild(neu('span', '', text));
     if (art === 'biko-sagt' && kannVorlesen) {
@@ -267,7 +320,7 @@
       k.dataset.zustand = 'ruhe';
       k.innerHTML = `<span class="wechsel">${icon('vorlesen', 'i-ruhe')}${icon('stopp', 'i-laeuft')}</span><span></span>`;
       k.lastElementChild.textContent = t('vorlesen');
-      k.addEventListener('click', () => vorlesen(text, k));
+      k.addEventListener('click', () => vorlesen(lesetext || text, k));
       d.appendChild(k);
     }
     verlauf.appendChild(d);
@@ -289,6 +342,96 @@
     notizFuellen(n);
     verlauf.appendChild(n);
     nachUnten();
+  }
+
+  // Eine Nachricht, die Biko für jemanden geschrieben hat: steht unter seiner Antwort, zum Kopieren und Einfügen
+  // in WeChat, WhatsApp oder SMS. Verschicken kann Biko selbst nichts.
+  async function kopiere(el) {
+    try {
+      await navigator.clipboard.writeText(el.textContent);
+      return true;
+    } catch (e) { // ohne https gibt es die Zwischenablage nur auf dem alten Weg
+      const wahl = getSelection(), bereich = document.createRange();
+      bereich.selectNodeContents(el);
+      wahl.removeAllRanges();
+      wahl.addRange(bereich);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e2) { /* geht nicht */ }
+      wahl.removeAllRanges();
+      return ok;
+    }
+  }
+  function entwurfTexte(el) {
+    const n = el._n, kop = $('.kopieren', el), teil = $('.teilen', el);
+    $('.entwurf-an span', el).textContent = n.an ? t('nachricht_an').replace('{name}', n.an) : t('nachricht_ohne');
+    kop.lastElementChild.textContent = t(kop.dataset.zustand === 'ok' ? 'kopiert' : 'kopieren');
+    if (teil) teil.lastElementChild.textContent = t('teilen');
+    $('.meldung', el).textContent = '';
+  }
+  function entwurf(n) {
+    const el = neu('div', 'entwurf');
+    el._n = n;
+    const an = neu('p', 'entwurf-an');
+    an.innerHTML = icon('nachricht') + '<span></span>';
+    const text = neu('p', 'entwurf-text', n.text);
+    const knoepfe = neu('div', 'zwei');
+    const kop = neu('button', 'knopf haupt druck kopieren');
+    kop.type = 'button';
+    kop.dataset.zustand = 'ruhe';
+    kop.innerHTML = `<span class="wechsel">${icon('kopieren', 'i-ruhe')}${icon('ok', 'i-ok')}</span><span></span>`;
+    const info = neu('p', 'meldung');
+    info.setAttribute('role', 'status');
+    kop.addEventListener('click', async () => {
+      if (await kopiere(text)) {
+        bestaetigen(kop, 'kopiert', 'kopieren');
+        info.textContent = t('kopiert_hilfe');
+        M.fidget('hop');
+      } else info.textContent = t('kopieren_geht_nicht');
+      info.scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
+    });
+    knoepfe.appendChild(kop);
+    if (navigator.share) {
+      const teil = neu('button', 'knopf druck teilen');
+      teil.type = 'button';
+      teil.innerHTML = icon('teilen') + '<span></span>';
+      teil.addEventListener('click', () => { navigator.share({ text: n.text }).catch(() => {}); });
+      knoepfe.appendChild(teil);
+    }
+    el.append(an, text, knoepfe, info);
+    entwurfTexte(el);
+    verlauf.appendChild(el);
+    if (!still) B.aufdecken(el); // frisch geschrieben: das Blatt wird von oben nach unten aufgedeckt
+    nachUnten();
+  }
+
+  // Links, die Biko gefunden hat (Quelle eines Angebots, aktueller Prospekt): große Knöpfe unter der Antwort
+  function linksZeigen(liste) {
+    const gut = liste.filter((l) => L.linkSeite(l.url));
+    if (!gut.length) return;
+    const box = neu('div', 'links');
+    gut.forEach((l) => {
+      const a = neu('a', 'link-knopf druck');
+      a.href = l.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.innerHTML = icon('link');
+      const zeilen = neu('span');
+      zeilen.append(neu('strong', '', l.titel || L.linkSeite(l.url)), neu('span', 'seite', L.linkSeite(l.url)));
+      a.appendChild(zeilen);
+      box.appendChild(a);
+    });
+    verlauf.appendChild(box);
+    nachUnten();
+  }
+
+  // Bikos Antwort mit allem, was er dabei getan hat: gemerkt, gestrichen, eine Nachricht geschrieben, Links gefunden
+  function bikoSagt(m) {
+    const d = blase(m.text, 'biko-sagt', L.vorleseText(m.text, m.nachrichten));
+    (m.vergessen || []).forEach((er) => notiz(er, false));
+    (m.gemerkt || []).forEach((er) => notiz(er, true));
+    (m.nachrichten || []).forEach(entwurf);
+    linksZeigen(m.links || []);
+    return d;
   }
   function denkBlase() {
     const d = neu('div', 'blase denkt');
@@ -321,13 +464,33 @@
     kopf.classList.remove('gross');
     kopfRichten();
     B.umzug(platz, vorher);
-    B.spiele($('#gruss'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 140, fill: 'backwards', easing: 'ease' });
+    B.spiele($('#neu-im-kopf'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 140, fill: 'backwards', easing: 'ease' });
   }
+  // Leeres Startbild: mit der nächsten Frage beginnt ein neues Gespräch. Das alte bleibt im Verlauf.
   function startbild() {
+    sitzung++;
+    gespraechNr = '';
+    vorlesenStopp();
     verlauf.replaceChildren();
     $('#reden-kopf').classList.add('gross');
     kopfRichten();
     vorschlaegeZeigen();
+    gespraecheZeigen();
+  }
+  // Ein gespeichertes Gespräch steht wieder da, zum Nachlesen und Weiterreden
+  function gespraechZeigen(g) {
+    sitzung++;
+    gespraechNr = g.id;
+    vorlesenStopp();
+    still = true;
+    verlauf.replaceChildren();
+    g.nachrichten.forEach((m) => (m.von === 'ich' ? blase(m.text, 'ich') : bikoSagt(m)));
+    still = false;
+    $('#reden-kopf').classList.toggle('gross', !g.nachrichten.length);
+    kopfRichten();
+    vorschlaegeZeigen();
+    gespraecheZeigen();
+    ganzNachUnten();
   }
 
   // `von`: Stelle, von der die Frage losfliegt (Vorschlag oder Eingabefeld)
@@ -344,24 +507,74 @@
     stimmung('tippt');
     B.flug(blase(text, 'ich'), start);
     const warte = denkBlase();
+    const hier = sitzung;
     try {
-      const j = await api('/api/chat', { text });
-      warte.remove();
-      stimmung('da');
-      const d = blase(j.antwort, 'biko-sagt');
-      (j.vergessen || []).forEach((er) => notiz(er, false));
-      (j.gemerkt || []).forEach((er) => notiz(er, true));
-      if (vorlesenAn()) vorlesen(j.antwort, d.querySelector('.vorlesen'));
+      const j = await api('/api/chat', { text, gespraech: gespraechNr });
+      gespraeche = [j.gespraech, ...gespraeche.filter((g) => g.id !== j.gespraech.id)];
+      if (hier === sitzung) { // sonst wurde inzwischen ein anderes Gespräch geöffnet: die Antwort steht dann im Verlauf
+        warte.remove();
+        stimmung('da');
+        gespraechNr = j.gespraech.id;
+        const d = bikoSagt({ ...j, text: j.antwort });
+        if (vorlesenAn()) vorlesen(L.vorleseText(j.antwort, j.nachrichten), d.querySelector('.vorlesen'));
+      }
+      gespraecheZeigen();
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
     } catch (err) {
-      warte.remove();
-      stimmung('traurig', 5000);
-      blase(err.message, 'fehler-blase');
-      if (!feld.value) feld.value = text; // nichts geht verloren
+      if (hier === sitzung) {
+        warte.remove();
+        stimmung('traurig', 5000);
+        blase(err.message, 'fehler-blase');
+        if (!feld.value) feld.value = text; // nichts geht verloren
+      }
     }
     sendet = false;
     feldAnpassen();
   }
+
+  // ---------- 2. Gespräche: frühere Sitzungen ----------
+  // Jede Sitzung ist am Server ein eigenes Gespräch. Hier stehen sie zum Wiederöffnen, das zuletzt benutzte oben.
+  function gespraecheZeigen() {
+    const ul = $('#gespraeche');
+    if (!gespraeche.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_gespraeche'))); return; }
+    ul.replaceChildren(...gespraeche.map((g) => {
+      const li = neu('li', 'gespraech reihe');
+      const auf = neu('button', 'oeffnen druck');
+      auf.type = 'button';
+      auf.append(neu('span', 'titel', g.titel), neu('span', 'wann', L.wannWar(g.zuletzt, new Date(), T[sprache])));
+      if (g.id === gespraechNr) auf.setAttribute('aria-current', 'true');
+      auf.addEventListener('click', () => gespraechOeffnen(g.id));
+      const [weg, sicher] = loeschKnopf(g.titel, 'gespraech_loeschen_frage', async () => {
+        const liste = await api('/api/gespraech/loeschen', { id: g.id });
+        await verschwinden(li);
+        gespraeche = liste;
+        if (g.id === gespraechNr) startbild(); else gespraecheZeigen();
+      });
+      li.append(auf, weg, sicher);
+      return li;
+    }));
+  }
+  async function gespraecheLaden() {
+    try {
+      gespraeche = await api('/api/gespraeche');
+      gespraecheZeigen();
+    } catch (err) { /* die Liste von vorhin bleibt stehen */ }
+  }
+  async function gespraechOeffnen(nr) {
+    try {
+      gespraechZeigen(await api('/api/gespraech?id=' + encodeURIComponent(nr)));
+      wechseln('reden');
+      ganzNachUnten();
+    } catch (err) { gespraecheLaden(); } // das Gespräch gibt es nicht mehr
+  }
+  function neuBeginnen() {
+    startbild();
+    wechseln('reden');
+    window.scrollTo(0, 0);
+    B.spiele(ansicht('reden'), [{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'ease' });
+  }
+  $('#neues-gespraech').addEventListener('click', neuBeginnen);
+  $('#neu-im-kopf').addEventListener('click', neuBeginnen);
 
   // Sprechen statt tippen: der Satz wird wie eine Sprachnachricht gleich abgeschickt
   const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -413,60 +626,6 @@
     if (feld.value.trim()) senden(feld.value);
   });
 
-  // ---------- 2. Nachricht ----------
-  $('#nachricht-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const knopf = $('#nachricht-los'), fehler = $('#nachricht-fehler');
-    fehler.textContent = '';
-    if (!$('#nachricht-was').value.trim()) { fehler.textContent = t('nachricht_leer'); $('#nachricht-was').focus(); return; }
-    knopf.disabled = true;
-    knopf.lastElementChild.textContent = t('schreibt');
-    stimmung('tippt');
-    try {
-      const { nachricht } = await api('/api/nachricht', { an: $('#nachricht-an').value, was: $('#nachricht-was').value });
-      stimmung('da');
-      const ergebnis = $('#nachricht-ergebnis');
-      $('#nachricht-text').textContent = nachricht;
-      $('#nachricht-info').textContent = '';
-      $('#nachricht-teilen').hidden = !navigator.share;
-      zustand($('#nachricht-kopieren'), 'ruhe', 'kopieren');
-      ergebnis.hidden = false;
-      B.aufdecken(ergebnis);
-      ergebnis.scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
-    } catch (err) {
-      stimmung('traurig', 5000);
-      fehler.textContent = err.message;
-    }
-    knopf.disabled = false;
-    knopf.lastElementChild.textContent = t('schreiben');
-  });
-  async function kopiere(el) {
-    try {
-      await navigator.clipboard.writeText(el.textContent);
-      return true;
-    } catch (e) { // ohne https gibt es die Zwischenablage nur auf dem alten Weg
-      const wahl = getSelection(), bereich = document.createRange();
-      bereich.selectNodeContents(el);
-      wahl.removeAllRanges();
-      wahl.addRange(bereich);
-      let ok = false;
-      try { ok = document.execCommand('copy'); } catch (e2) { /* geht nicht */ }
-      wahl.removeAllRanges();
-      return ok;
-    }
-  }
-  $('#nachricht-kopieren').addEventListener('click', async () => {
-    if (await kopiere($('#nachricht-text'))) {
-      bestaetigen($('#nachricht-kopieren'), 'kopiert', 'kopieren');
-      $('#nachricht-info').textContent = t('kopiert_hilfe');
-      M.fidget('hop');
-    } else $('#nachricht-info').textContent = t('kopieren_geht_nicht');
-    $('#nachricht-info').scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
-  });
-  $('#nachricht-teilen').addEventListener('click', () => {
-    navigator.share({ text: $('#nachricht-text').textContent }).catch(() => {});
-  });
-
   // ---------- 3. Erinnerungen ----------
   // Erinnerungen entstehen im Gespräch: Biko schreibt sie sich am Server selbst auf (server.py, Werkzeuge).
   // Die App bekommt mit jeder Antwort die aktuelle Liste, zeigt sie in den Einstellungen und meldet sich zur Uhrzeit.
@@ -494,30 +653,11 @@
       const li = neu('li', 'erinnerung reihe');
       const mitte = neu('div');
       mitte.append(neu('div', '', er.text), neu('div', 'tage-text', L.wannText(er, T[sprache], new Date())));
-      const weg = neu('button', 'weg druck');
-      weg.type = 'button';
-      weg.innerHTML = icon('loeschen');
-      weg.setAttribute('aria-label', `${t('loeschen')}: ${er.text}`);
-      // Erst nachfragen: ein falscher Tipp soll keine Tabletten-Erinnerung kosten
-      const sicher = neu('div', 'sicher');
-      const ja = neu('button', 'knopf druck ja', t('loeschen')), nein = neu('button', 'knopf druck nein', t('behalten'));
-      ja.type = nein.type = 'button';
-      sicher.append(neu('p', '', t('loeschen_frage')), nein, ja);
-      sicher.hidden = true;
-      weg.addEventListener('click', () => {
-        sicher.hidden = !sicher.hidden;
-        weg.setAttribute('aria-expanded', String(!sicher.hidden));
-        if (!sicher.hidden) { B.spiele(sicher, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease' }); nein.focus({ preventScroll: true }); }
-      });
-      nein.addEventListener('click', () => { sicher.hidden = true; weg.setAttribute('aria-expanded', 'false'); weg.focus(); });
-      ja.addEventListener('click', async () => {
-        ja.disabled = true;
-        try {
-          const liste = await api('/api/erinnerungen', { erinnerungen: erinnerungen.filter((x) => x.id !== er.id) });
-          await B.spiele(li, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.97)' }], { duration: L.ausgang(220), easing: 'ease', fill: 'forwards' });
-          erinnerungen = liste;
-          erinnerungenZeigen();
-        } catch (err) { ja.disabled = false; sicher.firstElementChild.textContent = err.message; }
+      const [weg, sicher] = loeschKnopf(er.text, 'loeschen_frage', async () => {
+        const liste = await api('/api/erinnerungen', { erinnerungen: erinnerungen.filter((x) => x.id !== er.id) });
+        await verschwinden(li);
+        erinnerungen = liste;
+        erinnerungenZeigen();
       });
       li.append(neu('span', 'zeit', er.zeit), mitte, weg, sicher);
       return li;
@@ -658,14 +798,13 @@
   });
   schriftSetzen(holen('schrift') || '1');
 
-  $('#verlauf-loeschen').addEventListener('click', async () => {
+  // "Alle Gespräche vergessen" löscht den ganzen Verlauf am Server, deshalb auch hier erst die Nachfrage
+  sicherVerdrahten($('#alle-sicher'), $('#verlauf-loeschen'), () => t('alle_loeschen_frage'), async () => {
+    await api('/api/verlauf/loeschen', {});
+    gespraeche = [];
+    startbild();
     const info = $('#vergessen-info');
-    try {
-      await api('/api/verlauf/loeschen', {});
-      vorlesenStopp();
-      startbild();
-      info.textContent = t('vergessen_ok');
-    } catch (err) { info.textContent = err.message; }
+    info.textContent = t('vergessen_ok');
     clearTimeout(info._uhr);
     info._uhr = setTimeout(() => { info.textContent = ''; }, 6000);
   });
