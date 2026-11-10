@@ -8,7 +8,7 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 
 | Bereich | Was passiert |
 |---|---|
-| **Reden / 聊天** | Fragen stellen oder einfach plaudern. Der große gelbe Knopf ist ein Mikrofon wie bei einer WeChat-Sprachnachricht: drücken, sprechen, der Satz wird von selbst abgeschickt. Tippen geht genauso. Antworten kann man sich vorlesen lassen. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
+| **Reden / 聊天** | Fragen stellen oder einfach plaudern. Der große gelbe Knopf ist ein Mikrofon wie bei einer WeChat-Sprachnachricht: drücken, sprechen, nach einer kurzen Pause wird der Satz von selbst abgeschickt. Tippen geht genauso. Antworten kann man sich vorlesen lassen, mit Sprachdienst in einer natürlichen Stimme. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
 | **Verlauf / 记录** | Frühere Gespräche zum Nachlesen und Weiterreden, dazu der Knopf "Neues Gespräch". |
 | **Einstellen / 设置** | Für die Familie: nachsehen, was Biko sich gemerkt hat, dazu Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
 
@@ -61,7 +61,7 @@ offenen Gesprächs mit.
 - **Ehrlich KI:** Biko sagt, dass er eine KI ist, und ermutigt zu Kontakt mit Familie und Freunden.
 - **Betrug:** Er warnt bei Enkeltrick, falscher Polizei oder Bank, Links in SMS.
 - **Erinnerungen brauchen die offene App.** Version 1 kann das Handy nicht "aufwecken", wenn die Seite zu ist. Für wichtige Medikamente zusätzlich den Handy-Wecker stellen. Echte Push-Nachrichten sind der nächste Schritt.
-- **Sprechen** nutzt die Spracherkennung des Browsers. Geht sie auf einem Handy nicht, funktioniert immer die Mikrofon-Taste der Tastatur.
+- **Stimme und Zuhören ohne Sprachdienst** (siehe unten) nutzen das, was der Browser am Handy mitbringt: die Stimme klingt dann künstlich, und verstanden wird nur die Sprache, die in der App eingestellt ist. Geht das Zuhören auf einem Handy gar nicht, funktioniert immer die Mikrofon-Taste der Tastatur.
 
 ## Installieren
 
@@ -87,18 +87,52 @@ Den API-Schlüssel gibt es auf https://console.anthropic.com unter "API Keys". D
 
 Am Handy Passwort eingeben und "Zum Home-Bildschirm" wählen.
 
+## Stimme und Zuhören: der Sprachdienst
+
+Damit Biko natürlich klingt und Deutsch und Chinesisch versteht, ohne dass man etwas umstellt, nutzt er
+[ElevenLabs](https://elevenlabs.io). Dafür braucht es einen zweiten Schlüssel:
+
+1. Bei ElevenLabs ein Konto anlegen und unter "API Keys" einen Schlüssel erstellen.
+2. Den Schlüssel am Server als `ELEVENLABS_API_KEY` eintragen (`.env` oder die Variablen des Hosters), neu starten.
+
+Mehr ist nicht nötig. Solange kein Schlüssel eingetragen ist, läuft alles wie bisher mit der Stimme und der
+Spracherkennung des Browsers.
+
+| Variable | Bedeutung |
+|---|---|
+| `ELEVENLABS_API_KEY` | schaltet den Sprachdienst ein |
+| `SPRACH_STIMME` | optional: die "Voice ID" einer bestimmten Stimme aus dem ElevenLabs-Konto. Leer: die erste Stimme des Kontos. Für Deutsch und Chinesisch am besten eine Stimme wählen, die beides gut spricht, und sie in "My Voices" speichern. |
+| `SPRACH_MODELL` | optional: Standard `eleven_v4_turbo` (schnell und günstig). `eleven_v4` klingt noch natürlicher, kostet das Doppelte und braucht länger. |
+
+So läuft es ab: Beim **Vorlesen** schickt die App den Text an den eigenen Server (`POST /api/vorlesen`), der holt
+den Ton bei ElevenLabs und gibt ihn als MP3 zurück. Dieselbe Antwort gleich nochmal anhören kostet nichts, der Ton
+der letzten Antworten bleibt in der offenen App im Speicher. Beim **Sprechen** nimmt das Handy auf, bis man fertig ist (eine Pause von
+knapp zwei Sekunden reicht, oder nochmal auf den Knopf tippen, spätestens nach einer Minute; wer 8 Sekunden lang
+nichts sagt, bekommt einen Hinweis), die Aufnahme geht
+über den Server (`POST /api/zuhoeren`) an ElevenLabs und kommt als Text zurück. Der Dienst erkennt die Sprache
+selbst. Fällt er aus, liest die Stimme des Browsers vor, statt dass es still bleibt. Der Schlüssel bleibt am
+Server, das Handy sieht ihn nie.
+
+Noch nicht am echten Gerät geprüft: Safari am iPhone (Ton nach dem Sprechen, Aufnahme als mp4).
+
 ## Kosten
 
 Pro Frage ohne Internetsuche grob 1 Cent, mit Suche grob 5 bis 10 Cent (Standardmodell `claude-opus-5-5`).
 Das sind Schätzungen, die echten Zahlen stehen in der Anthropic-Konsole. Wer sparen will, setzt in der `.env`
 `ASSISTENT_MODELL=claude-haiku-5-5` (viel günstiger, etwas weniger schlau).
 
+Der Sprachdienst kostet extra (Stand November 2026, laut Preisliste von ElevenLabs): Vorlesen etwa 0,04 $ pro
+1.000 Zeichen, eine Antwort mit 300 Zeichen also grob 1 Cent. Zuhören etwa 0,22 $ pro Stunde Aufnahme, das fällt
+kaum ins Gewicht. Im kostenlosen Tarif sind rund 10.000 Zeichen im Monat dabei, das reicht zum Ausprobieren.
+"Antworten immer laut vorlesen" in den Einstellungen liest jede Antwort vor und kostet entsprechend mehr.
+
 ## Daten
 
 Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
 `erinnerungen.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
-Claude-API von Anthropic, sonst nirgends hin. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen
+Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
+Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen
 Verlauf, einzelne Gespräche löscht man im Bereich "Verlauf". Das Server-Log enthält keine Inhalte.
 
 ## Eine Person pro Installation
@@ -118,8 +152,8 @@ node --test --test-concurrency=1 tests/e2e.test.js                    # Oberflä
 DATA_DIR=./daten APP_PASSWORT=test ANTHROPIC_API_KEY=... python server.py   # http://127.0.0.1:8092
 ```
 
-Die Browser-Tests starten den echten Server mit einer falschen KI (`tests/falscher_server.py`) und bedienen die
-App wie auf einem iPhone. Playwright einmalig: `npm install --no-save playwright && npx playwright install chromium`.
+Die Browser-Tests starten den echten Server mit einer falschen KI und einem falschen Sprachdienst
+(`tests/falscher_server.py`) und bedienen die App wie auf einem iPhone, mit einem falschen Mikrofon. Playwright einmalig: `npm install --no-save playwright && npx playwright install chromium`.
 
 ### Aufbau der Oberfläche (`web/`, kein Build-Schritt)
 
@@ -128,10 +162,11 @@ App wie auf einem iPhone. Playwright einmalig: `npm install --no-save playwright
 | `index.html` | Seitenaufbau und die Icons (Phosphor, MIT) als eingebettete Sammlung |
 | `style.css` | Aussehen, hell und dunkel, alle Maße und Farben als Variablen |
 | `texte.js` | alle Texte auf Deutsch und Chinesisch |
-| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, "wann" in Worten, weiterreden oder neu beginnen, sichere Links, Knopfart, Gummiband, Flugbogen) |
+| `logik.js` | reine Logik ohne Browser (fällige Erinnerung, "wann" in Worten, weiterreden oder neu beginnen, sichere Links, Knopfart, wann eine Aufnahme zu Ende ist, Gummiband, Flugbogen) |
 | `bewegung.js` | alle Bewegungen an einer Stelle |
-| `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt", Nachricht zum Kopieren und Links unter der Antwort), Verlauf, fällige Erinnerung, Einstellungen |
+| `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt", Nachricht zum Kopieren und Links unter der Antwort), Vorlesen und Aufnehmen, Verlauf, fällige Erinnerung, Einstellungen |
 | `biko.js`, `biko.css` | das Maskottchen aus der Trading-App, dazu die Stimmungen "hört zu" und "ist da" |
+| `stille.mp3` | eine Viertelsekunde Stille: damit "weckt" die App beim ersten Antippen den Ton am iPhone |
 | `fonts/` | Atkinson Hyperlegible Next (für schwache Augen gezeichnet, OFL). Chinesisch nutzt die Schrift des Handys. |
 
 Zielgruppe, Ton und Gestaltungsregeln stehen in [PRODUCT.md](PRODUCT.md).

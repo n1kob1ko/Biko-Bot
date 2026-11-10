@@ -142,6 +142,25 @@ test('Vorgelesen wird Bikos Antwort und danach die Nachricht, die er geschrieben
   assert.equal(L.vorleseText('Nur die Antwort.'), 'Nur die Antwort.');
 });
 
+test('Aufnahme: nach dem Sprechen beendet eine Pause die Aufnahme von selbst', () => {
+  assert.equal(L.aufnahmeEnde({ dauer: 3000, gesprochen: true, stille: 500 }), 'weiter');
+  assert.equal(L.aufnahmeEnde({ dauer: 3000, gesprochen: true, stille: 1800 }), 'fertig');
+  // wer noch nichts gesagt hat, bekommt Zeit zum Überlegen
+  assert.equal(L.aufnahmeEnde({ dauer: 5000, gesprochen: false, stille: 5000 }), 'weiter');
+  // danach geht die Aufnahme trotzdem zum Verstehen: vielleicht hat jemand nur sehr leise gesprochen
+  assert.equal(L.aufnahmeEnde({ dauer: 8000, gesprochen: false, stille: 8000 }), 'fertig');
+  // nach einer Minute ist Schluss, auch wenn jemand ohne Pause weiterredet
+  assert.equal(L.aufnahmeEnde({ dauer: 59000, gesprochen: true, stille: 0 }), 'weiter');
+  assert.equal(L.aufnahmeEnde({ dauer: 60000, gesprochen: true, stille: 0 }), 'fertig');
+});
+
+test('Aufnahme: laut ist, was deutlich über dem Grundrauschen und nahe an der bisherigen Spitze liegt', () => {
+  assert.equal(L.istLaut(0.005, 0), false, 'Rauschen');
+  assert.equal(L.istLaut(0.05, 0), true, 'normale Stimme');
+  assert.equal(L.istLaut(0.03, 0.2), false, 'leises Nachklingen nach lautem Sprechen zählt als Pause');
+  assert.equal(L.istLaut(0.08, 0.2), true);
+});
+
 test('Jeder deutsche Text hat eine chinesische Fassung und umgekehrt', () => {
   assert.deepEqual(Object.keys(T.zh).sort(), Object.keys(T.de).sort());
 });

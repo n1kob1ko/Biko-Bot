@@ -17,7 +17,8 @@ test.before(async () => {
   for (let i = 0; i < 50; i++) {
     try { await fetch(URL + 'api/status'); break; } catch (e) { await new Promise((r) => setTimeout(r, 100)); }
   }
-  browser = await chromium.launch();
+  // Falsches Mikrofon des Browsers: Aufnahmen gelingen ohne Nachfrage und ohne echtes Gerät
+  browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
 });
 test.after(async () => {
   await browser.close();
@@ -38,8 +39,9 @@ const FALSCHES_MIKRO = () => {
   };
 };
 
-// Die Uhr steht fest (Montag, 15 Uhr), damit keine Erinnerung von selbst in einen Test platzt
-async function seite(t, { uhr = '2026-01-05T15:00:00', ...optionen } = {}) {
+// Die Uhr steht fest (Montag, 15 Uhr), damit keine Erinnerung von selbst in einen Test platzt.
+// `ohneDienst`: so, als wäre am Server kein Sprachdienst eingerichtet (dann sprechen und hören die Browser selbst).
+async function seite(t, { uhr = '2026-01-05T15:00:00', ohneDienst = false, vorher = null, ...optionen } = {}) {
   const kontext = await browser.newContext({ ...devices['iPhone 13'], ...optionen });
   t.after(() => kontext.close());
   const p = await kontext.newPage();
@@ -49,6 +51,13 @@ async function seite(t, { uhr = '2026-01-05T15:00:00', ...optionen } = {}) {
   p.on('console', (m) => { if (m.type() === 'error') fehler.push(m.text()); });
   p.fehler = fehler;
   await p.addInitScript(FALSCHES_MIKRO);
+  if (vorher) await p.addInitScript(vorher);
+  if (ohneDienst) {
+    await p.route('**/api/status', async (route) => {
+      const antwort = await route.fetch();
+      await route.fulfill({ response: antwort, json: { ...(await antwort.json()), sprachdienst: false } });
+    });
+  }
   await p.clock.setFixedTime(new Date(uhr));
   await p.goto(URL);
   return p;
@@ -66,6 +75,12 @@ const erinnerungenSetzen = (p, liste) => p.evaluate(async (l) => {
 const erinnerungenHolen = (p) => p.evaluate(async () => (await fetch('/api/erinnerungen')).json());
 const zu = (p, ziel) => p.click(`.leiste button[data-ziel=${ziel}]`);
 const stimmung = (p) => p.getAttribute('#app .biko', 'data-mood');
+const fragen = async (p, text) => {
+  const bisher = await p.locator('.blase.biko-sagt').count();
+  await p.fill('#chat-text', text);
+  await p.click('#chat-knopf');
+  await p.waitForFunction((n) => document.querySelectorAll('.blase.biko-sagt').length > n, bisher);
+};
 
 test('Anmelden zeigt die App und Biko begrüßt', async (t) => {
   const p = await seite(t);
@@ -101,14 +116,145 @@ test('Frage senden: Biko tippt beim Nachdenken und antwortet dann', async (t) =>
   assert.deepEqual(p.fehler, []);
 });
 
-test('Sprechen: Biko hört zu, der Satz wird von selbst gesendet', async (t) => {
-  const p = await angemeldet(t);
+test('Sprechen ohne Sprachdienst: der Browser hört zu, der Satz wird von selbst gesendet', async (t) => {
+  const p = await angemeldet(t, { ohneDienst: true });
   await p.click('#chat-knopf');
   assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'stopp');
   assert.equal(await stimmung(p), 'hoert');
   await p.waitForSelector('.blase.ich');
   assert.equal(await p.textContent('.blase.ich'), 'Hallo Biko');
   await p.waitForSelector('.blase.biko-sagt');
+});
+
+test('Sprechen mit Sprachdienst: die Aufnahme geht zum Server, der verstandene Satz wird gesendet', async (t) => {
+  const p = await angemeldet(t);
+  const aufnahme = p.waitForRequest((r) => r.url().endsWith('/api/zuhoeren'));
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  assert.equal(await stimmung(p), 'hoert');
+  await p.waitForTimeout(700);
+  await p.click('#chat-knopf'); // fertig gesprochen
+  const anfrage = await aufnahme;
+  assert.match(anfrage.headers()['content-type'], /^audio\/(webm|mp4)/);
+  await p.waitForSelector('.blase.ich');
+  assert.equal(await p.textContent('.blase.ich'), 'Hallo Biko');
+  await p.waitForSelector('.blase.biko-sagt');
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Sprechen: nichts verstanden oder Mikrofon nicht erlaubt sagt Biko freundlich', async (t) => {
+  const p = await angemeldet(t);
+  await p.route('**/api/zuhoeren', (route) => route.fulfill({ json: { text: '', sprache: '' } }));
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  await p.waitForTimeout(400);
+  await p.click('#chat-knopf');
+  await p.waitForFunction(() => /nichts gehört/.test(document.querySelector('#chat-hinweis').textContent));
+  assert.equal(await p.locator('.blase').count(), 0);
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+
+  const q = await angemeldet(t, { vorher: () => {
+    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('nein', 'NotAllowedError'));
+  } });
+  await q.click('#chat-knopf');
+  await q.waitForFunction(() => /Mikrofon/.test(document.querySelector('#chat-hinweis').textContent));
+  assert.equal(await q.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+});
+
+test('Sprechen: gleich wieder angetippt (ein Versehen) schickt nichts weg', async (t) => {
+  const p = await angemeldet(t);
+  let geschickt = 0;
+  p.on('request', (r) => { if (r.url().endsWith('/api/zuhoeren')) geschickt++; });
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  await p.click('#chat-knopf');
+  await p.waitForFunction(() => /nichts gehört/.test(document.querySelector('#chat-hinweis').textContent));
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+  assert.equal(geschickt, 0);
+  assert.equal(await p.locator('.blase').count(), 0);
+});
+
+// Falsches Mikrofon mit bestimmbarem Inhalt: `sekunden` lang ein Ton ("jemand spricht"), danach Stille
+const MIKRO_MIT_TON = (sekunden) => {
+  navigator.mediaDevices.getUserMedia = async () => {
+    const ac = new AudioContext();
+    const ziel = ac.createMediaStreamDestination();
+    const o = ac.createOscillator(), g = ac.createGain();
+    g.gain.value = sekunden ? 0.3 : 0;
+    o.connect(g).connect(ziel);
+    o.start();
+    o.stop(ac.currentTime + (sekunden || 0.1));
+    return ziel.stream;
+  };
+};
+
+test('Sprechen: nach einer Pause hört Biko von selbst auf und schickt den Satz ab', async (t) => {
+  const p = await angemeldet(t);
+  await p.addInitScript(MIKRO_MIT_TON, 1);
+  await p.reload();
+  await p.waitForSelector('#app:not([hidden])');
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  await p.waitForSelector('.blase.ich', { timeout: 8000 }); // kein zweites Antippen
+  assert.equal(await p.textContent('.blase.ich'), 'Hallo Biko');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Sprechen: wer nichts sagt, bekommt nach ein paar Sekunden von selbst einen freundlichen Hinweis', async (t) => {
+  const p = await angemeldet(t);
+  await p.addInitScript(MIKRO_MIT_TON, 0);
+  await p.reload();
+  await p.waitForSelector('#app:not([hidden])');
+  // die stille Aufnahme geht trotzdem zum Verstehen (vielleicht war es nur sehr leise), dort kommt kein Wort heraus
+  let geschickt = 0;
+  await p.route('**/api/zuhoeren', (route) => { geschickt++; return route.fulfill({ json: { text: '', sprache: '' } }); });
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  await p.waitForFunction(() => /nichts gehört/.test(document.querySelector('#chat-hinweis').textContent), null, { timeout: 12000 });
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+  assert.equal(geschickt, 1);
+  assert.equal(await p.locator('.blase').count(), 0);
+});
+
+test('Vorlesen mit Sprachdienst: der Ton kommt vom Server, nochmal antippen stoppt', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Gibt es Angebote für Kaffee?');
+  let geholt = 0;
+  p.on('request', (r) => { if (r.url().endsWith('/api/vorlesen')) geholt++; });
+  const anfrage = p.waitForRequest((r) => r.url().endsWith('/api/vorlesen'));
+  await p.click('.blase .vorlesen');
+  assert.match((await anfrage).postDataJSON().text, /Billa/);
+  await p.waitForSelector('.blase .vorlesen[data-zustand=laeuft]');
+  assert.equal((await p.textContent('.blase .vorlesen')).trim(), 'Stopp');
+  // der Ton ist kurz: danach steht der Knopf von selbst wieder auf "Vorlesen"
+  await p.waitForSelector('.blase .vorlesen[data-zustand=ruhe]');
+  await p.click('.blase .vorlesen');
+  await p.waitForSelector('.blase .vorlesen[data-zustand=laeuft]');
+  await p.click('.blase .vorlesen');
+  assert.equal(await p.getAttribute('.blase .vorlesen', 'data-zustand'), 'ruhe');
+  assert.equal(geholt, 1, 'dieselbe Antwort nochmal anhören kostet nichts: der Ton ist noch da');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Vorlesen: ohne Sprachdienst oder wenn er ausfällt, liest der Browser vor', async (t) => {
+  const zaehlen = () => {
+    window.gesprochen = [];
+    speechSynthesis.speak = (u) => { window.gesprochen.push(u.text); };
+  };
+  const p = await angemeldet(t, { ohneDienst: true, vorher: zaehlen });
+  let gefragt = 0;
+  p.on('request', (r) => { if (r.url().endsWith('/api/vorlesen')) gefragt++; });
+  await fragen(p, 'Gibt es Angebote für Kaffee?');
+  await p.click('.blase .vorlesen');
+  await p.waitForFunction(() => window.gesprochen.some((x) => /Billa/.test(x)));
+  assert.equal(gefragt, 0, 'ohne Sprachdienst fragt die App den Server nicht');
+
+  const q = await angemeldet(t, { vorher: zaehlen });
+  await q.route('**/api/vorlesen', (route) => route.fulfill({ status: 503, json: { fehler: 'Die Stimme geht gerade nicht.' } }));
+  await fragen(q, 'Gibt es Angebote für Kaffee?');
+  await q.click('.blase .vorlesen');
+  await q.waitForFunction(() => window.gesprochen.some((x) => /Billa/.test(x)));
 });
 
 test('Vorschlag antippen stellt die Frage', async (t) => {
@@ -160,12 +306,6 @@ test('Erinnerung geht groß auf, bei "Erledigt" freut sich Biko', async (t) => {
   await p.waitForSelector('#alarm', { state: 'hidden' });
 });
 
-const fragen = async (p, text) => {
-  const bisher = await p.locator('.blase.biko-sagt').count();
-  await p.fill('#chat-text', text);
-  await p.click('#chat-knopf');
-  await p.waitForFunction((n) => document.querySelectorAll('.blase.biko-sagt').length > n, bisher);
-};
 const gespraecheHolen = (p) => p.evaluate(async () => (await fetch('/api/gespraeche')).json());
 
 test('Nachricht für jemanden: Biko stellt sie ins Gespräch, Kopieren bestätigt mit "Kopiert"', async (t) => {
