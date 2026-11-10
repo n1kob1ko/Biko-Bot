@@ -2,10 +2,8 @@ name: Kursdaten holen
 
 # Lädt BTC/EUR-Stundenkerzen von den öffentlichen Binance-Datendumps (data.binance.vision)
 # und legt sie gepackt unter backtests/daten/ ab. Nur für Backtests, kein Handel.
+# Von Hand starten (Actions > Kursdaten holen > Run workflow), um die Daten zu erneuern.
 on:
-  push:
-    branches: ["claude/**"]
-    paths: [".github/workflows/kursdaten.yml"]
   workflow_dispatch:
 
 permissions:
