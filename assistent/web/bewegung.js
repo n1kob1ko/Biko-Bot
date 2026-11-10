@@ -68,6 +68,44 @@
     knauf.animate(L.dehnung(an ? 0 : 20, an ? 20 : 0), { duration: 220, easing: WEG });
   }
 
+  // Den Schalter ziehen. Solange der Finger hält, folgt der Knauf direkt (kein Übergang); über die Enden
+  // hinaus gibt er wie ein Gummiband nach. Beim Loslassen entscheidet die Lage, `fertig(an)` meldet sie.
+  const KNAUF_WEG = 20, KNAUF_GUMMI = 8;
+  function schalterZiehen(schalter, fertig) {
+    const knauf = schalter.querySelector('.knauf');
+    let zug = null;
+    schalter.addEventListener('pointerdown', (e) => {
+      if (zug || e.button > 0) return; // ein zweiter Finger zählt nicht
+      zug = { id: e.pointerId, x: e.clientX, von: schalter.getAttribute('aria-checked') === 'true' ? KNAUF_WEG : 0, lage: null };
+      try { schalter.setPointerCapture(e.pointerId); } catch (err) { /* Zeiger schon weg */ }
+    });
+    schalter.addEventListener('pointermove', (e) => {
+      if (!zug || e.pointerId !== zug.id) return;
+      const weg = e.clientX - zug.x;
+      if (zug.lage === null && Math.abs(weg) < 4) return; // noch ein Tippen, kein Ziehen
+      if (zug.lage === null) stoppe(knauf);
+      const x = zug.von + weg;
+      zug.lage = x < 0 ? -L.gummiband(-x, KNAUF_GUMMI) : x > KNAUF_WEG ? KNAUF_WEG + L.gummiband(x - KNAUF_WEG, KNAUF_GUMMI) : x;
+      knauf.style.transform = `translateX(${zug.lage}px)`;
+    });
+    const ende = (e) => {
+      if (!zug || e.pointerId !== zug.id) return;
+      const { lage, von } = zug;
+      zug = null;
+      if (lage === null) return; // nur getippt: das erledigt der Klick
+      // Abgebrochen (zum Beispiel weil die Seite rollt): zurück in die alte Stellung
+      const an = e.type === 'pointercancel' ? von > 0 : lage > KNAUF_WEG / 2;
+      const ziel = an ? KNAUF_WEG : 0;
+      schalter._gezogen = true; // der Klick, der auf das Loslassen folgt, schaltet nicht noch einmal um
+      setTimeout(() => { schalter._gezogen = false; }, 400);
+      knauf.style.transform = '';
+      fertig(an);
+      if (lage !== ziel && !reduziert()) knauf.animate([{ transform: `translateX(${lage}px)` }, { transform: `translateX(${ziel}px)` }], { duration: 180, easing: AB });
+    };
+    schalter.addEventListener('pointerup', ende);
+    schalter.addEventListener('pointercancel', ende);
+  }
+
   // Ein Ring pulsiert einmal: "hat geklappt"
   function puls(el) {
     el.classList.remove('puls');
@@ -118,68 +156,9 @@
     return spiele(el, [{ clipPath: 'inset(-24px -24px 100% -24px)', opacity: 0.4 }, { clipPath: 'inset(-24px)', opacity: 1 }], { duration: 320, easing: AB });
   }
 
-  // ---------- Blatt (dialog) ----------
-  const GROESSE = 'scale(0.82)';
-  function blattAuf(dialog, ausloeser) {
-    const inhalt = dialog.querySelector('.blatt-inhalt');
-    dialog._ausloeser = ausloeser;
-    dialog._schliesst = false;
-    dialog.classList.remove('schliesst');
-    stoppe(inhalt);
-    inhalt.style.transform = '';
-    dialog.showModal();
-    // Ursprung der Bewegung ist die Mitte des Knopfs, der das Blatt geöffnet hat
-    const r = inhalt.getBoundingClientRect(), k = ausloeser.getBoundingClientRect();
-    inhalt.style.transformOrigin = `${k.left + k.width / 2 - r.left}px ${k.top + k.height / 2 - r.top}px`;
-    return spiele(inhalt, [{ opacity: 0, transform: GROESSE }, { opacity: 1, transform: 'scale(1)' }], { duration: 320, easing: AB });
-  }
-  async function blattZu(dialog, { nachUnten = false } = {}) {
-    if (!dialog.open || dialog._schliesst) return;
-    dialog._schliesst = true;
-    dialog.classList.add('schliesst');
-    const inhalt = dialog.querySelector('.blatt-inhalt');
-    const bilder = nachUnten
-      ? [{ opacity: 1, transform: inhalt.style.transform || 'translateY(0px)' }, { opacity: 0, transform: 'translateY(100%)' }]
-      : [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: GROESSE }];   // zurück in den Knopf
-    const a = await spiele(inhalt, bilder, { duration: L.ausgang(320), easing: 'ease', fill: 'forwards' });
-    dialog.close();
-    if (a) a.cancel();
-    inhalt.style.transform = '';
-    dialog.classList.remove('schliesst');
-    dialog._schliesst = false;
-    if (dialog._ausloeser) dialog._ausloeser.focus({ preventScroll: true });
-  }
-  // Am Griff nach unten wegziehen. Solange der Finger hält, folgt das Blatt direkt (kein Übergang);
-  // nach oben gibt es wie ein Gummiband nach.
-  function blattZiehen(dialog) {
-    const griff = dialog.querySelector('.blatt-griff'), inhalt = dialog.querySelector('.blatt-inhalt');
-    let zug = null;
-    griff.addEventListener('pointerdown', (e) => {
-      if (zug || dialog._schliesst) return; // ein zweiter Finger zählt nicht
-      zug = { id: e.pointerId, y: e.clientY, t: e.timeStamp, dy: 0 };
-      griff.setPointerCapture(e.pointerId);
-      stoppe(inhalt);
-    });
-    griff.addEventListener('pointermove', (e) => {
-      if (!zug || e.pointerId !== zug.id) return;
-      const weg = e.clientY - zug.y;
-      zug.dy = weg >= 0 ? weg : -L.gummiband(-weg, 60);
-      inhalt.style.transform = `translateY(${zug.dy}px)`;
-    });
-    const ende = (e) => {
-      if (!zug || e.pointerId !== zug.id) return;
-      const dy = zug.dy, tempo = dy / Math.max(1, e.timeStamp - zug.t);
-      zug = null;
-      if (dy > 90 || (dy > 24 && tempo > 0.5)) { blattZu(dialog, { nachUnten: true }); return; }
-      inhalt.style.transform = '';
-      if (dy && !reduziert()) inhalt.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0px)' }], { duration: 220, easing: AB });
-    };
-    griff.addEventListener('pointerup', ende);
-    griff.addEventListener('pointercancel', ende);
-  }
 
   window.BikoBewegung = {
-    reduziert, spiele, aufklappen, zuklappen, ausblenden, kissenSetzen, knaufSchieben, puls, flug, umzug, geist,
-    aufdecken, blattAuf, blattZu, blattZiehen,
+    reduziert, spiele, aufklappen, zuklappen, ausblenden, kissenSetzen, knaufSchieben, schalterZiehen, puls, flug, umzug, geist,
+    aufdecken,
   };
 })();

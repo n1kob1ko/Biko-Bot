@@ -4,7 +4,6 @@
   'use strict';
   const T = window.BikoTexte, L = window.BikoLogik, B = window.BikoBewegung, M = window.Maskottchen;
   const STIMME = { de: 'de-AT', zh: 'zh-CN' };
-  const TAGE = ['mo', 'di', 'mi', 'do', 'fr', 'sa', 'so'];
 
   const $ = (s, wo = document) => wo.querySelector(s);
   const $$ = (s, wo = document) => Array.from(wo.querySelectorAll(s));
@@ -54,10 +53,10 @@
     $('#gruss').textContent = profil.name ? t('hallo_name').replace('{name}', profil.name) : t('hallo');
     $$('.blase .vorlesen').forEach((k) => { k.lastElementChild.textContent = t(k.dataset.zustand === 'laeuft' ? 'stopp' : 'vorlesen'); });
     $$('.blase.denkt .nur-vorlesen').forEach((el) => { el.textContent = t('denkt'); });
+    $$('.notiz').forEach(notizFuellen);
     zustand($('#nachricht-kopieren'), 'ruhe', 'kopieren');
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
-    tageAufbauen();
     vorschlaegeZeigen();
     erinnerungenZeigen();
   }
@@ -275,6 +274,22 @@
     nachUnten(); // ganz nach unten, damit die neue Blase über dem Eingabefeld zu sehen ist
     return d;
   }
+  // Kleine Zeile unter Bikos Antwort: was er sich gerade aufgeschrieben ("Gemerkt") oder gestrichen hat
+  function notizFuellen(n) {
+    const er = n._er, gemerkt = !n.classList.contains('gestrichen');
+    n.innerHTML = icon(gemerkt ? 'erinnern' : 'loeschen');
+    const zeile = neu('span');
+    zeile.append(neu('strong', '', t(gemerkt ? 'gemerkt_notiz' : 'gestrichen_notiz')), er.text);
+    n.appendChild(zeile);
+    if (gemerkt) n.appendChild(neu('span', 'wann', `${L.wannText(er, T[sprache], new Date())}, ${er.zeit}`));
+  }
+  function notiz(er, gemerkt) {
+    const n = neu('div', 'notiz' + (gemerkt ? '' : ' gestrichen'));
+    n._er = er;
+    notizFuellen(n);
+    verlauf.appendChild(n);
+    nachUnten();
+  }
   function denkBlase() {
     const d = neu('div', 'blase denkt');
     d.innerHTML = '<i></i><i></i><i></i>';
@@ -330,11 +345,14 @@
     B.flug(blase(text, 'ich'), start);
     const warte = denkBlase();
     try {
-      const { antwort } = await api('/api/chat', { text });
+      const j = await api('/api/chat', { text });
       warte.remove();
       stimmung('da');
-      const d = blase(antwort, 'biko-sagt');
-      if (vorlesenAn()) vorlesen(antwort, d.querySelector('.vorlesen'));
+      const d = blase(j.antwort, 'biko-sagt');
+      (j.vergessen || []).forEach((er) => notiz(er, false));
+      (j.gemerkt || []).forEach((er) => notiz(er, true));
+      if (vorlesenAn()) vorlesen(j.antwort, d.querySelector('.vorlesen'));
+      if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
     } catch (err) {
       warte.remove();
       stimmung('traurig', 5000);
@@ -450,27 +468,32 @@
   });
 
   // ---------- 3. Erinnerungen ----------
-  function tageAufbauen() {
-    const box = $('#tage-wahl');
-    const erster = !box.children.length;
-    const gewaehlt = new Set($$('input:checked', box).map((i) => i.value));
-    box.replaceChildren(...TAGE.map((tag) => {
-      const l = neu('label'), i = neu('input');
-      i.type = 'checkbox';
-      i.value = tag;
-      i.checked = erster || gewaehlt.has(tag);
-      l.append(i, t('tage')[tag]);
-      return l;
-    }));
+  // Erinnerungen entstehen im Gespräch: Biko schreibt sie sich am Server selbst auf (server.py, Werkzeuge).
+  // Die App bekommt mit jeder Antwort die aktuelle Liste, zeigt sie in den Einstellungen und meldet sich zur Uhrzeit.
+  function hinweiseErlauben() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch (err) { /* alte Browser */ }
+    }
+  }
+  function erinnerungenUebernehmen(liste, gemerkt) {
+    erinnerungen = liste;
+    erinnerungenZeigen();
+    if (gemerkt.length) { M.fidget('hop'); hinweiseErlauben(); }
+    // "Jeden Tag um 8", gesagt um halb 9: Biko meldet sich erst morgen, nicht mitten in seine eigene Antwort hinein.
+    // Eine einmalige Erinnerung ("in 5 Minuten") darf dagegen sofort kommen.
+    const jetzt = new Date();
+    gemerkt.filter((er) => !er.datum && L.faelligeErinnerung({ erinnerungen: [er], jetzt }))
+      .forEach((er) => merken(L.gezeigtSchluessel(er, jetzt), '1'));
+    erinnerungPruefen();
   }
 
-  function erinnerungenZeigen(neuId) {
+  function erinnerungenZeigen() {
     const ul = $('#erinnerungen');
     if (!erinnerungen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_erinnerungen'))); return; }
     ul.replaceChildren(...erinnerungen.map((er) => {
-      const li = neu('li', 'erinnerung reihe' + (er.id === neuId ? ' neu' : ''));
+      const li = neu('li', 'erinnerung reihe');
       const mitte = neu('div');
-      mitte.append(neu('div', '', er.text), neu('div', 'tage-text', er.tage.length === 7 ? t('jeden_tag') : er.tage.map((x) => t('tage')[x]).join(', ')));
+      mitte.append(neu('div', '', er.text), neu('div', 'tage-text', L.wannText(er, T[sprache], new Date())));
       const weg = neu('button', 'weg druck');
       weg.type = 'button';
       weg.innerHTML = icon('loeschen');
@@ -500,38 +523,6 @@
       return li;
     }));
   }
-
-  // Blatt "Neue Erinnerung": geht aus dem Plus-Knopf auf und dorthin wieder zu
-  const blatt = $('#blatt');
-  B.blattZiehen(blatt);
-  $('#erinnerung-neu').addEventListener('click', (e) => {
-    $('#erinnerung-form').reset();
-    $$('#tage-wahl input').forEach((i) => { i.checked = true; });
-    $('#erinnerung-fehler').textContent = '';
-    B.blattAuf(blatt, e.currentTarget);
-  });
-  $('#blatt-zu').addEventListener('click', () => B.blattZu(blatt));
-  blatt.addEventListener('cancel', (e) => { e.preventDefault(); B.blattZu(blatt); }); // Escape oder Zurück-Taste
-  blatt.addEventListener('click', (e) => { if (e.target === blatt) B.blattZu(blatt); }); // daneben getippt
-
-  $('#erinnerung-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const knopf = e.submitter || $('#erinnerung-form button[type=submit]');
-    const neue = { zeit: $('#erinnerung-zeit').value, text: $('#erinnerung-text').value, tage: $$('#tage-wahl input:checked').map((i) => i.value) };
-    knopf.disabled = true;
-    try {
-      const vorher = new Set(erinnerungen.map((x) => x.id));
-      erinnerungen = await api('/api/erinnerungen', { erinnerungen: erinnerungen.concat(neue) });
-      erinnerungenZeigen((erinnerungen.find((x) => !vorher.has(x.id)) || {}).id);
-      B.blattZu(blatt);
-      M.fidget('hop');
-    } catch (err) { $('#erinnerung-fehler').textContent = err.message; }
-    knopf.disabled = false;
-    // Erlaubnis für Hinweise holen, solange die Person gerade etwas angetippt hat
-    if ('Notification' in window && Notification.permission === 'default') {
-      try { Notification.requestPermission(); } catch (err) { /* alte Browser */ }
-    }
-  });
 
   // Welche Erinnerung wurde heute schon gezeigt? Das merkt sich das Handy.
   const speicherSchluessel = () => { try { return Object.keys(localStorage); } catch (e) { return []; } };
@@ -575,7 +566,6 @@
 
   function alarmZeigen(er) {
     offen = er;
-    if (blatt.open) blatt.close(); // ein offenes Blatt läge sonst über der Erinnerung
     alarm.getAnimations().forEach((a) => a.cancel());
     $('#alarm-text').textContent = er.text;
     $('#alarm-ok').disabled = $('#alarm-spaeter').disabled = false;
@@ -609,7 +599,8 @@
   }
   $('#alarm-ok').addEventListener('click', () => alarmZu(false));
   $('#alarm-spaeter').addEventListener('click', () => alarmZu(true));
-  $('#ton-test').addEventListener('click', () => alarmZeigen({ id: 'test', text: t('test_text') }));
+  // Beim Testen auch gleich die Erlaubnis für Hinweise holen: hier hat die Person gerade selbst getippt
+  $('#ton-test').addEventListener('click', () => { hinweiseErlauben(); alarmZeigen({ id: 'test', text: t('test_text') }); });
 
   // ---------- Einstellungen ----------
   function profilInsFormular() {
@@ -638,13 +629,18 @@
   // Schalter "immer vorlesen"
   const schalter = $('#vorlesen');
   schalter.setAttribute('aria-checked', String(vorlesenAn()));
-  schalter.addEventListener('click', () => {
-    const an = !vorlesenAn();
+  function vorlesenSetzen(an) {
     merken('vorlesen', an ? '1' : '0');
     schalter.setAttribute('aria-checked', String(an));
-    B.knaufSchieben($('.knauf', schalter), an);
     if (an) stimmeWecken(); else vorlesenStopp();
+  }
+  schalter.addEventListener('click', () => {
+    if (schalter._gezogen) return; // gerade gezogen: das Loslassen hat schon entschieden
+    const an = !vorlesenAn();
+    vorlesenSetzen(an);
+    B.knaufSchieben($('.knauf', schalter), an);
   });
+  B.schalterZiehen(schalter, vorlesenSetzen); // der Schalter lässt sich auch mit dem Finger schieben
 
   // Schriftgröße: die gelbe Ebene wird auf die gewählte Stelle zugeschnitten
   const AUSSCHNITT = ['inset(0 66.667% 0 0 round 12px)', 'inset(0 33.333% 0 33.333% round 12px)', 'inset(0 0 0 66.667% round 12px)'];

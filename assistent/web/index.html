@@ -27,9 +27,7 @@
 <symbol id="i-kopieren" viewBox="0 0 256 256"><path d="M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"/></symbol>
 <symbol id="i-ok" viewBox="0 0 256 256"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></symbol>
 <symbol id="i-teilen" viewBox="0 0 256 256"><path d="M220,112v96a20,20,0,0,1-20,20H56a20,20,0,0,1-20-20V112A20,20,0,0,1,56,92H76a12,12,0,0,1,0,24H60v88H196V116H180a12,12,0,0,1,0-24h20A20,20,0,0,1,220,112ZM96.49,72.49,116,53v83a12,12,0,0,0,24,0V53l19.51,19.52a12,12,0,1,0,17-17l-40-40a12,12,0,0,0-17,0l-40,40a12,12,0,1,0,17,17Z"/></symbol>
-<symbol id="i-plus" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"/></symbol>
 <symbol id="i-loeschen" viewBox="0 0 256 256"><path d="M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"/></symbol>
-<symbol id="i-zu" viewBox="0 0 256 256"><path d="M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"/></symbol>
 <symbol id="i-sprache" viewBox="0 0 256 256"><path d="M250.73,210.63l-56-112a12,12,0,0,0-21.46,0l-20.52,41A84.2,84.2,0,0,1,114,126.22,107.48,107.48,0,0,0,139.33,68H160a12,12,0,0,0,0-24H108V32a12,12,0,0,0-24,0V44H32a12,12,0,0,0,0,24h83.13A83.69,83.69,0,0,1,96,110.35,84,84,0,0,1,83.6,91a12,12,0,1,0-21.81,10A107.55,107.55,0,0,0,78,126.24,83.54,83.54,0,0,1,32,140a12,12,0,0,0,0,24,107.47,107.47,0,0,0,64-21.07,108.4,108.4,0,0,0,45.39,19.44l-24.13,48.26a12,12,0,1,0,21.46,10.73L151.41,196h65.17l12.68,25.36a12,12,0,1,0,21.47-10.73ZM163.41,172,184,130.83,204.58,172Z"/></symbol>
 <symbol id="i-pfeil" viewBox="0 0 256 256"><path d="M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z"/></symbol>
 </svg>
@@ -114,21 +112,7 @@
       </div>
     </section>
 
-    <!-- 3. Erinnerungen -->
-    <section class="ansicht" data-ansicht="erinnern" hidden>
-      <header class="kopf">
-        <div class="biko-platz" data-biko></div>
-        <div>
-          <h1 data-t="erinnern_titel"></h1>
-          <p class="leise" data-t="erinnern_text"></p>
-        </div>
-      </header>
-      <button type="button" id="erinnerung-neu" class="knopf haupt druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neue_erinnerung"></span></button>
-      <ul id="erinnerungen" class="liste" aria-live="polite"></ul>
-      <button type="button" id="ton-test" class="knopf druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="ton_test"></span></button>
-    </section>
-
-    <!-- Einstellungen (für die Familie) -->
+    <!-- 3. Einstellungen (für die Familie). Erinnerungen entstehen im Gespräch; hier kann man sie nur nachsehen und löschen. -->
     <section class="ansicht" data-ansicht="einstellen" hidden>
       <header class="kopf">
         <div class="biko-platz" data-biko></div>
@@ -137,6 +121,16 @@
           <p class="leise" data-t="einstellen_text"></p>
         </div>
       </header>
+      <div class="abschnitt reihe">
+        <h2 data-t="gemerkt_titel"></h2>
+        <p class="leise klein" data-t="gemerkt_hilfe"></p>
+      </div>
+      <ul id="erinnerungen" class="liste" aria-live="polite"></ul>
+      <button type="button" id="ton-test" class="knopf druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="ton_test"></span></button>
+      <div class="abschnitt reihe">
+        <h2 data-t="wissen_titel"></h2>
+        <p class="leise klein" data-t="wissen_hilfe"></p>
+      </div>
       <form id="profil-form" class="karte reihe">
         <label for="profil-name" data-t="name"></label>
         <input id="profil-name" type="text" maxlength="80" aria-describedby="profil-name-hilfe" autocomplete="off">
@@ -184,34 +178,9 @@
       <span class="leiste-kissen" aria-hidden="true"></span>
       <button type="button" data-ziel="reden" aria-current="page"><svg class="icon " aria-hidden="true"><use href="#i-reden"/></svg><span data-t="tab_reden"></span></button>
       <button type="button" data-ziel="nachricht"><svg class="icon " aria-hidden="true"><use href="#i-nachricht"/></svg><span data-t="tab_nachricht"></span></button>
-      <button type="button" data-ziel="erinnern"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="tab_erinnern"></span></button>
       <button type="button" data-ziel="einstellen"><svg class="icon " aria-hidden="true"><use href="#i-einstellen"/></svg><span data-t="tab_einstellen"></span></button>
     </nav>
   </main>
-
-  <!-- Blatt: neue Erinnerung. Geht aus dem Plus-Knopf auf, lässt sich nach unten wegziehen. -->
-  <dialog id="blatt" aria-labelledby="blatt-titel">
-    <div class="blatt-inhalt">
-      <div class="blatt-griff" aria-hidden="true"></div>
-      <div class="blatt-kopf">
-        <h2 id="blatt-titel" data-t="neue_erinnerung" tabindex="-1" autofocus></h2>
-        <button type="button" id="blatt-zu" class="rund-klein druck" data-t-label="schliessen"><svg class="icon " aria-hidden="true"><use href="#i-zu"/></svg></button>
-      </div>
-      <form id="erinnerung-form">
-        <label for="erinnerung-zeit" data-t="uhrzeit"></label>
-        <input id="erinnerung-zeit" type="time" required value="08:00">
-        <label for="erinnerung-text" data-t="woran"></label>
-        <input id="erinnerung-text" type="text" required maxlength="120" aria-describedby="erinnerung-text-hilfe" autocomplete="off">
-        <p class="hilfe" id="erinnerung-text-hilfe" data-t="woran_hilfe"></p>
-        <fieldset>
-          <legend data-t="welche_tage"></legend>
-          <div class="tage" id="tage-wahl"></div>
-        </fieldset>
-        <p id="erinnerung-fehler" class="meldung fehler" role="alert"></p>
-        <button type="submit" class="knopf haupt druck" data-t="speichern"></button>
-      </form>
-    </div>
-  </dialog>
 
   <!-- Erinnerung, die gerade fällig ist: groß über allem, bis "Erledigt" gedrückt wird -->
   <div id="alarm" class="alarm" role="alertdialog" aria-labelledby="alarm-titel" aria-describedby="alarm-text" hidden>

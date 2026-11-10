@@ -11,6 +11,25 @@ test('Erinnerung ist fällig, sobald ihre Uhrzeit erreicht ist', () => {
   assert.equal(L.faelligeErinnerung({ erinnerungen: [tablette], jetzt: um('08:00') }).id, 'a');
 });
 
+test('Einmalige Erinnerung ist nur an ihrem Tag fällig', () => {
+  const arzt = { ...tablette, id: 'arzt', datum: '2026-11-10' };
+  assert.equal(L.faelligeErinnerung({ erinnerungen: [arzt], jetzt: um('08:00', '2026-11-09') }), null);
+  assert.equal(L.faelligeErinnerung({ erinnerungen: [arzt], jetzt: um('08:00', '2026-11-10') }).id, 'arzt');
+  assert.equal(L.faelligeErinnerung({ erinnerungen: [arzt], jetzt: um('08:00', '2026-11-11') }), null);
+});
+
+test('Wann eine Erinnerung kommt, steht kurz und klar da', () => {
+  const texte = { jeden_tag: 'jeden Tag', einmal_am: 'einmal am {t}.{m}.', heute: 'heute', morgen: 'morgen', tage: { mo: 'Mo', mi: 'Mi' } };
+  const jetzt = um('12:00', '2026-11-09');
+  assert.equal(L.wannText(tablette, texte, jetzt), 'jeden Tag');
+  assert.equal(L.wannText({ ...tablette, tage: ['mo', 'mi'] }, texte, jetzt), 'Mo, Mi');
+  assert.equal(L.wannText({ ...tablette, tage: ['mo', 'mi'] }, { ...texte, tage: { mo: '周一', mi: '周三' }, tage_trenner: '、' }, jetzt), '周一、周三');
+  assert.equal(L.wannText({ ...tablette, datum: '2026-11-09' }, texte, jetzt), 'heute');
+  assert.equal(L.wannText({ ...tablette, datum: '2026-11-10' }, texte, jetzt), 'morgen');
+  assert.equal(L.wannText({ ...tablette, datum: '2026-12-24' }, texte, jetzt), 'einmal am 24.12.');
+  assert.equal(L.wannText({ ...tablette, datum: '2026-12-24' }, { ...texte, einmal_am: '{m}月{t}日' }, jetzt), '12月24日');
+});
+
 test('Erinnerung ist vor ihrer Uhrzeit nicht fällig', () => {
   assert.equal(L.faelligeErinnerung({ erinnerungen: [tablette], jetzt: um('07:59') }), null);
 });
