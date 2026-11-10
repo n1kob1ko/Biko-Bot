@@ -1,0 +1,37 @@
+name: Kursdaten holen
+
+# Lädt BTC/EUR-Stundenkerzen von den öffentlichen Binance-Datendumps (data.binance.vision)
+# und legt sie gepackt unter backtests/daten/ ab. Nur für Backtests, kein Handel.
+# Von Hand starten (Actions > Kursdaten holen > Run workflow), um die Daten zu erneuern.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  holen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Monatsdateien laden
+        run: |
+          set -e
+          mkdir -p tmp backtests/daten
+          for y in 2020 2021 2022 2023 2024 2025 2026; do
+            for m in 01 02 03 04 05 06 07 08 09 10 11 12; do
+              f="BTCEUR-1h-$y-$m.zip"
+              if curl -sfL -o "tmp/$f" "https://data.binance.vision/data/spot/monthly/klines/BTCEUR/1h/$f"; then
+                unzip -o -q "tmp/$f" -d tmp && echo "ok $f"
+              fi
+            done
+          done
+          cat tmp/*.csv | gzip -9 > backtests/daten/BTCEUR-1h.csv.gz
+          ls -la backtests/daten
+      - name: Einchecken
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add backtests/daten
+          git commit -m "Kursdaten BTC/EUR 1h (Binance) für Backtests"
+          git push
