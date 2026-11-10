@@ -11,10 +11,15 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         Die App meldet sich zur Uhrzeit. GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
 Nachrichten, Links und Erinnerungen sind Werkzeuge, die Claude selbst aufruft.
 
+Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) liest Biko mit einer natürlichen Stimme vor
+(POST /api/vorlesen) und versteht Gesprochenes in jeder Sprache (POST /api/zuhoeren, die Aufnahme als Ton).
+Ohne Schlüssel sprechen und hören die Browser der Handys selbst, so gut sie können.
+
 Dazu ein Profil (GET/POST /api/profil): Name, Diät-Regeln, Notizen. Biko liest es bei jeder Antwort mit.
 
 Anmelden: ein Passwort (APP_PASSWORT in der .env). Danach bleibt das Handy ein Jahr angemeldet (Cookie).
-Daten liegen als JSON in DATA_DIR (Standard /data), nichts geht außer an die Claude-API raus.
+Daten liegen als JSON in DATA_DIR (Standard /data). Nach außen gehen nur die Texte an die Claude-API und, wenn
+der Sprachdienst eingerichtet ist, vorzulesende Texte und Aufnahmen an ElevenLabs.
 Nur Python-Standardbibliothek plus das offizielle anthropic-Paket.
 """
 
@@ -27,11 +32,13 @@ import secrets
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -46,6 +53,13 @@ MAX_VERLAUF = 30          # so viele Nachrichten eines Gesprächs liest Biko bei
 MAX_GESPRAECHE = 40       # so viele Gespräche bleiben im Verlauf, das älteste fällt weg
 MAX_GESPEICHERT = 200     # so viele Nachrichten bleiben pro Gespräch gespeichert
 MAX_TEXT = 2000           # längere Eingaben werden abgelehnt
+# Sprachdienst (ElevenLabs): natürliche Stimme zum Vorlesen, Zuhören in jeder Sprache. Ein Schlüssel für beides.
+SPRACH_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+SPRACH_STIMME = os.environ.get("SPRACH_STIMME", "")              # Nummer der Stimme (voice_id); leer: die erste des Kontos
+SPRACH_MODELL = os.environ.get("SPRACH_MODELL", "eleven_v4_turbo")   # spricht über 90 Sprachen, antwortet schnell
+SPRACH_HOEREN = "scribe_v2"                                      # erkennt die gesprochene Sprache selbst
+MAX_VORLESEN = 2500       # so viele Zeichen werden höchstens vorgelesen
+MAX_AUFNAHME = 6_000_000  # Bytes; eine Minute Sprechen ist etwa 1 MB
 COOKIE = "biko_assistent"
 COOKIE_TAGE = 365
 
@@ -273,6 +287,82 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
 
 def jetzt():
     return datetime.now(ZEITZONE)
+
+
+# ---------- Sprachdienst ----------
+
+def sprach_anfrage(pfad, daten=None, kopf=None):
+    """Der eine Aufruf des Sprachdienstes. Die Tests ersetzen ihn. Liefert die Antwort als Bytes."""
+    req = urllib.request.Request("https://api.elevenlabs.io" + pfad, data=daten, method="GET" if daten is None else "POST",
+                                 headers={"xi-api-key": SPRACH_KEY, **(kopf or {})})
+    with urllib.request.urlopen(req, timeout=40) as r:
+        return r.read()
+
+
+def sprachdienst(pfad, daten=None, kopf=None):
+    """Fragt den Sprachdienst. Wirft RuntimeError mit freundlicher Meldung."""
+    if not SPRACH_KEY:
+        raise RuntimeError("Der Sprachdienst ist nicht eingerichtet.")
+    try:
+        return sprach_anfrage(pfad, daten, kopf)
+    except urllib.error.HTTPError as e:
+        try:
+            grund = e.read()[:300].decode("utf-8", "replace")   # die Fehlermeldung des Dienstes, kein Inhalt aus Gesprächen
+        except Exception:
+            grund = ""
+        protokoll(f"Sprachdienst-Fehler: {e.code} bei {pfad.split('?')[0]} {grund}")
+        if e.code in (401, 403):
+            raise RuntimeError("Der Schlüssel für die Stimme fehlt, stimmt nicht oder das Guthaben ist aufgebraucht. Bitte Niko Bescheid geben.")
+        raise RuntimeError("Die Stimme geht gerade nicht. Bitte gleich nochmal probieren.")
+    except OSError:
+        protokoll(f"Sprachdienst-Fehler: keine Verbindung bei {pfad.split('?')[0]}")
+        raise RuntimeError("Der Sprachdienst ist gerade nicht erreichbar.")
+
+
+_stimme = None
+
+
+def stimme():
+    """Mit welcher Stimme Biko spricht: die festgelegte (SPRACH_STIMME), sonst die erste Stimme des Kontos."""
+    global _stimme
+    if SPRACH_STIMME:
+        return SPRACH_STIMME
+    if _stimme is None:
+        liste = json.loads(sprachdienst("/v2/voices?page_size=20")).get("voices") or []
+        if not liste:
+            raise RuntimeError("Die Stimme geht gerade nicht. Bitte gleich nochmal probieren.")
+        _stimme = str(liste[0]["voice_id"])
+        protokoll(f"Sprachdienst: Biko spricht mit der Stimme {liste[0].get('name')!r}")
+    return _stimme
+
+
+def ton_holen(text):
+    """Der Text als gesprochener Ton (MP3)."""
+    text = text[:MAX_VORLESEN]
+    ton = sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}?output_format=mp3_44100_128",
+                       json.dumps({"text": text, "model_id": SPRACH_MODELL}).encode(), {"Content-Type": "application/json"})
+    protokoll(f"Sprachdienst: {len(text)} Zeichen vorgelesen")
+    return ton
+
+
+AUFNAHME_ARTEN = {"audio/webm": "webm", "audio/mp4": "mp4", "audio/ogg": "ogg", "audio/wav": "wav",
+                  "audio/mpeg": "mp3", "audio/aac": "aac", "audio/x-m4a": "m4a"}
+
+
+def text_hoeren(ton, art):
+    """Die Aufnahme als Text. Die Sprache wird nicht vorgegeben: der Dienst erkennt selbst, ob Deutsch oder
+    Chinesisch gesprochen wurde."""
+    grenze = "biko" + secrets.token_hex(16)
+    felder = {"model_id": SPRACH_HOEREN, "tag_audio_events": "false", "timestamps_granularity": "none"}
+    teile = [f'--{grenze}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode() for k, v in felder.items()]
+    teile.append(f'--{grenze}\r\nContent-Disposition: form-data; name="file"; filename="aufnahme.{AUFNAHME_ARTEN[art]}"\r\n'
+                 f'Content-Type: {art}\r\n\r\n'.encode() + ton + b"\r\n")
+    teile.append(f"--{grenze}--\r\n".encode())
+    j = json.loads(sprachdienst("/v1/speech-to-text", b"".join(teile),
+                                {"Content-Type": f"multipart/form-data; boundary={grenze}"}))
+    sprache = str(j.get("language_code") or "")
+    protokoll(f"Sprachdienst: {len(ton) // 1000} kB zugehört, Sprache {sprache or 'unbekannt'}")
+    return {"text": str(j.get("text") or "").strip(), "sprache": sprache}
 
 
 def system_prompt():
@@ -570,11 +660,18 @@ ZH = {
     "Zu viele Versuche. Bitte in 15 Minuten nochmal.": "尝试次数太多。请 15 分钟后再试。",
     "Am Server ist noch kein Passwort eingestellt (APP_PASSWORT).": "服务器还没有设置密码（APP_PASSWORT）。",
     "Das Passwort stimmt nicht.": "密码不对。",
+    "Der Sprachdienst ist nicht eingerichtet.": "语音服务还没有设置好。",
+    "Der Schlüssel für die Stimme fehlt, stimmt nicht oder das Guthaben ist aufgebraucht. Bitte Niko Bescheid geben.":
+        "语音服务的密钥缺失、不正确，或者余额用完了。请告诉 Niko。",
+    "Die Stimme geht gerade nicht. Bitte gleich nochmal probieren.": "语音现在用不了。请稍后再试。",
+    "Der Sprachdienst ist gerade nicht erreichbar.": "现在连不上语音服务。",
+    "Die Aufnahme ist zu lang. Bitte kürzer sprechen.": "录音太长了。请说短一点。",
 }
 
 TYPEN = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml",
-         ".webmanifest": "application/manifest+json", ".png": "image/png", ".woff2": "font/woff2"}
+         ".webmanifest": "application/manifest+json", ".png": "image/png", ".woff2": "font/woff2",
+         ".mp3": "audio/mpeg"}
 
 _fehlversuche = {}
 
@@ -596,8 +693,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", typ)
         self.send_header("Content-Length", str(len(body)))
-        if typ.startswith("application/json"):
-            cache = "no-store"
+        if typ.startswith("application/json") or self.path.startswith("/api/"):
+            cache = "no-store"   # Antworten und vorgelesener Ton werden nirgends zwischengespeichert
         elif typ == "font/woff2":
             cache = "public, max-age=31536000, immutable"  # Schriften ändern sich nie
         else:
@@ -608,7 +705,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
-                         "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+                         "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -641,7 +738,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         pfad = self.path.split("?")[0]
         if pfad == "/api/status":
-            return self.senden(200, {"angemeldet": self.angemeldet(), "passwort_gesetzt": bool(PASSWORT)})
+            return self.senden(200, {"angemeldet": self.angemeldet(), "passwort_gesetzt": bool(PASSWORT),
+                                     "sprachdienst": bool(SPRACH_KEY)})
         if pfad.startswith("/api/"):
             if not self.angemeldet():
                 return self.senden(401, {"fehler": "Bitte anmelden."})
@@ -663,6 +761,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         pfad = self.path.split("?")[0]
         try:
+            if pfad == "/api/zuhoeren":
+                return self.zuhoeren()
             daten = self.json_body()
             if pfad == "/api/login":
                 return self.login(daten)
@@ -673,6 +773,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not text or len(text) > MAX_TEXT:
                     raise ValueError("Bitte etwas Kürzeres schreiben.")
                 return self.senden(200, chat(text, str(daten.get("gespraech") or "")))
+            if pfad == "/api/vorlesen":
+                text = str(daten.get("text", "")).strip()
+                if not text:
+                    raise ValueError("Das hat nicht geklappt, bitte nochmal.")
+                return self.senden(200, ton_holen(text), "audio/mpeg")
             if pfad == "/api/gespraech/loeschen":
                 with _lock:
                     rest = [g for g in gespraeche_lesen() if g["id"] != str(daten.get("id") or "")]
@@ -703,6 +808,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(400, {"fehler": str(e)})
         except RuntimeError as e:
             return self.senden(503, {"fehler": str(e)})
+
+    def zuhoeren(self):
+        """Die Aufnahme aus dem Mikrofon kommt als roher Ton an und geht als Text zurück."""
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_AUFNAHME:
+            raise ValueError("Die Aufnahme ist zu lang. Bitte kürzer sprechen.")
+        ton = self.rfile.read(n)
+        if not self.angemeldet():
+            return self.senden(401, {"fehler": "Bitte anmelden."})
+        if not SPRACH_KEY:
+            raise RuntimeError("Der Sprachdienst ist nicht eingerichtet.")
+        art = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if not ton or art not in AUFNAHME_ARTEN:
+            raise ValueError("Das hat nicht geklappt, bitte nochmal.")
+        return self.senden(200, text_hoeren(ton, art))
 
     def login(self, daten):
         ip = self.ip()

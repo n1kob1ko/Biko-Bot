@@ -1,5 +1,6 @@
 """Startet den echten Server mit einer falschen KI, für die Browser-Tests (tests/e2e.test.js).
 Aufruf: python falscher_server.py <port> <daten-ordner>"""
+import json
 import os
 import sys
 import time
@@ -40,5 +41,18 @@ def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None
     return "Diese Woche gibt es bei Billa Kaffee um 30 % günstiger. Preise können sich ändern."
 
 
+# Falscher Sprachdienst: liefert zum Vorlesen einen kurzen Ton und "versteht" aus jeder Aufnahme denselben Satz
+def falscher_sprachdienst(pfad, daten=None, kopf=None):
+    if pfad.startswith("/v2/voices"):
+        return json.dumps({"voices": [{"voice_id": "test-stimme", "name": "Test"}]}).encode()
+    if pfad.startswith("/v1/text-to-speech/"):
+        with open(os.path.join(os.path.dirname(__file__), "ton.mp3"), "rb") as f:
+            return f.read()
+    assert b'name="file"' in daten and len(daten) > 500, "die Aufnahme fehlt"
+    return json.dumps({"language_code": "de", "text": "Hallo Biko"}).encode()
+
+
 server.frage_claude = falsche_ki
+server.SPRACH_KEY = "test"
+server.sprach_anfrage = falscher_sprachdienst
 ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), server.Handler).serve_forever()

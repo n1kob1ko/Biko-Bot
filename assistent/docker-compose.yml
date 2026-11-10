@@ -5,7 +5,7 @@ services:
     build: .
     restart: unless-stopped
     container_name: biko-helfer
-    env_file: .env              # ANTHROPIC_API_KEY und APP_PASSWORT, nie ins Git
+    env_file: .env              # ANTHROPIC_API_KEY, APP_PASSWORT und optional ELEVENLABS_API_KEY, nie ins Git
     volumes:
       - "./daten:/data"          # Profil, Erinnerungen, Gespräch (bleibt bei Updates erhalten)
     # Nur am Server selbst erreichbar. Fürs Handy per Tailscale freigeben (siehe README).

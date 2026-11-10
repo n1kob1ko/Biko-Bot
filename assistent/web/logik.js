@@ -86,6 +86,20 @@
     return text.trim() ? 'senden' : 'mikro';
   }
 
+  // Aufnahme mit dem Mikrofon: laut ist, was deutlich über dem Grundrauschen liegt und nicht nur
+  // das Nachklingen von lautem Sprechen ist. `rms`: Lautstärke jetzt, `spitze`: lauteste Stelle bisher (0 bis 1).
+  function istLaut(rms, spitze) {
+    return rms > Math.max(0.015, spitze * 0.25);
+  }
+
+  // Wann hört Biko von selbst auf zuzuhören? Zeiten in ms. Nach dem Sprechen reicht eine Pause. Wer noch nichts
+  // gesagt hat, bekommt Zeit zum Überlegen. Danach geht die Aufnahme trotzdem zum Verstehen, falls nur sehr
+  // leise gesprochen wurde. Nach einer Minute ist immer Schluss.
+  function aufnahmeEnde({ dauer, gesprochen, stille }) {
+    if (dauer >= 60000) return 'fertig';
+    return (gesprochen ? stille >= 1800 : dauer >= 8000) ? 'fertig' : 'weiter';
+  }
+
   // Ziehen über eine Grenze hinaus: folgt dem Finger immer weniger, nie weiter als `grenze`
   function gummiband(weg, grenze) {
     if (weg <= 0) return 0;
@@ -119,5 +133,5 @@
     return Math.round(ms * 0.8);
   }
 
-  return { faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, gummiband, bogen, dehnung, ausgang };
+  return { faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

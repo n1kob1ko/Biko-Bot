@@ -383,6 +383,114 @@ class Test(unittest.TestCase):
         self.assertEqual([e["id"] for e in self.rufe("/api/erinnerungen", cookie=c)[1]], ["neu"])
         self.leeren(c)
 
+    # ---------- Sprachdienst: natürliche Stimme und Zuhören in jeder Sprache ----------
+
+    def roh(self, pfad, koerper=None, typ=None, cookie=None):
+        """Wie rufe(), aber mit rohen Bytes hin und zurück (Ton statt JSON)."""
+        req = urllib.request.Request(self.url + pfad, method="POST" if koerper is not None else "GET", data=koerper)
+        if typ:
+            req.add_header("Content-Type", typ)
+        if cookie:
+            req.add_header("Cookie", cookie)
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read(), r.headers
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), e.headers
+
+    def sprachdienst(self, antworten=None, stimme=""):
+        """Schaltet den Sprachdienst für einen Test ein. Der Dienst antwortet nach `antworten` (Pfadanfang -> Bytes
+        oder Ausnahme). Liefert die Liste der Anfragen."""
+        anfragen = []
+        antworten = {"/v2/voices": json.dumps({"voices": [{"voice_id": "stimme1", "name": "Anna"}]}).encode(),
+                     "/v1/text-to-speech/": b"ID3-ton", **(antworten or {})}
+
+        def dienst(pfad, daten=None, kopf=None):
+            anfragen.append({"pfad": pfad, "daten": daten, "kopf": kopf or {}})
+            ergebnis = next(v for k, v in antworten.items() if pfad.startswith(k))
+            if isinstance(ergebnis, Exception):
+                raise ergebnis
+            return ergebnis
+
+        alt = (server.SPRACH_KEY, server.SPRACH_STIMME, server.sprach_anfrage, server._stimme)
+        server.SPRACH_KEY, server.SPRACH_STIMME, server.sprach_anfrage, server._stimme = "sk_test", stimme, dienst, None
+        self.addCleanup(lambda: (setattr(server, "SPRACH_KEY", alt[0]), setattr(server, "SPRACH_STIMME", alt[1]),
+                                 setattr(server, "sprach_anfrage", alt[2]), setattr(server, "_stimme", alt[3])))
+        return anfragen
+
+    def test_ohne_schluessel_gibt_es_keinen_sprachdienst(self):
+        c = self.anmelden()
+        self.assertFalse(self.rufe("/api/status")[1]["sprachdienst"])
+        self.assertEqual(self.rufe("/api/vorlesen", {"text": "Hallo"}, cookie=c)[0], 503)
+        self.assertEqual(self.roh("/api/zuhoeren", b"ton", "audio/webm", c)[0], 503)
+        self.sprachdienst()
+        self.assertTrue(self.rufe("/api/status")[1]["sprachdienst"])
+
+    def test_vorlesen_holt_den_ton_vom_sprachdienst(self):
+        c = self.anmelden()
+        anfragen = self.sprachdienst()
+        status, ton, kopf = self.roh("/api/vorlesen", json.dumps({"text": "Guten Morgen, 你好"}).encode(), "application/json", c)
+        self.assertEqual((status, ton, kopf["Content-Type"], kopf["Cache-Control"]), (200, b"ID3-ton", "audio/mpeg", "no-store"))
+        # ohne festgelegte Stimme nimmt Biko die erste Stimme des Kontos und merkt sie sich
+        self.assertEqual([a["pfad"].split("?")[0] for a in anfragen], ["/v2/voices", "/v1/text-to-speech/stimme1"])
+        gesendet = json.loads(anfragen[1]["daten"])
+        self.assertEqual((gesendet["text"], gesendet["model_id"]), ("Guten Morgen, 你好", server.SPRACH_MODELL))
+        self.assertEqual(anfragen[1]["kopf"]["Content-Type"], "application/json")
+        self.roh("/api/vorlesen", json.dumps({"text": "Nochmal"}).encode(), "application/json", c)
+        self.assertEqual(len(anfragen), 3, "die Stimme wird nur einmal gesucht")
+
+    def test_vorlesen_mit_festgelegter_stimme_und_langem_text(self):
+        c = self.anmelden()
+        anfragen = self.sprachdienst(stimme="meine-stimme")
+        self.roh("/api/vorlesen", json.dumps({"text": "a" * 1990}).encode(), "application/json", c)
+        self.assertEqual(anfragen[0]["pfad"].split("?")[0], "/v1/text-to-speech/meine-stimme")
+        self.assertEqual(self.rufe("/api/vorlesen", {"text": "  "}, cookie=c)[0], 400)
+        self.assertEqual(self.rufe("/api/vorlesen", {"text": "Hallo"})[0], 401)
+        self.assertEqual(len(anfragen), 1)
+
+    def test_zuhoeren_schickt_die_aufnahme_zum_sprachdienst_und_liefert_den_text(self):
+        c = self.anmelden()
+        anfragen = self.sprachdienst({"/v1/speech-to-text": json.dumps({"language_code": "zh", "text": " 你好 Biko "}).encode()})
+        status, antwort_, _ = self.roh("/api/zuhoeren", b"\x1aE\xdf\xa3-aufnahme", "audio/webm;codecs=opus", c)
+        self.assertEqual((status, json.loads(antwort_)), (200, {"text": "你好 Biko", "sprache": "zh"}))
+        a = anfragen[0]
+        self.assertEqual(a["pfad"], "/v1/speech-to-text")
+        self.assertTrue(a["kopf"]["Content-Type"].startswith("multipart/form-data; boundary="))
+        grenze = a["kopf"]["Content-Type"].split("boundary=")[1].encode()
+        teile = a["daten"].split(b"--" + grenze)
+        self.assertTrue(any(b'name="model_id"' in t and b"scribe_v2" in t for t in teile))
+        self.assertTrue(any(b'name="file"; filename="aufnahme.webm"' in t and b"Content-Type: audio/webm" in t
+                            and t.rstrip(b"\r\n").endswith(b"\x1aE\xdf\xa3-aufnahme") for t in teile))
+        # keine Sprache vorgeben: der Dienst erkennt selbst, ob Deutsch oder Chinesisch gesprochen wurde
+        self.assertNotIn(b"language_code", a["daten"])
+        self.assertTrue(a["daten"].rstrip(b"\r\n").endswith(b"--" + grenze + b"--"))
+
+    def test_zuhoeren_nimmt_auch_aufnahmen_vom_iphone_und_lehnt_anderes_ab(self):
+        c = self.anmelden()
+        anfragen = self.sprachdienst({"/v1/speech-to-text": json.dumps({"language_code": "de", "text": "Hallo"}).encode()})
+        self.assertEqual(self.roh("/api/zuhoeren", b"ftyp-aufnahme", "audio/mp4", c)[0], 200)
+        self.assertIn(b'filename="aufnahme.mp4"', anfragen[0]["daten"])
+        self.assertEqual(self.roh("/api/zuhoeren", b"ton", "audio/webm")[0], 401)
+        self.assertEqual(self.roh("/api/zuhoeren", b"", "audio/webm", c)[0], 400)
+        self.assertEqual(self.roh("/api/zuhoeren", b"kein ton", "text/plain", c)[0], 400)
+        alt = server.MAX_AUFNAHME
+        server.MAX_AUFNAHME = 1000
+        self.addCleanup(setattr, server, "MAX_AUFNAHME", alt)
+        self.assertEqual(self.roh("/api/zuhoeren", b"x" * 1001, "audio/webm", c)[0], 400)
+        self.assertEqual(len(anfragen), 1)
+
+    def test_fehler_vom_sprachdienst_kommen_freundlich_an(self):
+        c = self.anmelden()
+        falscher_schluessel = urllib.error.HTTPError("https://dienst.example", 401, "Unauthorized", {}, None)
+        self.sprachdienst({"/v1/text-to-speech/": falscher_schluessel,
+                           "/v1/speech-to-text": urllib.error.URLError("kein Netz")}, stimme="s")
+        status, j, _ = self.rufe("/api/vorlesen", {"text": "Hallo"}, cookie=c)
+        self.assertEqual(status, 503)
+        self.assertIn("Schlüssel für die Stimme", j["fehler"])
+        status, roh_, _ = self.roh("/api/zuhoeren", b"ton", "audio/webm", c)
+        self.assertEqual(status, 503)
+        self.assertIn("nicht erreichbar", json.loads(roh_)["fehler"])
+
     def test_seite_und_kein_pfad_ausbruch(self):
         with urllib.request.urlopen(self.url + "/../server.py") as r:
             self.assertIn(b"<!doctype html>", r.read())

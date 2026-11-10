@@ -106,16 +106,19 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menueZu(true); });
 
   // ---------- Server ----------
+  // `daten`: nichts (lesen), ein Objekt (als JSON) oder eine Tonaufnahme (Blob, geht so wie sie ist)
+  const anfrage = (pfad, daten) => {
+    const roh = daten instanceof Blob;
+    return fetch(pfad, {
+      method: daten === undefined ? 'GET' : 'POST',
+      headers: { 'Content-Type': roh ? daten.type : 'application/json', 'X-Sprache': STIMME[sprache] },
+      body: daten === undefined || roh ? daten : JSON.stringify(daten),
+      credentials: 'same-origin',
+    });
+  };
   async function api(pfad, daten) {
     let r;
-    try {
-      r = await fetch(pfad, {
-        method: daten === undefined ? 'GET' : 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
-        body: daten === undefined ? undefined : JSON.stringify(daten),
-        credentials: 'same-origin',
-      });
-    } catch (e) { throw new Error(t('keine_verbindung')); }
+    try { r = await anfrage(pfad, daten); } catch (e) { throw new Error(t('keine_verbindung')); }
     let j = {};
     try { j = await r.json(); } catch (e) { /* leer */ }
     if (r.status === 401 && pfad !== '/api/login') loginZeigen();
@@ -154,6 +157,7 @@
       return;
     }
     if (!s.angemeldet) { loginZeigen(); return; }
+    sprachdienst = !!s.sprachdienst;
     [profil, erinnerungen, gespraeche] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche')]);
     angemeldet = true;
     $('#login').hidden = true;
@@ -257,49 +261,101 @@
     { duration: L.ausgang(220), easing: 'ease', fill: 'forwards' });
 
   // ---------- Vorlesen ----------
-  const kannVorlesen = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  // Mit Sprachdienst am Server (siehe README) kommt eine natürliche Stimme als Ton. Ohne ihn, oder wenn er
+  // gerade ausfällt, liest die Stimme des Browsers vor.
+  let sprachdienst = false; // sagt der Server in /api/status
+  const browserStimme = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  const kannVorlesen = () => sprachdienst || browserStimme;
   const vorlesenAn = () => holen('vorlesen') === '1';
+  const spieler = new Audio(); // immer derselbe: ein iPhone erlaubt Ton nur dem Spieler, der einmal angetippt wurde
+  const tonSpeicher = new Map(); // Text -> fertiger Ton: nochmal anhören kostet nichts
   let liest = null; // der Knopf der Blase, die gerade vorgelesen wird
+  let lauf = 0;     // zählt jedes Vorlesen und jedes Stopp: ein Ton, der zu spät ankommt, spielt nicht mehr
   function vorlesenStopp() {
-    if (!kannVorlesen) return;
-    speechSynthesis.cancel();
+    lauf++;
+    spieler.onended = spieler.onerror = null;
+    spieler.pause();
+    if (browserStimme) speechSynthesis.cancel();
     if (liest) zustand(liest, 'ruhe', 'vorlesen');
     liest = null;
   }
-  function vorlesen(text, knopf) {
-    if (!kannVorlesen) return;
-    const war = liest;
-    vorlesenStopp();
-    if (knopf && war === knopf) return; // nochmal antippen heißt Stopp
+  function vorlesenFertig(knopf) {
+    if (!knopf || liest !== knopf) return;
+    zustand(knopf, 'ruhe', 'vorlesen');
+    liest = null;
+  }
+  function browserLiest(text, knopf) {
+    if (!browserStimme) return vorlesenFertig(knopf);
     const u = new SpeechSynthesisUtterance(text);
     u.lang = L.spracheVonText(text);
     u.rate = 0.92;
+    u.onend = u.onerror = () => vorlesenFertig(knopf);
+    speechSynthesis.speak(u);
+  }
+  async function tonHolen(text) {
+    if (tonSpeicher.has(text)) return tonSpeicher.get(text);
+    const r = await anfrage('/api/vorlesen', { text });
+    if (!r.ok) throw new Error('kein Ton');
+    const url = URL.createObjectURL(await r.blob());
+    tonSpeicher.set(text, url);
+    if (tonSpeicher.size > 8) { // nur die letzten Antworten bleiben im Speicher
+      const [alt, altUrl] = tonSpeicher.entries().next().value;
+      tonSpeicher.delete(alt);
+      URL.revokeObjectURL(altUrl);
+    }
+    return url;
+  }
+  async function vorlesen(text, knopf) {
+    if (!kannVorlesen()) return;
+    const war = liest;
+    vorlesenStopp();
+    if (knopf && war === knopf) return; // nochmal antippen heißt Stopp
     if (knopf) {
       liest = knopf;
       zustand(knopf, 'laeuft', 'stopp');
-      u.onend = u.onerror = () => { if (liest === knopf) { zustand(knopf, 'ruhe', 'vorlesen'); liest = null; } };
     }
-    speechSynthesis.speak(u);
+    if (!sprachdienst) return browserLiest(text, knopf);
+    stimmeWecken();
+    const hier = lauf;
+    try {
+      const url = await tonHolen(text);
+      if (hier !== lauf) return;
+      spieler.src = url;
+      // `ended`: das Ende des stillen Weck-Tons von eben zählt nicht
+      spieler.onended = () => { if (hier === lauf && spieler.ended) vorlesenFertig(knopf); };
+      spieler.onerror = () => { if (hier === lauf) vorlesenFertig(knopf); };
+      await spieler.play();
+    } catch (err) {
+      if (hier === lauf) browserLiest(text, knopf); // lieber die Stimme des Browsers als Stille
+    }
   }
-  // iPhones lesen nur vor, wenn das Vorlesen einmal durch ein Antippen begonnen wurde
+  // iPhones spielen Ton nur, wenn er einmal durch ein Antippen begonnen wurde. Deshalb beim ersten
+  // Antippen (senden, sprechen, vorlesen) kurz etwas Stilles abspielen, danach darf Biko von selbst reden.
   let stimmeWach = false;
   function stimmeWecken() {
-    if (stimmeWach || !kannVorlesen || !vorlesenAn()) return;
-    stimmeWach = true;
-    speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    if (stimmeWach) return;
+    if (sprachdienst) {
+      if (!spieler.paused) return;
+      spieler.src = 'stille.mp3';
+      spieler.play().then(() => { stimmeWach = true; }).catch(() => { /* beim nächsten Antippen nochmal */ });
+    } else if (browserStimme && vorlesenAn()) {
+      stimmeWach = true;
+      speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    }
   }
 
   // ---------- 1. Reden ----------
   const feld = $('#chat-text'), chatKnopf = $('#chat-knopf'), verlauf = $('#verlauf');
   let sendet = false;
-  let hoert = null; // laufende Spracherkennung
+  let hoert = null;      // Biko hört gerade zu: Aufnahme oder Spracherkennung, mit stop()
+  let versteht = false;  // die Aufnahme ist beim Sprachdienst, der Satz kommt gleich
 
   function knopfZeigen() {
     const art = L.knopfArt(feld.value, !!hoert);
     chatKnopf.dataset.art = art;
     chatKnopf.setAttribute('aria-label', t('knopf_' + art));
-    chatKnopf.disabled = sendet && art !== 'stopp';
-    feld.placeholder = t(hoert ? 'eingabe_hoert' : 'eingabe');
+    chatKnopf.disabled = (sendet || versteht) && art !== 'stopp';
+    feld.placeholder = t(hoert ? 'eingabe_hoert' : versteht ? 'eingabe_versteht' : 'eingabe');
   }
   function feldAnpassen() {
     feld.style.height = 'auto';
@@ -314,7 +370,7 @@
   function blase(text, art, lesetext) {
     const d = neu('div', 'blase ' + art);
     d.appendChild(neu('span', '', text));
-    if (art === 'biko-sagt' && kannVorlesen) {
+    if (art === 'biko-sagt' && kannVorlesen()) {
       const k = neu('button', 'vorlesen druck');
       k.type = 'button';
       k.dataset.zustand = 'ruhe';
@@ -496,7 +552,7 @@
   // `von`: Stelle, von der die Frage losfliegt (Vorschlag oder Eingabefeld)
   async function senden(text, von) {
     text = text.trim();
-    if (!text || sendet) return;
+    if (!text || sendet || versteht) return;
     sendet = true;
     const start = von || feld.getBoundingClientRect();
     if (!von) feld.value = '';
@@ -584,6 +640,97 @@
     clearTimeout(p._uhr);
     p._uhr = setTimeout(() => { p.textContent = ''; }, 8000);
   }
+
+  // Mit Sprachdienst: das Handy nimmt auf, der Server lässt die Aufnahme verstehen. Der Dienst erkennt selbst,
+  // ob Deutsch oder Chinesisch gesprochen wurde. Nach einer Pause hört Biko von selbst auf zuzuhören.
+  const kannAufnehmen = () => sprachdienst && !!window.MediaRecorder && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const AUFNAHME_ARTEN = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']; // iPhones nehmen als mp4 auf
+  let mikroStartet = false;
+  async function aufnehmen() {
+    if (mikroStartet) return;
+    mikroStartet = true;
+    vorlesenStopp(); // sonst hört Biko sich selbst zu
+    stimmeWecken();  // jetzt wird getippt: danach darf Biko die Antwort von selbst vorlesen
+    const ac = tonKontext();
+    let strom;
+    try { strom = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (err) {
+      mikroStartet = false;
+      hinweis(t('mikro_verboten'));
+      return;
+    }
+    mikroStartet = false;
+    const stuecke = [];
+    const aus = () => strom.getTracks().forEach((s) => s.stop());
+    let rek;
+    try {
+      const art = AUFNAHME_ARTEN.find((a) => MediaRecorder.isTypeSupported(a));
+      rek = new MediaRecorder(strom, art ? { mimeType: art } : undefined);
+    } catch (err) { aus(); hinweis(t('kein_mikro')); return; }
+
+    // Lautstärke mitlesen, um die Pause nach dem Sprechen zu erkennen
+    let quelle = null, messer = null, werte = null;
+    try {
+      if (ac) {
+        quelle = ac.createMediaStreamSource(strom);
+        messer = ac.createAnalyser();
+        messer.fftSize = 1024;
+        werte = new Float32Array(messer.fftSize);
+        quelle.connect(messer);
+      }
+    } catch (err) { messer = null; }
+    const beginn = performance.now();
+    let spitze = 0, gesprochen = false, zuletztLaut = beginn, vorbei = false;
+    const beenden = () => {
+      if (vorbei) return;
+      vorbei = true;
+      clearInterval(uhr);
+      try { rek.stop(); } catch (err) { if (rek.onstop) rek.onstop(); } // die Aufnahme lief gar nicht erst an
+    };
+    const uhr = setInterval(() => {
+      const jetzt = performance.now();
+      const misst = messer && ac.state === 'running';
+      if (misst) {
+        messer.getFloatTimeDomainData(werte);
+        const rms = Math.sqrt(werte.reduce((summe, w) => summe + w * w, 0) / werte.length);
+        if (L.istLaut(rms, spitze)) { gesprochen = true; zuletztLaut = jetzt; }
+        spitze = Math.max(rms, spitze * 0.995); // ein einzelnes lautes Geräusch zählt nicht ewig
+      }
+      // Ohne Messung hört nur die Fertig-Taste oder die Minute auf
+      const ende = L.aufnahmeEnde(misst ? { dauer: jetzt - beginn, gesprochen, stille: jetzt - zuletztLaut }
+        : { dauer: jetzt - beginn, gesprochen: true, stille: 0 });
+      if (ende === 'fertig') beenden();
+    }, 100);
+
+    rek.ondataavailable = (e) => { if (e.data && e.data.size) stuecke.push(e.data); };
+    rek.onerror = () => { stuecke.length = 0; beenden(); };
+    rek.onstop = async () => {
+      rek.onstop = null;
+      aus();
+      if (quelle) quelle.disconnect();
+      hoert = null;
+      let text = '', fehler = '';
+      // Gleich wieder angetippt war ein Versehen: in einer Drittelsekunde sagt niemand etwas
+      if (stuecke.length && performance.now() - beginn > 300) {
+        versteht = true;
+        stimmung('tippt');
+        knopfZeigen();
+        const ton = new Blob(stuecke, { type: rek.mimeType || stuecke[0].type || 'audio/webm' });
+        try { text = String((await api('/api/zuhoeren', ton)).text || '').trim(); } catch (err) { fehler = err.message; }
+        versteht = false;
+      }
+      stimmung('da');
+      knopfZeigen();
+      if (fehler) hinweis(fehler);
+      else if (!text) hinweis(t('nichts_gehoert'));
+      else senden((feld.value.trim() ? feld.value.trim() + ' ' : '') + text);
+    };
+    hoert = { stop: beenden };
+    stimmung('hoert');
+    knopfZeigen();
+    try { rek.start(); } catch (err) { beenden(); }
+  }
+
+  // Ohne Sprachdienst hört der Browser selbst zu, wenn er das kann
   function zuhoeren() {
     if (!Erkennung) { hinweis(t('kein_mikro')); feld.focus(); return; }
     vorlesenStopp(); // sonst hört Biko sich selbst zu
@@ -615,7 +762,7 @@
     e.preventDefault();
     const art = chatKnopf.dataset.art;
     if (art === 'stopp') hoert.stop();
-    else if (art === 'mikro') zuhoeren();
+    else if (art === 'mikro') (kannAufnehmen() ? aufnehmen() : zuhoeren());
     else senden(feld.value);
   });
   feld.addEventListener('input', feldAnpassen);
@@ -686,11 +833,18 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) erinnerungPruefen(); });
 
-  function ton() {
+  // Ein Tonwerk für alles: den Erinnerungston und das Mitlesen der Lautstärke beim Sprechen
+  function tonKontext() {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
-      const ac = ton.ac || (ton.ac = new AC());
+      const ac = tonKontext.ac || (tonKontext.ac = new AC());
       if (ac.state === 'suspended') ac.resume();
+      return ac;
+    } catch (e) { return null; }
+  }
+  function ton() {
+    try {
+      const ac = tonKontext();
       [523, 659, 784].forEach((hz, i) => { // drei freundliche Töne
         const o = ac.createOscillator(), g = ac.createGain(), ab = ac.currentTime + i * 0.28;
         o.frequency.value = hz;
@@ -713,8 +867,7 @@
     $('#alarm-ok').focus({ preventScroll: true });
     stimmung('winkt');
     ton();
-    vorlesenStopp();
-    if (kannVorlesen) vorlesen(`${t('erinnerung')}: ${er.text}`);
+    vorlesen(`${t('erinnerung')}: ${er.text}`);
     if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
     if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
       try { new Notification('Biko: ' + t('erinnerung'), { body: er.text, icon: 'icon.svg' }); } catch (e) { /* manche Handys nur per Service Worker */ }
