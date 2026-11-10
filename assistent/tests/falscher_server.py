@@ -20,10 +20,23 @@ def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None
     if frage.startswith("Vergiss"):
         werkzeuge["erinnerung_loeschen"]["tun"]({"id": server.erinnerungen_lesen()[0]["id"]})
         return "Erledigt, daran erinnere ich dich nicht mehr."
+    if frage.startswith("给安娜"):
+        werkzeuge["nachricht_zeigen"]["tun"]({"an": "安娜", "text": "亲爱的安娜，谢谢你送的花！周日来家里喝咖啡好吗？"})
+        return "这是给安娜的消息。"
+    if "茶" in frage:
+        werkzeuge["link_zeigen"]["tun"]({"titel": "Billa 本周传单", "url": "https://www.billa.at/flugblatt"})
+        return "茶的具体优惠我没有找到。你可以自己看看传单。"
     if any("一" <= z <= "鿿" for z in frage):
         return "这周 Billa 的咖啡打七折。价格可能会变哦。"
-    if frage.startswith("An:"):
-        return "Liebe Anna, vielen Dank für die schönen Blumen! Magst du am Sonntag auf einen Kaffee kommen?"
+    # Nachricht für jemanden: Biko stellt den fertigen Text unter seine Antwort
+    if frage.startswith("Schreib Anna"):
+        werkzeuge["nachricht_zeigen"]["tun"]({
+            "an": "Anna", "text": "Liebe Anna, vielen Dank für die schönen Blumen! Magst du am Sonntag auf einen Kaffee kommen?"})
+        return "Hier ist die Nachricht für Anna."
+    # Nichts Genaues gefunden: Biko stellt den Prospekt als Knopf ins Gespräch
+    if "Tee" in frage:
+        werkzeuge["link_zeigen"]["tun"]({"titel": "Billa Flugblatt", "url": "https://www.billa.at/flugblatt"})
+        return "Genaues zu Tee habe ich nicht gefunden. Schau am besten selbst ins Flugblatt."
     return "Diese Woche gibt es bei Billa Kaffee um 30 % günstiger. Preise können sich ändern."
 
 

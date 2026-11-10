@@ -130,8 +130,8 @@ test('Das Kissen in der Leiste wandert zum gewählten Bereich', async (t) => {
   assert.ok(Math.abs(kissen - knopf) < 2, `Kissen ${kissen} liegt nicht unter dem Knopf ${knopf}`);
   assert.equal(await p.locator('.leiste-kissen').count(), 1, 'es gibt genau ein Kissen, das wandert');
   assert.equal(await p.isVisible('[data-ansicht=einstellen]'), true);
-  assert.deepEqual(await p.locator('.leiste button').evaluateAll((l) => l.map((b) => b.dataset.ziel)), ['reden', 'nachricht', 'einstellen'],
-    'einen eigenen Bereich für Erinnerungen gibt es nicht mehr');
+  assert.deepEqual(await p.locator('.leiste button').evaluateAll((l) => l.map((b) => b.dataset.ziel)), ['reden', 'gespraeche', 'einstellen'],
+    'eigene Bereiche für Erinnerungen und Nachrichten gibt es nicht mehr');
   await p.waitForTimeout(300);
   assert.equal(await p.isVisible('[data-ansicht=reden]'), false);
 });
@@ -160,17 +160,130 @@ test('Erinnerung geht groß auf, bei "Erledigt" freut sich Biko', async (t) => {
   await p.waitForSelector('#alarm', { state: 'hidden' });
 });
 
-test('Nachricht schreiben und kopieren bestätigt mit "Kopiert"', async (t) => {
+const fragen = async (p, text) => {
+  const bisher = await p.locator('.blase.biko-sagt').count();
+  await p.fill('#chat-text', text);
+  await p.click('#chat-knopf');
+  await p.waitForFunction((n) => document.querySelectorAll('.blase.biko-sagt').length > n, bisher);
+};
+const gespraecheHolen = (p) => p.evaluate(async () => (await fetch('/api/gespraeche')).json());
+
+test('Nachricht für jemanden: Biko stellt sie ins Gespräch, Kopieren bestätigt mit "Kopiert"', async (t) => {
   const p = await angemeldet(t, { permissions: ['clipboard-read', 'clipboard-write'] });
-  await zu(p, 'nachricht');
-  await p.fill('#nachricht-an', 'Anna');
-  await p.fill('#nachricht-was', 'danke für die Blumen');
-  await p.click('#nachricht-form button[type=submit]');
-  await p.waitForSelector('#nachricht-ergebnis:not([hidden])');
-  assert.match(await p.textContent('#nachricht-text'), /Liebe Anna/);
-  await p.click('#nachricht-kopieren');
-  await p.waitForSelector('#nachricht-kopieren[data-zustand=ok]');
-  assert.equal((await p.textContent('#nachricht-kopieren')).trim(), 'Kopiert');
+  assert.equal(await p.locator('[data-ansicht=nachricht], #nachricht-form').count(), 0, 'kein eigener Bereich, kein Formular');
+  await fragen(p, 'Schreib Anna danke für die Blumen');
+  await p.waitForSelector('.entwurf');
+  assert.match(await p.textContent('.entwurf .entwurf-an'), /Nachricht an Anna/);
+  assert.match(await p.textContent('.entwurf .entwurf-text'), /^Liebe Anna, vielen Dank/);
+  assert.doesNotMatch(await p.textContent('.blase.biko-sagt'), /Liebe Anna/, 'der Text steht nur einmal da');
+  await p.click('.entwurf .kopieren');
+  await p.waitForSelector('.entwurf .kopieren[data-zustand=ok]');
+  assert.equal((await p.textContent('.entwurf .kopieren')).trim(), 'Kopiert');
+  assert.match(await p.evaluate(() => navigator.clipboard.readText()), /^Liebe Anna, vielen Dank.*kommen\?$/);
+  assert.match(await p.textContent('.entwurf .meldung'), /Einfügen/);
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Angebote: findet Biko nichts Genaues, steht der Prospekt als Knopf im Gespräch', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Gibt es Angebote für Tee?');
+  const link = p.locator('.links a.link-knopf');
+  assert.equal(await link.count(), 1);
+  assert.equal(await link.getAttribute('href'), 'https://www.billa.at/flugblatt');
+  assert.equal(await link.getAttribute('target'), '_blank');
+  assert.match(await link.getAttribute('rel'), /noopener/);
+  assert.match(await link.textContent(), /Billa Flugblatt.*billa\.at/s);
+  const kasten = await link.boundingBox();
+  assert.ok(kasten.height >= 56, `Knopf ist groß genug zum Antippen: ${kasten.height}`);
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Verlauf: frühere Gespräche stehen in der Liste und lassen sich zum Weiterreden öffnen', async (t) => {
+  const p = await angemeldet(t, { permissions: ['clipboard-read', 'clipboard-write'] });
+  await fragen(p, 'Schreib Anna einen Gruß vom Verlauf-Test');
+  await fragen(p, 'Erzähl mir etwas vom Verlauf-Test');
+  // "Neues Gespräch" steht im Gespräch selbst und führt zurück zum Startbild
+  await p.click('#neu-im-kopf');
+  await p.waitForSelector('#reden-kopf.gross');
+  assert.equal(await p.locator('#verlauf > *').count(), 0);
+  assert.ok(await p.locator('.vorschlag').count() > 0);
+  await zu(p, 'gespraeche');
+  const zeile = p.locator('li.gespraech', { hasText: 'Schreib Anna einen Gruß vom Verlauf-Test' });
+  await zeile.waitFor();
+  assert.equal(await zeile.count(), 1, 'beide Fragen gehören zu einem Gespräch');
+  await zeile.locator('.oeffnen').click();
+  await p.waitForSelector('[data-ansicht=reden]:not([hidden]) .blase.biko-sagt');
+  assert.deepEqual(await p.locator('.blase.ich').allTextContents(),
+    ['Schreib Anna einen Gruß vom Verlauf-Test', 'Erzähl mir etwas vom Verlauf-Test']);
+  assert.equal(await p.locator('.blase.biko-sagt').count(), 2);
+  assert.match(await p.textContent('.entwurf .entwurf-text'), /^Liebe Anna/, 'die geschriebene Nachricht ist wieder da');
+  assert.equal(await p.locator('#reden-kopf.gross').count(), 0);
+  // weiterreden landet im selben Gespräch
+  await fragen(p, 'Und noch etwas');
+  const liste = await gespraecheHolen(p);
+  assert.deepEqual([liste[0].titel, liste[0].anzahl], ['Schreib Anna einen Gruß vom Verlauf-Test', 6]);
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Verlauf: "Neues Gespräch" beginnt von vorn, das alte bleibt in der Liste', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Erstes Gespräch vom Neu-Test');
+  await zu(p, 'gespraeche');
+  await p.click('#neues-gespraech');
+  await p.waitForSelector('[data-ansicht=reden]:not([hidden]) #reden-kopf.gross');
+  await fragen(p, 'Zweites Gespräch vom Neu-Test');
+  const titel = (await gespraecheHolen(p)).map((g) => g.titel);
+  assert.deepEqual(titel.slice(0, 2), ['Zweites Gespräch vom Neu-Test', 'Erstes Gespräch vom Neu-Test']);
+});
+
+test('Beim Öffnen am selben Tag steht das letzte Gespräch wieder da, an einem anderen Tag das Startbild', async (t) => {
+  const p = await angemeldet(t, { uhr: new Date() });
+  await zu(p, 'gespraeche');
+  await p.click('#neues-gespraech'); // heute wurde in anderen Tests schon geredet
+  await p.waitForSelector('[data-ansicht=reden]:not([hidden]) #reden-kopf.gross');
+  await fragen(p, 'Frage vom Wiederkommen-Test');
+  await p.reload();
+  await p.waitForSelector('.blase.biko-sagt');
+  assert.deepEqual(await p.locator('.blase.ich').allTextContents(), ['Frage vom Wiederkommen-Test']);
+  assert.equal(await p.locator('#reden-kopf.gross').count(), 0);
+  assert.equal(await p.locator('.vorschlag').count(), 0);
+  // ein anderer Tag: Biko begrüßt wieder von vorn, das Gespräch steht im Verlauf
+  await p.clock.setFixedTime(new Date(Date.now() + 2 * 86400000));
+  await p.reload();
+  await p.waitForSelector('#app:not([hidden])');
+  await p.waitForSelector('.vorschlag');
+  assert.equal(await p.locator('.blase').count(), 0);
+  assert.equal(await p.locator('#reden-kopf.gross').count(), 1);
+});
+
+test('Gespräch löschen fragt zuerst nach, "Alle Gespräche vergessen" auch', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Frage vom Lösch-Test');
+  await zu(p, 'gespraeche');
+  const zeile = p.locator('li.gespraech', { hasText: 'Frage vom Lösch-Test' });
+  await zeile.locator('.weg').click();
+  assert.equal(await zeile.locator('.sicher').isVisible(), true);
+  await zeile.locator('.sicher .nein').click();
+  assert.equal(await zeile.count(), 1);
+  await zeile.locator('.weg').click();
+  await zeile.locator('.sicher .ja').click();
+  await zeile.waitFor({ state: 'detached' });
+  assert.ok(!(await gespraecheHolen(p)).some((g) => g.titel === 'Frage vom Lösch-Test'));
+  // das gelöschte Gespräch war das offene: beim Reden steht wieder das Startbild
+  await zu(p, 'reden');
+  await p.waitForSelector('#reden-kopf.gross');
+  await fragen(p, 'Noch eine Frage vom Lösch-Test');
+  await zu(p, 'einstellen');
+  await p.click('#verlauf-loeschen');
+  assert.equal(await p.isVisible('#alle-sicher'), true);
+  assert.ok((await gespraecheHolen(p)).length > 0, 'ein Tipp allein löscht noch nichts');
+  await p.click('#alle-sicher .ja');
+  await p.waitForFunction(() => /vergessen/.test(document.querySelector('#vergessen-info').textContent));
+  assert.deepEqual(await gespraecheHolen(p), []);
+  await zu(p, 'gespraeche');
+  assert.match(await p.textContent('#gespraeche'), /Noch keine Gespräche/);
+  await zu(p, 'reden');
+  assert.equal(await p.locator('.blase').count(), 0);
 });
 
 test('Schalter "immer vorlesen" merkt sich seine Stellung', async (t) => {
@@ -196,7 +309,7 @@ test('Schriftgröße "Sehr groß" macht die Schrift größer', async (t) => {
 
 test('Keine Emojis und keine Gedankenstriche in der Oberfläche', async (t) => {
   const p = await angemeldet(t);
-  for (const ziel of ['reden', 'nachricht', 'einstellen']) {
+  for (const ziel of ['reden', 'gespraeche', 'einstellen']) {
     await zu(p, ziel);
     await p.waitForTimeout(250);
     const text = await p.innerText('body');
@@ -223,7 +336,7 @@ test('Dunkler Modus: Text bleibt gut lesbar (Kontrast mindestens 4,5 zu 1)', asy
 
 test('"Bewegung reduzieren": nichts fliegt oder wandert, es wird nur ein- und ausgeblendet', async (t) => {
   const p = await angemeldet(t, { reducedMotion: 'reduce' });
-  await zu(p, 'nachricht');
+  await zu(p, 'gespraeche');
   await p.click('#sprache-knopf');
   await p.waitForSelector('#sprache-menue:not([hidden])');
   const bewegt = await p.evaluate(() => document.getAnimations()
@@ -235,7 +348,7 @@ test('"Bewegung reduzieren": nichts fliegt oder wandert, es wird nur ein- und au
 
 test('Tippflächen sind groß genug (mindestens 48 px)', async (t) => {
   const p = await angemeldet(t);
-  for (const ziel of ['reden', 'nachricht', 'einstellen']) {
+  for (const ziel of ['reden', 'gespraeche', 'einstellen']) {
     await zu(p, ziel);
     await p.waitForTimeout(250);
     const zuKlein = await p.evaluate(() => [...document.querySelectorAll('#app button, #sprache-knopf')]
