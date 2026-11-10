@@ -8,7 +8,7 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 
 | Bereich | Was passiert |
 |---|---|
-| **Reden / 聊天** | Fragen stellen oder einfach plaudern. Der große gelbe Knopf ist ein Mikrofon wie bei einer WeChat-Sprachnachricht: drücken, sprechen, nach einer kurzen Pause wird der Satz von selbst abgeschickt. Tippen geht genauso. Antworten kann man sich vorlesen lassen, mit Sprachdienst in einer natürlichen Stimme. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
+| **Reden / 聊天** | Fragen stellen oder einfach plaudern. Mit Sprachdienst redet man wie am Telefon: einmal auf den großen gelben Knopf tippen, dann hört Biko durchgehend zu, antwortet mit Stimme, und man kann ihm jederzeit ins Wort fallen. Der rote Knopf legt auf. Tippen geht genauso. Antworten kann man sich vorlesen lassen, mit Sprachdienst in einer natürlichen Stimme. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
 | **Verlauf / 记录** | Frühere Gespräche zum Nachlesen und Weiterreden, dazu der Knopf "Neues Gespräch". |
 | **Einstellen / 设置** | Für die Familie: nachsehen, was Biko sich gemerkt hat, dazu Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
 
@@ -104,7 +104,25 @@ Spracherkennung des Browsers.
 | `SPRACH_STIMME` | optional: die "Voice ID" einer bestimmten Stimme aus dem ElevenLabs-Konto. Leer: die erste Stimme des Kontos. Für Deutsch und Chinesisch am besten eine Stimme wählen, die beides gut spricht, und sie in "My Voices" speichern. |
 | `SPRACH_MODELL` | optional: Standard `eleven_v4_turbo` (schnell und günstig). `eleven_v4` klingt noch natürlicher, kostet das Doppelte und braucht länger. |
 
-So läuft es ab: Beim **Vorlesen** schickt die App den Text an den eigenen Server (`POST /api/vorlesen`), der holt
+So läuft das **Reden wie am Telefon** ab (seit November 2026):
+
+1. Einmal aufs Mikrofon tippen. Die App holt sich beim eigenen Server einen Zugang für 15 Minuten
+   (`POST /api/live-zugang`) und schickt das Mikrofon damit direkt an das Live-Zuhören von ElevenLabs
+   (`scribe_v2_realtime`). Der Schlüssel selbst bleibt am Server.
+2. Was man sagt, steht schon beim Sprechen im Eingabefeld. Nach einer Sekunde Pause ist der Satz fertig und geht
+   von selbst ab. Wer kurz absetzt und gleich weiterredet, wird nicht abgeschnitten. Deutsch und Chinesisch
+   erkennt der Dienst selbst.
+3. Bikos Antwort kommt stückweise (`POST /api/chat` mit `"strom": true`). Sobald der erste Satz fertig ist, spricht
+   Biko ihn (`POST /api/stimme`, der Ton kommt roh und spielt sofort, Satz für Satz lückenlos hintereinander).
+   Am Telefon antwortet Biko kürzer und ohne Listen. Muss er suchen, sagt er vorher "Moment, ich schau kurz nach".
+4. Redet man dazwischen, hört Biko sofort auf und hört zu. Seine eigene Stimme aus dem Lautsprecher zählt dabei
+   nicht (das Mikrofon filtert sie, und Wörter, die er gerade selbst sagt, werden nicht als Unterbrechung gewertet).
+5. Der rote Knopf legt auf. Nach 90 Sekunden Stille oder wenn man die App weglegt, legt Biko selbst auf.
+   Reißt die Verbindung ab, verbindet die App still neu.
+
+Geht das Live-Zuhören an einem Handy nicht, nimmt Biko wie früher Satz für Satz auf (siehe unten).
+
+Beim **Vorlesen** schickt die App den Text an den eigenen Server (`POST /api/vorlesen`), der holt
 den Ton bei ElevenLabs und gibt ihn als MP3 zurück. Dieselbe Antwort gleich nochmal anhören kostet nichts, der Ton
 der letzten Antworten bleibt in der offenen App im Speicher. Beim **Sprechen** nimmt das Handy auf, bis man fertig ist (eine Pause von
 knapp zwei Sekunden reicht, oder nochmal auf den Knopf tippen, spätestens nach einer Minute; wer 8 Sekunden lang
@@ -113,7 +131,8 @@ nichts sagt, bekommt einen Hinweis), die Aufnahme geht
 selbst. Fällt er aus, liest die Stimme des Browsers vor, statt dass es still bleibt. Der Schlüssel bleibt am
 Server, das Handy sieht ihn nie.
 
-Noch nicht am echten Gerät geprüft: Safari am iPhone (Ton nach dem Sprechen, Aufnahme als mp4).
+Noch nicht am echten Gerät geprüft: Safari am iPhone (Ton nach dem Sprechen, Aufnahme als mp4, Lautstärke und
+Echo beim Reden wie am Telefon über den Lautsprecher).
 
 ## Kosten
 
@@ -123,7 +142,8 @@ Das sind Schätzungen, die echten Zahlen stehen in der Anthropic-Konsole. Wer sp
 
 Der Sprachdienst kostet extra (Stand November 2026, laut Preisliste von ElevenLabs): Vorlesen etwa 0,04 $ pro
 1.000 Zeichen, eine Antwort mit 300 Zeichen also grob 1 Cent. Zuhören etwa 0,22 $ pro Stunde Aufnahme, das fällt
-kaum ins Gewicht. Im kostenlosen Tarif sind rund 10.000 Zeichen im Monat dabei, das reicht zum Ausprobieren.
+kaum ins Gewicht. Beim Reden wie am Telefon zählt die ganze Zeit, in der das Gespräch offen ist (das Live-Zuhören
+wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst auf. Im kostenlosen Tarif sind rund 10.000 Zeichen im Monat dabei, das reicht zum Ausprobieren.
 "Antworten immer laut vorlesen" in den Einstellungen liest jede Antwort vor und kostet entsprechend mehr.
 
 ## Daten
