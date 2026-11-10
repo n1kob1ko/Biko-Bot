@@ -349,11 +349,12 @@
   let sendet = false;
   let hoert = null;      // Biko hört gerade zu: Aufnahme oder Spracherkennung, mit stop()
   let versteht = false;  // die Aufnahme ist beim Sprachdienst, der Satz kommt gleich
+  let telefon = null;     // läuft gerade ein Gespräch wie am Telefon (siehe unten)?
 
   function knopfZeigen() {
     const art = L.knopfArt(feld.value, !!hoert);
     chatKnopf.dataset.art = art;
-    chatKnopf.setAttribute('aria-label', t('knopf_' + art));
+    chatKnopf.setAttribute('aria-label', t(telefon ? 'knopf_auflegen' : 'knopf_' + art));
     chatKnopf.disabled = (sendet || versteht) && art !== 'stopp';
     feld.placeholder = t(hoert ? 'eingabe_hoert' : versteht ? 'eingabe_versteht' : 'eingabe');
   }
@@ -549,6 +550,34 @@
     ganzNachUnten();
   }
 
+  // Die Antwort kommt stückweise (Server-Sent Events): `beimText` bekommt jedes neue Stück, am Ende kommt alles,
+  // was Biko dabei getan hat (gemerkt, Nachrichten, Links).
+  async function chatStrom(daten, beimText) {
+    let r;
+    try { r = await anfrage('/api/chat', { ...daten, strom: true }); } catch (e) { throw new Error(t('keine_verbindung')); }
+    if (!r.ok || !r.body) {
+      let j = {};
+      try { j = await r.json(); } catch (e) { /* leer */ }
+      if (r.status === 401) loginZeigen();
+      throw new Error(j.fehler || t('fehler'));
+    }
+    const leser = r.body.getReader(), dekoder = new TextDecoder();
+    let rest = '';
+    for (;;) {
+      let teil;
+      try { teil = await leser.read(); } catch (e) { throw new Error(t('keine_verbindung')); }
+      if (teil.done) break;
+      const s = L.sseLesen(rest + dekoder.decode(teil.value, { stream: true }));
+      rest = s.rest;
+      for (const e of s.ereignisse) {
+        if (e.fehler) throw new Error(e.fehler);
+        if (e.fertig) return e.fertig;
+        if (typeof e.text === 'string') beimText(e.text);
+      }
+    }
+    throw new Error(t('keine_verbindung')); // die Verbindung ging vor dem Ende zu
+  }
+
   // `von`: Stelle, von der die Frage losfliegt (Vorschlag oder Eingabefeld)
   async function senden(text, von) {
     text = text.trim();
@@ -564,24 +593,41 @@
     B.flug(blase(text, 'ich'), start);
     const warte = denkBlase();
     const hier = sitzung;
+    const tel = telefon; // am Telefon spricht Biko schon, während die Antwort noch kommt
+    if (tel) antwortBeginnt(tel);
+    let live = null;     // Bikos Antwort, solange sie noch kommt: sie wächst Stück für Stück
+    const stueck = (s) => {
+      if (hier !== sitzung) return;
+      if (!live) { warte.remove(); live = blase('', 'biko-sagt-live'); }
+      live.firstChild.textContent += s;
+      nachUnten();
+      if (tel && telefon === tel) antwortStueck(tel, s);
+    };
     try {
-      const j = await api('/api/chat', { text, gespraech: gespraechNr });
+      const j = await chatStrom({ text, gespraech: gespraechNr, gesprochen: !!tel }, stueck);
       gespraeche = [j.gespraech, ...gespraeche.filter((g) => g.id !== j.gespraech.id)];
       if (hier === sitzung) { // sonst wurde inzwischen ein anderes Gespräch geöffnet: die Antwort steht dann im Verlauf
         warte.remove();
-        stimmung('da');
+        if (live) live.remove();
         gespraechNr = j.gespraech.id;
         const d = bikoSagt({ ...j, text: j.antwort });
-        if (vorlesenAn()) vorlesen(L.vorleseText(j.antwort, j.nachrichten), d.querySelector('.vorlesen'));
+        if (live) d.classList.add('gleich-da');
+        if (tel && telefon === tel) antwortFertig(tel, j);
+        else {
+          stimmung('da');
+          if (vorlesenAn()) vorlesen(L.vorleseText(j.antwort, j.nachrichten), d.querySelector('.vorlesen'));
+        }
       }
       gespraecheZeigen();
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
     } catch (err) {
       if (hier === sitzung) {
         warte.remove();
+        if (live) live.remove();
         stimmung('traurig', 5000);
         blase(err.message, 'fehler-blase');
-        if (!feld.value) feld.value = text; // nichts geht verloren
+        if (tel && telefon === tel) { antwortBeginnt(tel); tel.sprecher.sagen(err.message); }
+        else if (!feld.value) feld.value = text; // nichts geht verloren
       }
     }
     sendet = false;
@@ -638,7 +684,12 @@
     const p = $('#chat-hinweis');
     p.textContent = text;
     clearTimeout(p._uhr);
-    p._uhr = setTimeout(() => { p.textContent = ''; }, 8000);
+    p._uhr = setTimeout(() => { p.textContent = telefon ? t('telefon_laeuft') : ''; }, 8000);
+  }
+  function dauerHinweis(text) {
+    const p = $('#chat-hinweis');
+    clearTimeout(p._uhr);
+    p.textContent = text;
   }
 
   // Mit Sprachdienst: das Handy nimmt auf, der Server lässt die Aufnahme verstehen. Der Dienst erkennt selbst,
@@ -758,11 +809,145 @@
     try { r.start(); } catch (e) { fertig('fehler'); }
   }
 
+  // ---------- Reden wie am Telefon ----------
+  // Einmal aufs Mikrofon tippen, dann hört Biko durchgehend zu (Live-Zuhören beim Sprachdienst). Ist ein Satz fertig,
+  // geht er von selbst ab. Biko spricht seine Antwort Satz für Satz, schon während sie noch kommt. Wer ihm ins Wort
+  // fällt, unterbricht ihn. Der rote Knopf legt auf, nach langer Stille legt Biko selbst auf.
+  const Tel = window.BikoTelefon;
+  let liveGeht = true; // klappt das Live-Zuhören nicht, nimmt Biko für den Rest der Sitzung wieder Satz für Satz auf
+  const STILL_AUFLEGEN = 90000;
+  const kannTelefonieren = () => sprachdienst && liveGeht && !!Tel && !!window.WebSocket && !!window.AudioWorkletNode
+    && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  async function telefonieren() {
+    if (telefon || mikroStartet) return;
+    mikroStartet = true;
+    vorlesenStopp();
+    stimmeWecken();
+    const ac = tonKontext(); // jetzt, solange das Antippen gilt: sonst bleibt das iPhone stumm
+    const tel = { offen: feld.value.trim(), gesagt: '', puffer: '', stumm: false, zuletzt: Date.now(), versuche: 0 };
+    tel.sprecher = Tel.sprecher({
+      ac,
+      holen: (text, vorher, signal) => fetch('/api/stimme', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
+        body: JSON.stringify({ text, vorher }), credentials: 'same-origin', signal,
+      }),
+      beimStart: () => { tel.zuletzt = Date.now(); if (telefon === tel) stimmung('da'); },
+      beimEnde: () => { tel.zuletzt = Date.now(); if (telefon === tel && !sendet) stimmung('hoert'); },
+      beimFehler: () => { if (telefon === tel) hinweis(t('stimme_weg')); },
+    });
+    try { await verbinden(tel, ac); } catch (e) {
+      mikroStartet = false;
+      if (e && e.art === 'mikro') { hinweis(t('mikro_verboten')); return; }
+      liveGeht = false; // dann eben wie bisher: aufnehmen, nach der Pause verstehen lassen
+      aufnehmen();
+      return;
+    }
+    mikroStartet = false;
+    telefon = tel;
+    hoert = { stop: () => auflegen() };
+    stimmung('hoert');
+    knopfZeigen();
+    dauerHinweis(t('telefon_laeuft'));
+    tel.uhr = setInterval(() => {
+      if (telefon === tel && !sendet && !tel.sprecher.spricht() && Date.now() - tel.zuletzt > STILL_AUFLEGEN) auflegen(t('telefon_still'));
+    }, 5000);
+  }
+  async function verbinden(tel, ac) {
+    let zugang;
+    try { zugang = await api('/api/live-zugang', {}); } catch (e) { throw { art: 'live' }; }
+    tel.hoerer = await Tel.hoeren({
+      ac, zugang,
+      beimTeil: (text) => gehoert(tel, text, false),
+      beimSatz: (text) => gehoert(tel, text, true),
+      beimEnde: () => verbindungWeg(tel),
+    });
+  }
+  // Ein Zugang gilt nur eine Weile: dann still neu verbinden, ohne dass die Person etwas merkt
+  async function verbindungWeg(tel) {
+    if (telefon !== tel) return;
+    if (tel.versuche < 2) {
+      tel.versuche++;
+      try {
+        await verbinden(tel, tonKontext());
+        if (telefon !== tel) tel.hoerer.stop(); // inzwischen aufgelegt
+        return;
+      } catch (e) { /* dann eben auflegen */ }
+    }
+    auflegen(t('telefon_weg'));
+  }
+  // `fertig`: der Sprachdienst meint, der Satz ist zu Ende. Sonst ist es, was gerade gesprochen wird.
+  function gehoert(tel, text, fertig) {
+    if (telefon !== tel) return;
+    text = text.trim();
+    if (!text) return;
+    tel.zuletzt = Date.now();
+    if (tel.sprecher.spricht() && !tel.stumm) {
+      // Hört das Mikrofon nur Bikos eigene Stimme, passiert nichts. Sonst fällt die Person ihm ins Wort: er hört sofort auf.
+      if (fertig ? L.istEcho(text, tel.gesagt) : !L.istUnterbrechung(text, tel.gesagt)) return;
+      tel.stumm = true;
+      tel.sprecher.stopp();
+    }
+    clearTimeout(tel.sendeUhr);
+    feld.value = (tel.offen ? tel.offen + ' ' : '') + text;
+    feldAnpassen();
+    if (!sendet) stimmung('hoert');
+    if (!fertig) return;
+    tel.offen = feld.value.trim();
+    tel.versuche = 0;
+    tel.sendeUhr = setTimeout(() => abschicken(tel), 500); // wer gleich weiterredet, wird nicht abgeschnitten
+  }
+  function abschicken(tel) {
+    if (telefon !== tel || !tel.offen) return;
+    if (sendet) { tel.sendeUhr = setTimeout(() => abschicken(tel), 300); return; } // erst die vorige Antwort
+    const text = tel.offen;
+    tel.offen = '';
+    feld.value = text;
+    senden(text);
+  }
+  function antwortBeginnt(tel) {
+    tel.stumm = false;
+    tel.gesagt = '';
+    tel.puffer = '';
+    tel.sprecher.neueAntwort();
+  }
+  function antwortStueck(tel, s) {
+    tel.gesagt += s;
+    const teil = L.saetzeTeilen(tel.puffer + s);
+    tel.puffer = teil.rest;
+    if (!tel.stumm) teil.saetze.forEach((satz) => tel.sprecher.sagen(satz));
+  }
+  function antwortFertig(tel, j) {
+    const saetze = L.saetzeTeilen(tel.puffer, true).saetze;
+    tel.puffer = '';
+    // Hat Biko eine Nachricht für jemanden geschrieben, liest er sie danach vor
+    (j.nachrichten || []).forEach((n) => { saetze.push(...L.saetzeTeilen(n.text, true).saetze); tel.gesagt += ' ' + n.text; });
+    if (!tel.stumm) saetze.forEach((satz) => tel.sprecher.sagen(satz));
+    if (!tel.sprecher.spricht()) stimmung('hoert');
+  }
+  function auflegen(meldung) {
+    const tel = telefon;
+    if (!tel) return;
+    telefon = null;
+    hoert = null;
+    clearInterval(tel.uhr);
+    clearTimeout(tel.sendeUhr);
+    if (tel.hoerer) tel.hoerer.stop();
+    tel.sprecher.stopp();
+    if (tel.offen) feld.value = tel.offen; // was noch nicht abgeschickt war, bleibt im Feld
+    feldAnpassen();
+    stimmung('da');
+    dauerHinweis('');
+    if (meldung) hinweis(meldung);
+  }
+  // Wer die App weglegt oder wechselt, legt auf: sonst hört das Handy im Hintergrund weiter zu
+  document.addEventListener('visibilitychange', () => { if (document.hidden) auflegen(); });
+
   $('#chat-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const art = chatKnopf.dataset.art;
     if (art === 'stopp') hoert.stop();
-    else if (art === 'mikro') (kannAufnehmen() ? aufnehmen() : zuhoeren());
+    else if (art === 'mikro') (kannTelefonieren() ? telefonieren() : kannAufnehmen() ? aufnehmen() : zuhoeren());
     else senden(feld.value);
   });
   feld.addEventListener('input', feldAnpassen);

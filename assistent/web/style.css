@@ -234,6 +234,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 .blase { max-width: 88%; padding: 12px 16px; border-radius: 22px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .blase.ich { align-self: flex-end; background: var(--card); border: 2px solid var(--line); border-bottom-right-radius: 8px; }
 .blase.biko-sagt { align-self: flex-start; background: var(--blase); border-bottom-left-radius: 8px; animation: kommt var(--t-ein) var(--ease-out) both; }
+.blase.biko-sagt-live { align-self: flex-start; background: var(--blase); border-bottom-left-radius: 8px; animation: kommt var(--t-ein) var(--ease-out) both; }
+.blase.biko-sagt.gleich-da { animation: none; } /* ersetzt die mitlaufende Antwort, ohne nochmal hereinzukommen */
 .blase.fehler-blase { align-self: flex-start; background: var(--down-bg); color: var(--down); font-weight: 700; }
 .blase .vorlesen {
   display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 8px 0 -4px -8px; padding: 0 12px 0 8px;
@@ -413,7 +415,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 
 /* "Bewegung reduzieren": nichts wandert oder wächst, es wird nur ein- und ausgeblendet */
 @media (prefers-reduced-motion: reduce) {
-  .ansicht.kommt, .kommt .reihe, .alarm > *, .blase.biko-sagt, .notiz, .links { animation-name: blende-ein; animation-duration: 160ms; animation-delay: 0s; }
+  .ansicht.kommt, .kommt .reihe, .alarm > *, .blase.biko-sagt, .blase.biko-sagt-live, .notiz, .links { animation-name: blende-ein; animation-duration: 160ms; animation-delay: 0s; }
   .druck:active:not(:disabled), .leiste button:active, .segment button:active, #sprache-menue button:active { transform: none; }
   .erinnerung.neu { animation-name: blende-ein; animation-duration: 160ms; }
   .wechsel .icon { transform: none; filter: none; }

@@ -172,3 +172,59 @@ test('Texte enthalten keine Emojis und keine Gedankenstriche', () => {
     assert.doesNotMatch(s, /[—–]/, s);
   }
 });
+
+// ---------- Reden wie am Telefon ----------
+
+test('Antwort in Sätze teilen: fertige Sätze gehen gleich zum Sprechen, der Rest wartet', () => {
+  assert.deepEqual(L.saetzeTeilen('Hallo Anna! Wie geht es dir? Ich hab'), { saetze: ['Hallo Anna!', 'Wie geht es dir?'], rest: ' Ich hab' });
+  assert.deepEqual(L.saetzeTeilen('Ein Satz.'), { saetze: [], rest: 'Ein Satz.' }, 'ohne Leerzeichen danach kann noch etwas kommen');
+  assert.deepEqual(L.saetzeTeilen('Ein Satz.', true), { saetze: ['Ein Satz.'], rest: '' });
+  assert.deepEqual(L.saetzeTeilen('Moment, ich schau nach.\nBei Billa'), { saetze: ['Moment, ich schau nach.'], rest: 'Bei Billa' });
+});
+
+test('Sätze teilen: Zahlen, Datum und Abkürzungen beenden keinen Satz', () => {
+  assert.deepEqual(L.saetzeTeilen('Am 24. Dezember um 8.30 Uhr, z. B. mit Dr. Huber. Gut'),
+    { saetze: ['Am 24. Dezember um 8.30 Uhr, z. B. mit Dr. Huber.'], rest: ' Gut' });
+});
+
+test('Sätze teilen: Chinesisch braucht kein Leerzeichen nach dem Satzzeichen', () => {
+  assert.deepEqual(L.saetzeTeilen('你好！今天天气很好。我们'), { saetze: ['你好！', '今天天气很好。'], rest: '我们' });
+  assert.deepEqual(L.saetzeTeilen('“好的。”然后'), { saetze: ['“好的。”'], rest: '然后' });
+});
+
+test('Echo: was Biko selbst gerade sagt, zählt nicht als Antwort der Person', () => {
+  const gesagt = 'Diese Woche gibt es bei Billa Kaffee um 30 Prozent günstiger.';
+  assert.equal(L.istEcho('bei Billa Kaffee günstiger', gesagt), true);
+  assert.equal(L.istEcho('Warte, ich hab eine Frage', gesagt), false);
+  assert.equal(L.istEcho('Hallo', ''), false);
+  assert.equal(L.istEcho('今天天气', '今天天气很好。'), true);
+  assert.equal(L.istEcho('等一下', '今天天气很好。'), false);
+});
+
+test('Ins Wort fallen: erst bei richtigen Worten, nicht bei einem Räuspern oder dem eigenen Echo', () => {
+  const gesagt = 'Diese Woche gibt es bei Billa Kaffee günstiger.';
+  assert.equal(L.istUnterbrechung('Moment mal', gesagt), true);
+  assert.equal(L.istUnterbrechung('Stopp', gesagt), true);
+  assert.equal(L.istUnterbrechung('mhm', gesagt), false);
+  assert.equal(L.istUnterbrechung('  ', gesagt), false);
+  assert.equal(L.istUnterbrechung('Billa Kaffee', gesagt), false);
+  assert.equal(L.istUnterbrechung('等等', '今天天气很好。'), true);
+  assert.equal(L.istUnterbrechung('嗯', '今天天气很好。'), false);
+});
+
+test('Server-Sent Events lesen, auch wenn ein Ereignis in zwei Stücken ankommt', () => {
+  const a = L.sseLesen('data: {"text":"Hal"}\n\ndata: {"text":"lo"}\n\ndata: {"fer');
+  assert.deepEqual(a.ereignisse, [{ text: 'Hal' }, { text: 'lo' }]);
+  const b = L.sseLesen(a.rest + 'tig":{"antwort":"Hallo"}}\n\n');
+  assert.deepEqual(b, { ereignisse: [{ fertig: { antwort: 'Hallo' } }], rest: '' });
+});
+
+test('Ton aus dem Netz: 16-Bit-Stücke werden zu Zahlen, ein halbes Byte wartet aufs nächste Stück', () => {
+  const a = L.pcmLesen(null, new Uint8Array([0x00, 0x40, 0x00, 0xc0, 0xff]));
+  assert.deepEqual(Array.from(a.werte), [0.5, -0.5]);
+  assert.deepEqual(Array.from(a.rest), [0xff]);
+  const b = L.pcmLesen(a.rest, new Uint8Array([0x7f]));
+  assert.equal(b.werte.length, 1);
+  assert.ok(Math.abs(b.werte[0] - 1) < 0.001);
+  assert.equal(b.rest, null);
+});

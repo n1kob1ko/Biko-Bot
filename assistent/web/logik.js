@@ -133,5 +133,89 @@
     return Math.round(ms * 0.8);
   }
 
-  return { faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  // ---------- Reden wie am Telefon ----------
+
+  const ZH_ENDE = '。！？；', ENDE = '.!?…', ZU = '”」』）"\'';
+  const ABKUERZUNG = new Set(['ca', 'dr', 'nr', 'bzw', 'usw', 'evtl', 'ggf', 'inkl', 'st', 'hr', 'fr', 'mag', 'ing', 'prof', 'tel', 'vgl', 'ab']);
+  // Biko spricht Satz für Satz, während die Antwort noch kommt. Liefert die fertigen Sätze und was noch wartet.
+  // `ende`: die Antwort ist vollständig, der Rest wird auch gesprochen.
+  function saetzeTeilen(puffer, ende = false) {
+    const saetze = [];
+    let start = 0;
+    const nimm = (bis, weiter) => {
+      const satz = puffer.slice(start, bis).trim();
+      if (satz) saetze.push(satz);
+      start = weiter;
+    };
+    for (let i = 0; i < puffer.length; i++) {
+      const c = puffer[i];
+      if (c === '\n') { nimm(i, i + 1); continue; }
+      if (ZH_ENDE.includes(c)) {
+        let j = i + 1;
+        while (j < puffer.length && ZU.includes(puffer[j])) j++;
+        nimm(j, j);
+        i = j - 1;
+        continue;
+      }
+      if (ENDE.includes(c) && i + 1 < puffer.length && /\s/.test(puffer[i + 1])) {
+        if (c === '.') { // "24. Dezember", "z. B." oder "Dr." beenden keinen Satz
+          const wort = (/([\p{L}\p{N}]+)$/u.exec(puffer.slice(start, i)) || [''])[0];
+          if (/^\d+$/.test(wort) || wort.length === 1 || ABKUERZUNG.has(wort.toLowerCase())) continue;
+        }
+        nimm(i + 1, i + 1);
+      }
+    }
+    if (ende) { nimm(puffer.length, puffer.length); return { saetze, rest: '' }; }
+    return { saetze, rest: puffer.slice(start) };
+  }
+
+  const CJK = /[㐀-鿿]/u;
+  const zeichen = (s) => Array.from(String(s || '')).filter((c) => CJK.test(c));
+  const woerter = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  // Hört das Mikrofon gerade Bikos eigene Stimme? Dann stehen fast alle gehörten Wörter in dem, was er sagt.
+  function istEcho(gehoert, gesagt) {
+    if (!String(gesagt || '').trim()) return false;
+    if (CJK.test(gehoert)) {
+      const z = zeichen(gehoert);
+      return z.filter((c) => gesagt.includes(c)).length / z.length >= 0.7;
+    }
+    const w = woerter(gehoert);
+    if (!w.length) return false;
+    const da = new Set(woerter(gesagt));
+    return w.filter((x) => da.has(x)).length / w.length >= 0.6;
+  }
+  // Fällt die Person Biko ins Wort? Erst bei richtigen Worten, nicht bei "mhm" und nicht beim eigenen Echo.
+  function istUnterbrechung(teil, gesagt) {
+    const genug = CJK.test(teil) ? zeichen(teil).length >= 2 : ((w) => w.length >= 2 || (w.length === 1 && w[0].length >= 4))(woerter(teil));
+    return genug && !istEcho(teil, gesagt);
+  }
+
+  // Server-Sent Events: "data: {...}" und eine Leerzeile. Ein angefangenes Ereignis bleibt als Rest für später.
+  function sseLesen(text) {
+    const teile = String(text).split('\n\n');
+    const rest = teile.pop();
+    const ereignisse = [];
+    for (const teil of teile) {
+      const daten = teil.split('\n').filter((z) => z.startsWith('data:')).map((z) => z.slice(5).trimStart()).join('\n');
+      if (!daten) continue;
+      try { ereignisse.push(JSON.parse(daten)); } catch (e) { /* kaputtes Ereignis überspringen */ }
+    }
+    return { ereignisse, rest };
+  }
+
+  // Roher Ton (16 Bit, little endian) als Zahlen von -1 bis 1. Ein übriges Byte wartet auf das nächste Stück.
+  function pcmLesen(rest, bytes) {
+    let b = bytes;
+    if (rest && rest.length) { b = new Uint8Array(rest.length + bytes.length); b.set(rest); b.set(bytes, rest.length); }
+    const n = b.length >> 1;
+    const werte = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let v = b[2 * i] | (b[2 * i + 1] << 8);
+      if (v >= 0x8000) v -= 0x10000;
+      werte[i] = v / 32768;
+    }
+    return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
+  }
+
+  return { saetzeTeilen, istEcho, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

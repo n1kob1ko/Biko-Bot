@@ -1,7 +1,10 @@
 """Startet den echten Server mit einer falschen KI, für die Browser-Tests (tests/e2e.test.js).
 Aufruf: python falscher_server.py <port> <daten-ordner>"""
 import json
+import math
 import os
+import re
+import struct
 import sys
 import time
 
@@ -11,9 +14,17 @@ import server  # noqa: E402
 from http.server import ThreadingHTTPServer  # noqa: E402
 
 
-def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None):
+def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None):
     time.sleep(0.4)  # damit "Biko denkt nach" sichtbar ist
-    frage = messages[-1]["content"]
+    antwort = antwort_fuer(messages[-1]["content"], werkzeuge)
+    if beim_text:   # wie die echte KI: die Antwort kommt in Stücken
+        for stueck in re.findall(r"\S+\s*", antwort):
+            beim_text(stueck)
+            time.sleep(0.02)
+    return antwort
+
+
+def antwort_fuer(frage, werkzeuge):
     # So wie die echte KI: Biko schreibt sich Erinnerungen über seine Werkzeuge selbst auf
     if frage.startswith("Erinnere mich"):
         werkzeuge["erinnerung_merken"]["tun"]({"text": "Herztablette", "zeit": "08:00"})
@@ -41,10 +52,21 @@ def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None
     return "Diese Woche gibt es bei Billa Kaffee um 30 % günstiger. Preise können sich ändern."
 
 
+# Zwei Sekunden leiser Ton, roh wie vom echten Dienst (16 Bit, 24 kHz): so lange "spricht" Biko pro Satz
+PCM = b"".join(struct.pack("<h", int(800 * math.sin(i / 24000 * 2 * math.pi * 220))) for i in range(48000))
+
+
+def falscher_strom(pfad, daten, kopf=None):
+    assert pfad.endswith("/stream?output_format=pcm_24000") and json.loads(daten)["text"], "falsche Anfrage zum Sprechen"
+    return iter([PCM[i:i + 4800] for i in range(0, len(PCM), 4800)])
+
+
 # Falscher Sprachdienst: liefert zum Vorlesen einen kurzen Ton und "versteht" aus jeder Aufnahme denselben Satz
 def falscher_sprachdienst(pfad, daten=None, kopf=None):
     if pfad.startswith("/v2/voices"):
         return json.dumps({"voices": [{"voice_id": "test-stimme", "name": "Test"}]}).encode()
+    if pfad == "/v1/single-use-token/realtime_scribe":
+        return json.dumps({"token": "einmal-zugang"}).encode()
     if pfad.startswith("/v1/text-to-speech/"):
         with open(os.path.join(os.path.dirname(__file__), "ton.mp3"), "rb") as f:
             return f.read()
@@ -55,4 +77,5 @@ def falscher_sprachdienst(pfad, daten=None, kopf=None):
 server.frage_claude = falsche_ki
 server.SPRACH_KEY = "test"
 server.sprach_anfrage = falscher_sprachdienst
+server.sprach_strom = falscher_strom
 ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), server.Handler).serve_forever()

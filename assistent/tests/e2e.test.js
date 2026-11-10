@@ -37,6 +37,9 @@ const FALSCHES_MIKRO = () => {
     }
     stop() { clearTimeout(this.t); this.onend(); }
   };
+  // Das Live-Zuhören erreicht den Sprachdienst im Test nicht: die Verbindung geht gleich wieder zu.
+  // Die Tests fürs Reden wie am Telefon setzen stattdessen FALSCHES_TELEFON ein.
+  window.WebSocket = class { constructor() { setTimeout(() => this.onclose && this.onclose(), 10); } send() {} close() {} };
 };
 
 // Die Uhr steht fest (Montag, 15 Uhr), damit keine Erinnerung von selbst in einen Test platzt.
@@ -126,7 +129,7 @@ test('Sprechen ohne Sprachdienst: der Browser hört zu, der Satz wird von selbst
   await p.waitForSelector('.blase.biko-sagt');
 });
 
-test('Sprechen mit Sprachdienst: die Aufnahme geht zum Server, der verstandene Satz wird gesendet', async (t) => {
+test('Sprechen, wenn das Live-Zuhören nicht geht: die Aufnahme geht zum Server, der verstandene Satz wird gesendet', async (t) => {
   const p = await angemeldet(t);
   const aufnahme = p.waitForRequest((r) => r.url().endsWith('/api/zuhoeren'));
   await p.click('#chat-knopf');
@@ -215,6 +218,111 @@ test('Sprechen: wer nichts sagt, bekommt nach ein paar Sekunden von selbst einen
   assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
   assert.equal(geschickt, 1);
   assert.equal(await p.locator('.blase').count(), 0);
+});
+
+// Falsches Live-Zuhören: nimmt den Ton an wie der Sprachdienst, der Test sagt, was "gehört" wurde (window.liveSagt)
+const FALSCHES_TELEFON = () => {
+  window.live = { gesendet: 0, zu: false, adresse: '' };
+  window.WebSocket = class {
+    constructor(url) {
+      this.readyState = 0;
+      window.live.adresse = url;
+      window.liveDienst = this;
+      setTimeout(() => { this.readyState = 1; this.sag({ message_type: 'session_started', session_id: 's1', config: {} }); }, 30);
+    }
+    sag(m) { if (this.onmessage) this.onmessage({ data: JSON.stringify(m) }); }
+    send(d) {
+      const m = JSON.parse(d);
+      if (m.message_type === 'input_audio_chunk' && m.sample_rate === 16000 && m.audio_base_64.length > 4000) window.live.gesendet++;
+    }
+    close() { this.readyState = 3; window.live.zu = true; }
+  };
+  window.liveSagt = (text, fertig) => window.liveDienst.sag({ message_type: fertig ? 'committed_transcript' : 'partial_transcript', text });
+};
+const hoertGeradeZu = (p) => p.waitForFunction(() => document.querySelector('#app .biko').dataset.mood === 'hoert');
+
+test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwortet mit Stimme', async (t) => {
+  const p = await angemeldet(t, { vorher: FALSCHES_TELEFON });
+  const stimmen = [];
+  p.on('request', (r) => { if (r.url().endsWith('/api/stimme')) stimmen.push(JSON.parse(r.postData()).text); });
+  await p.click('#chat-knopf');
+  await p.waitForSelector('#chat-knopf[data-art=stopp]');
+  assert.equal(await p.getAttribute('#chat-knopf', 'aria-label'), 'Gespräch beenden');
+  assert.match(await p.textContent('#chat-hinweis'), /Wir reden/);
+  await hoertGeradeZu(p);
+  // das Mikrofon geht laufend zum Live-Zuhören, mit Zugang vom Server, nie mit dem Schlüssel
+  const adresse = await p.evaluate(() => window.live.adresse);
+  assert.match(adresse, /^wss:\/\/api\.elevenlabs\.io\/v1\/speech-to-text\/realtime\?/);
+  assert.match(adresse, /token=einmal-zugang/);
+  assert.match(adresse, /commit_strategy=vad/);
+  await p.waitForFunction(() => window.live.gesendet >= 3);
+
+  // was gerade gesprochen wird, steht schon im Feld; ist der Satz fertig, geht er von selbst ab
+  await p.evaluate(() => window.liveSagt('Gibt es', false));
+  assert.equal(await p.inputValue('#chat-text'), 'Gibt es');
+  await p.evaluate(() => window.liveSagt('Gibt es Angebote für Kaffee?', true));
+  await p.waitForSelector('.blase.ich');
+  assert.equal(await p.textContent('.blase.ich'), 'Gibt es Angebote für Kaffee?');
+  await p.waitForSelector('.blase.biko-sagt');
+  assert.match(await p.textContent('.blase.biko-sagt'), /Billa/);
+  // Biko spricht Satz für Satz, kein Abspielen einer ganzen Datei
+  await p.waitForFunction(() => document.querySelector('#app .biko').dataset.mood === 'da');
+  assert.deepEqual(stimmen.slice(0, 1), ['Diese Woche gibt es bei Billa Kaffee um 30 % günstiger.']);
+  await p.waitForFunction(() => document.querySelectorAll('.blase.ich').length === 1);
+  // das Gespräch bleibt offen
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'stopp');
+
+  // hört das Mikrofon nur Bikos eigene Stimme, redet er einfach weiter
+  await p.evaluate(() => window.liveSagt('bei Billa Kaffee günstiger', false));
+  await p.waitForTimeout(150);
+  assert.equal(await stimmung(p), 'da');
+  // fällt man ihm ins Wort, hört er sofort auf und hört zu
+  await p.evaluate(() => window.liveSagt('Moment mal', false));
+  await hoertGeradeZu(p);
+  await p.evaluate(() => window.liveSagt('Moment mal, und Tee?', true));
+  await p.waitForFunction(() => document.querySelectorAll('.blase.ich').length === 2);
+  assert.equal(await p.textContent('.blase.ich >> nth=1'), 'Moment mal, und Tee?');
+  await p.waitForFunction(() => document.querySelectorAll('.blase.biko-sagt').length === 2);
+
+  // der rote Knopf legt auf: das Mikrofon geht aus
+  await p.click('#chat-knopf');
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+  assert.equal(await p.evaluate(() => window.live.zu), true);
+  assert.equal(await p.textContent('#chat-hinweis'), '');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Reden wie am Telefon: wer kurz absetzt und weiterredet, wird nicht abgeschnitten', async (t) => {
+  const p = await angemeldet(t, { vorher: FALSCHES_TELEFON });
+  await p.click('#chat-knopf');
+  await hoertGeradeZu(p);
+  await p.evaluate(() => window.liveSagt('Erinnere mich', true));
+  await p.waitForTimeout(200);
+  await p.evaluate(() => window.liveSagt('morgen um 8', false));
+  await p.waitForTimeout(700);
+  assert.equal(await p.locator('.blase.ich').count(), 0, 'noch nicht abgeschickt');
+  await p.evaluate(() => window.liveSagt('morgen um 8 an die Tablette.', true));
+  await p.waitForSelector('.blase.ich');
+  assert.equal(await p.textContent('.blase.ich'), 'Erinnere mich morgen um 8 an die Tablette.');
+  await p.waitForSelector('.notiz');
+});
+
+test('Reden wie am Telefon: weglegen legt auf, eine abgerissene Verbindung kommt still wieder', async (t) => {
+  const p = await angemeldet(t, { vorher: FALSCHES_TELEFON });
+  let zugaenge = 0;
+  p.on('request', (r) => { if (r.url().endsWith('/api/live-zugang')) zugaenge++; });
+  await p.click('#chat-knopf');
+  await hoertGeradeZu(p);
+  await p.evaluate(() => window.liveDienst.onclose());
+  await p.waitForFunction(() => window.live.gesendet >= 1 && window.liveDienst.readyState === 1);
+  assert.equal(zugaenge, 2);
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'stopp');
+  await p.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
+  assert.deepEqual(p.fehler, []);
 });
 
 test('Vorlesen mit Sprachdienst: der Ton kommt vom Server, nochmal antippen stoppt', async (t) => {

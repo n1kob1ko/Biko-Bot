@@ -11,8 +11,14 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         Die App meldet sich zur Uhrzeit. GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
 Nachrichten, Links und Erinnerungen sind Werkzeuge, die Claude selbst aufruft.
 
-Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) liest Biko mit einer natürlichen Stimme vor
-(POST /api/vorlesen) und versteht Gesprochenes in jeder Sprache (POST /api/zuhoeren, die Aufnahme als Ton).
+Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
+  - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
+    das Mikrofon direkt an das Live-Zuhören von ElevenLabs. Der Dienst merkt selbst, wann ein Satz fertig ist.
+  - Die Antwort kommt stückweise (POST /api/chat mit "strom": true, als Server-Sent Events), die App spricht
+    Satz für Satz, während Biko noch schreibt (POST /api/stimme liefert den Ton roh als PCM, 24 kHz, sobald er entsteht).
+  - Fällt man Biko ins Wort, hört er auf zu sprechen.
+Daneben gibt es noch das Vorlesen einer ganzen Antwort als MP3 (POST /api/vorlesen) und das Verstehen einer ganzen
+Aufnahme (POST /api/zuhoeren), falls das Live-Zuhören an einem Handy nicht geht.
 Ohne Schlüssel sprechen und hören die Browser der Handys selbst, so gut sie können.
 
 Dazu ein Profil (GET/POST /api/profil): Name, Diät-Regeln, Notizen. Biko liest es bei jeder Antwort mit.
@@ -58,7 +64,10 @@ SPRACH_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 SPRACH_STIMME = os.environ.get("SPRACH_STIMME", "")              # Nummer der Stimme (voice_id); leer: die erste des Kontos
 SPRACH_MODELL = os.environ.get("SPRACH_MODELL", "eleven_v4_turbo")   # spricht über 90 Sprachen, antwortet schnell
 SPRACH_HOEREN = "scribe_v2"                                      # erkennt die gesprochene Sprache selbst
+SPRACH_LIVE = "scribe_v2_realtime"                              # hört live zu, für das Gespräch wie am Telefon
+LIVE_ADRESSE = "wss://api.elevenlabs.io"                         # dorthin schickt die App das Mikrofon beim Live-Zuhören
 MAX_VORLESEN = 2500       # so viele Zeichen werden höchstens vorgelesen
+MAX_SATZ = 600            # so viele Zeichen hat ein Stück, das im Gespräch auf einmal gesprochen wird
 MAX_AUFNAHME = 6_000_000  # Bytes; eine Minute Sprechen ist etwa 1 MB
 COOKIE = "biko_assistent"
 COOKIE_TAGE = 365
@@ -213,6 +222,16 @@ def claude_anfrage(**kw):
     return client().beta.messages.create(**kw)
 
 
+def claude_strom(beim_text, **kw):
+    """Wie claude_anfrage, aber jedes neue Stück Text geht sofort an `beim_text`. Damit kann Biko schon sprechen,
+    während er noch schreibt. Liefert am Ende die ganze Antwort, genau wie claude_anfrage."""
+    with client().beta.messages.stream(**kw) as strom:
+        for ereignis in strom:
+            if ereignis.type == "content_block_delta" and getattr(ereignis.delta, "type", "") == "text_delta":
+                beim_text(ereignis.delta.text)
+        return strom.get_final_message()
+
+
 def werkzeug_ergebnis(block, werkzeuge):
     """Führt ein von Claude gewünschtes Werkzeug aus. Fehler gehen als Text zurück, damit Claude nachfragen kann."""
     try:
@@ -224,18 +243,29 @@ def werkzeug_ergebnis(block, werkzeuge):
         return {"type": "tool_result", "tool_use_id": block.id, "content": f"Fehler: {e}", "is_error": True}
 
 
-def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None):
+def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None):
     """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung.
-    `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen."""
+    `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen.
+    `beim_text`: bekommt jedes Stück Text, sobald es da ist (für das Gespräch wie am Telefon)."""
     global _seiten_oeffnen
     werkzeuge = werkzeuge or {}
     web = [w for w in WEBSUCHE if _seiten_oeffnen or w["name"] != "web_fetch"] if websuche else []
     tools = web + [w["schema"] for w in werkzeuge.values()]
     messages = list(messages)
     benutzt = []
+    # Zwischen zwei Runden (etwa "Ich schau kurz nach." und danach die Suche) beginnt ein neuer Satz
+    runde_offen = {"gesagt": False, "trennen": False}
+
+    def weiterreichen(stueck):
+        if not stueck:
+            return
+        if runde_offen["trennen"]:
+            stueck, runde_offen["trennen"] = "\n" + stueck, False
+        runde_offen["gesagt"] = True
+        beim_text(stueck)
 
     def anfrage(tools):
-        return claude_anfrage(
+        kw = dict(
             model=MODELL,
             max_tokens=max_tokens,
             system=system,
@@ -247,6 +277,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
             fallbacks="default",
             **({"tools": tools} if tools else {}),
         )
+        return claude_strom(weiterreichen, **kw) if beim_text else claude_anfrage(**kw)
 
     try:
         for runde in range(1, 9):  # Werkzeug-Aufrufe und lange Websuchen (pause_turn) werden fortgesetzt
@@ -262,6 +293,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
                 tools, _seiten_oeffnen = ohne, False
                 protokoll("Seiten öffnen (web_fetch) wurde abgelehnt, Biko sucht ab jetzt ohne.")
             benutzt += [b.name for b in r.content if b.type in ("tool_use", "server_tool_use")]
+            runde_offen["trennen"] = runde_offen["gesagt"]
             if r.stop_reason == "pause_turn":
                 messages = messages + [{"role": "assistant", "content": r.content}]
             elif r.stop_reason == "tool_use":
@@ -299,12 +331,29 @@ def sprach_anfrage(pfad, daten=None, kopf=None):
         return r.read()
 
 
-def sprachdienst(pfad, daten=None, kopf=None):
-    """Fragt den Sprachdienst. Wirft RuntimeError mit freundlicher Meldung."""
+def sprach_strom(pfad, daten, kopf=None):
+    """Wie sprach_anfrage, liefert die Antwort aber in Stücken, sobald sie ankommen. Die Tests ersetzen ihn."""
+    req = urllib.request.Request("https://api.elevenlabs.io" + pfad, data=daten, method="POST",
+                                 headers={"xi-api-key": SPRACH_KEY, **(kopf or {})})
+    r = urllib.request.urlopen(req, timeout=40)
+
+    def stuecke():
+        with r:
+            while True:
+                stueck = r.read1(8192) if hasattr(r, "read1") else r.read(8192)
+                if not stueck:
+                    return
+                yield stueck
+    return stuecke()
+
+
+def sprachdienst(pfad, daten=None, kopf=None, strom=False):
+    """Fragt den Sprachdienst. Wirft RuntimeError mit freundlicher Meldung.
+    `strom`: die Antwort kommt als Folge von Stücken (Fehler beim Verbinden kommen trotzdem gleich hier an)."""
     if not SPRACH_KEY:
         raise RuntimeError("Der Sprachdienst ist nicht eingerichtet.")
     try:
-        return sprach_anfrage(pfad, daten, kopf)
+        return sprach_strom(pfad, daten, kopf) if strom else sprach_anfrage(pfad, daten, kopf)
     except urllib.error.HTTPError as e:
         try:
             grund = e.read()[:300].decode("utf-8", "replace")   # die Fehlermeldung des Dienstes, kein Inhalt aus Gesprächen
@@ -345,6 +394,30 @@ def ton_holen(text):
     return ton
 
 
+def ton_strom(text, vorher=""):
+    """Ein Stück einer Antwort als Ton, roh als PCM (16 Bit, 24 kHz, mono), Stück für Stück, sobald es entsteht.
+    `vorher`: was Biko davor gesagt hat, damit die Stimme im Satzfluss bleibt."""
+    text = text[:MAX_SATZ]
+    body = {"text": text, "model_id": SPRACH_MODELL}
+    if vorher:
+        body["previous_text"] = vorher[-500:]
+    stuecke = sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}/stream?output_format=pcm_24000",
+                           json.dumps(body).encode(), {"Content-Type": "application/json"}, strom=True)
+    protokoll(f"Sprachdienst: {len(text)} Zeichen gesprochen")
+    return stuecke
+
+
+def live_zugang():
+    """Ein Zugang für 15 Minuten, mit dem die App selbst live beim Sprachdienst zuhören lassen kann.
+    Der eigentliche Schlüssel verlässt den Server nie."""
+    j = json.loads(sprachdienst("/v1/single-use-token/realtime_scribe", b""))
+    zugang = str(j.get("token") or "")
+    if not zugang:
+        raise RuntimeError("Die Stimme geht gerade nicht. Bitte gleich nochmal probieren.")
+    protokoll("Sprachdienst: Live-Zuhören begonnen")
+    return {"token": zugang, "modell": SPRACH_LIVE}
+
+
 AUFNAHME_ARTEN = {"audio/webm": "webm", "audio/mp4": "mp4", "audio/ogg": "ogg", "audio/wav": "wav",
                   "audio/mpeg": "mp3", "audio/aac": "aac", "audio/x-m4a": "m4a"}
 
@@ -365,7 +438,17 @@ def text_hoeren(ton, art):
     return {"text": str(j.get("text") or "").strip(), "sprache": sprache}
 
 
-def system_prompt():
+GESPROCHEN = """
+
+Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt sie zu lesen.
+- Antworte so, wie man am Telefon redet: kurz, meistens 1 bis 3 Sätze, natürlich und herzlich. Keine Listen, keine Nummern.
+  Bei einer Anleitung sagst du nur den ersten Schritt oder zwei und fragst, ob es weitergehen soll.
+- Frag höchstens eine Sache auf einmal.
+- Musst du im Internet suchen, sag vorher einen ganz kurzen Satz wie "Moment, ich schau kurz nach." und such dann.
+- Was du hörst, wurde automatisch mitgeschrieben. Ist etwas unverständlich oder passt nicht zusammen, frag freundlich nach."""
+
+
+def system_prompt(gesprochen=False):
     p = profil()
     t = jetzt()
     tage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
@@ -379,7 +462,7 @@ def system_prompt():
         notizen=p["notizen"].strip() or "keine",
         datum=f"{tage[t.weekday()]}, {t.day}.{t.month}.{t.year}",
         uhrzeit=t.strftime("%H:%M"),
-    )
+    ) + (GESPROCHEN if gesprochen else "")
 
 
 # ---------- Funktionen ----------
@@ -502,13 +585,15 @@ def zeige_werkzeuge():
     return werkzeuge, entwuerfe, links
 
 
-def chat(text, gespraech_nr=""):
+def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
+    """Eine Frage im Gespräch. `beim_text` bekommt die Antwort stückweise, `gesprochen`: man redet gerade wie am Telefon."""
     with _lock:
         g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
     messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": text}]
     zeigen, entwuerfe, links = zeige_werkzeuge()
     vorher = erinnerungen_lesen()
-    antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen})
+    antwort = frage_claude(system_prompt(gesprochen), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
+                           **({"beim_text": beim_text} if beim_text else {}))
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
     nachher = erinnerungen_lesen()
     alt, neu = {e["id"] for e in vorher}, {e["id"] for e in nachher}
@@ -686,13 +771,42 @@ class Handler(BaseHTTPRequestHandler):
             print(f"{self.command} {self.path.split('?')[0]} {args[1] if len(args) > 1 else ''}", flush=True)
 
     # --- Helfer ---
-    def senden(self, status, daten=None, typ="application/json; charset=utf-8", extra=None):
+    def uebersetzt(self, daten):
+        """Fehlermeldungen auf Chinesisch, wenn die App so eingestellt ist."""
         if isinstance(daten, dict) and "fehler" in daten and (self.headers.get("X-Sprache") or "").startswith("zh"):
-            daten = {**daten, "fehler": ZH.get(daten["fehler"], daten["fehler"])}
+            return {**daten, "fehler": ZH.get(daten["fehler"], daten["fehler"])}
+        return daten
+
+    def senden(self, status, daten=None, typ="application/json; charset=utf-8", extra=None):
+        daten = self.uebersetzt(daten)
         body = daten if isinstance(daten, bytes) else json.dumps(daten, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", typ)
         self.send_header("Content-Length", str(len(body)))
+        self.kopf_ende(typ, extra)
+        self.wfile.write(body)
+
+    def strom_beginnen(self, typ):
+        """Eine Antwort ohne bekannte Länge: sie geht Stück für Stück hinaus, am Ende schließt die Verbindung."""
+        self.send_response(200)
+        self.send_header("Content-Type", typ)
+        self.send_header("X-Accel-Buffering", "no")   # Proxys sollen nichts sammeln, jedes Stück geht gleich weiter
+        self.close_connection = True
+        self.kopf_ende(typ)
+
+    def strom_schreiben(self, stueck):
+        """Schreibt ein Stück. Ist die App schon weg (aufgelegt, Netz weg), passiert einfach nichts mehr."""
+        if getattr(self, "_weg", False):
+            return False
+        try:
+            self.wfile.write(stueck)
+            self.wfile.flush()
+            return True
+        except OSError:
+            self._weg = True
+            return False
+
+    def kopf_ende(self, typ, extra=None):
         if typ.startswith("application/json") or self.path.startswith("/api/"):
             cache = "no-store"   # Antworten und vorgelesener Ton werden nirgends zwischengespeichert
         elif typ == "font/woff2":
@@ -705,11 +819,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
-                         "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+                         f"connect-src 'self' {LIVE_ADRESSE}; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; "
+                         "form-action 'self'")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(body)
 
     def json_body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -772,7 +886,17 @@ class Handler(BaseHTTPRequestHandler):
                 text = str(daten.get("text", "")).strip()
                 if not text or len(text) > MAX_TEXT:
                     raise ValueError("Bitte etwas Kürzeres schreiben.")
-                return self.senden(200, chat(text, str(daten.get("gespraech") or "")))
+                nr, gesprochen = str(daten.get("gespraech") or ""), daten.get("gesprochen") is True
+                if daten.get("strom") is True:
+                    return self.chat_strom(text, nr, gesprochen)
+                return self.senden(200, chat(text, nr, gesprochen=gesprochen))
+            if pfad == "/api/stimme":
+                text = str(daten.get("text", "")).strip()
+                if not text:
+                    raise ValueError("Das hat nicht geklappt, bitte nochmal.")
+                return self.stimme_strom(ton_strom(text, str(daten.get("vorher") or "")))
+            if pfad == "/api/live-zugang":
+                return self.senden(200, live_zugang())
             if pfad == "/api/vorlesen":
                 text = str(daten.get("text", "")).strip()
                 if not text:
@@ -808,6 +932,29 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(400, {"fehler": str(e)})
         except RuntimeError as e:
             return self.senden(503, {"fehler": str(e)})
+
+    def chat_strom(self, text, nr, gesprochen):
+        """Die Antwort als Server-Sent Events: {"text": ...} für jedes neue Stück, am Ende {"fertig": ...} mit allem,
+        was sonst /api/chat liefert, oder {"fehler": ...}. Legt die App vorher auf, wird die Antwort trotzdem fertig
+        geschrieben und gespeichert."""
+        self.strom_beginnen("text/event-stream; charset=utf-8")
+        ereignis = lambda d: self.strom_schreiben(f"data: {json.dumps(d, ensure_ascii=False)}\n\n".encode())
+        try:
+            ergebnis = chat(text, nr, beim_text=lambda stueck: ereignis({"text": stueck}), gesprochen=gesprochen)
+            ereignis({"fertig": ergebnis})
+        except (ValueError, RuntimeError) as e:
+            ereignis(self.uebersetzt({"fehler": str(e)}))
+
+    def stimme_strom(self, stuecke):
+        """Der Ton geht roh hinaus, sobald der Sprachdienst ihn liefert: die App spielt das erste Stück schon ab,
+        während der Rest noch entsteht."""
+        self.strom_beginnen("application/octet-stream")
+        try:
+            for stueck in stuecke:
+                if not self.strom_schreiben(stueck):
+                    break   # die App hört nicht mehr zu (unterbrochen oder aufgelegt)
+        except OSError:
+            protokoll("Sprachdienst-Fehler: Verbindung beim Sprechen abgebrochen")
 
     def zuhoeren(self):
         """Die Aufnahme aus dem Mikrofon kommt als roher Ton an und geht als Text zurück."""
