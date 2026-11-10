@@ -846,6 +846,7 @@
     mikroStartet = false;
     telefon = tel;
     hoert = { stop: () => auflegen() };
+    wachHalten(tel);
     stimmung('hoert');
     knopfZeigen();
     dauerHinweis(t('telefon_laeuft'));
@@ -925,6 +926,14 @@
     if (!tel.stumm) saetze.forEach((satz) => tel.sprecher.sagen(satz));
     if (!tel.sprecher.spricht()) stimmung('hoert');
   }
+  // Während des Gesprächs geht der Bildschirm nicht aus: sonst sperrt sich das Handy nach kurzer Zeit und Biko legt auf
+  async function wachHalten(tel) {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      const wach = await navigator.wakeLock.request('screen');
+      if (telefon === tel) tel.wach = wach; else wach.release().catch(() => {});
+    } catch (e) { /* geht nicht (z. B. Stromsparmodus): dann eben ohne */ }
+  }
   function auflegen(meldung) {
     const tel = telefon;
     if (!tel) return;
@@ -934,6 +943,7 @@
     clearTimeout(tel.sendeUhr);
     if (tel.hoerer) tel.hoerer.stop();
     tel.sprecher.stopp();
+    if (tel.wach) tel.wach.release().catch(() => {});
     if (tel.offen) feld.value = tel.offen; // was noch nicht abgeschickt war, bleibt im Feld
     feldAnpassen();
     stimmung('da');
