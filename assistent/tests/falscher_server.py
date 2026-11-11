@@ -14,7 +14,7 @@ import server  # noqa: E402
 from http.server import ThreadingHTTPServer  # noqa: E402
 
 
-def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None):
+def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None, modell=None):
     time.sleep(0.4)  # damit "Biko denkt nach" sichtbar ist
     antwort = antwort_fuer(messages[-1]["content"], werkzeuge)
     if beim_text:   # wie die echte KI: die Antwort kommt in Stücken
