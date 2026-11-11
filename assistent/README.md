@@ -175,6 +175,12 @@ Spracherkennung des Browsers.
 
 So läuft das **Reden wie am Telefon** ab (seit November 2026):
 
+Damit die Antwort schnell kommt: Die Verbindung zu ElevenLabs bleibt offen (jeder Satz braucht sonst einen neuen
+Verbindungsaufbau), und ist der erste Satz lang, geht er schon am ersten Komma an die Stimme. Nach jeder gesprochenen
+Antwort schickt die App die Zeiten an `POST /api/messung`; im Log steht dann "Reden: Biko spricht ... ms nach deinem
+Satz (Pause, erste Worte, erster Satz, Stimme)", dazu "Claude: erste Worte nach ..." und "Sprachdienst: ... erster Ton
+nach ...". Nicht mitgezählt ist die eine Sekunde Stille, nach der der Sprachdienst einen Satz für fertig hält.
+
 1. Einmal aufs Mikrofon tippen. Die App holt sich beim eigenen Server einen Zugang für 15 Minuten
    (`POST /api/live-zugang`) und schickt das Mikrofon damit direkt an das Live-Zuhören von ElevenLabs
    (`scribe_v2_realtime`). Der Schlüssel selbst bleibt am Server.

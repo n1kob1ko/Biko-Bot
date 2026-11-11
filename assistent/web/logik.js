@@ -193,6 +193,19 @@
   const ABKUERZUNG = new Set(['ca', 'dr', 'nr', 'bzw', 'usw', 'evtl', 'ggf', 'inkl', 'st', 'hr', 'fr', 'mag', 'ing', 'prof', 'tel', 'vgl', 'ab']);
   // Biko spricht Satz für Satz, während die Antwort noch kommt. Liefert die fertigen Sätze und was noch wartet.
   // `ende`: die Antwort ist vollständig, der Rest wird auch gesprochen.
+  // Der Anfang einer Antwort soll schnell zu hören sein: ist der erste Satz lang, geht er schon am ersten Komma
+  // an die Stimme ("Das ist eine gute Frage, | und ..."). Liefert { stueck, rest } oder null.
+  function fruehStueck(puffer) {
+    for (let i = 0; i < puffer.length; i++) {
+      const c = puffer[i];
+      if ('，：、'.includes(c) && i >= 6) return { stueck: puffer.slice(0, i + 1).trim(), rest: puffer.slice(i + 1) };
+      if (',:;–'.includes(c) && i >= 24 && /\s/.test(puffer[i + 1] || '')) {
+        return { stueck: puffer.slice(0, i + 1).trim(), rest: puffer.slice(i + 1) };
+      }
+    }
+    return null;
+  }
+
   function saetzeTeilen(puffer, ende = false) {
     const saetze = [];
     let start = 0;
@@ -271,5 +284,5 @@
     return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
   }
 
-  return { saetzeTeilen, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  return { saetzeTeilen, fruehStueck, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

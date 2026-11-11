@@ -496,6 +496,55 @@ class Test(unittest.TestCase):
         self.assertIn("aus", server.checkin_einstellen({"zeit": "aus"}))
         server.schreiben("checkin", {})
 
+    def test_sprachdienst_haelt_die_verbindung_offen_statt_jedes_mal_neu(self):
+        """Jeder Satz ist eine Anfrage beim Sprachdienst. Die Verbindung bleibt offen, das spart den Aufbau."""
+        from http.server import BaseHTTPRequestHandler
+        verbindungen = []
+
+        class Dienst(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"   # Keep-Alive
+
+            def setup(self):
+                super().setup()
+                verbindungen.append(1)
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                if self.headers.get("xi-api-key") != "sk_test":
+                    inhalt = b'{"detail": "falscher Schluessel"}'
+                    self.send_response(401)
+                else:
+                    inhalt = b"ton" * 5000
+                    self.send_response(200)
+                self.send_header("Content-Length", str(len(inhalt)))
+                self.end_headers()
+                self.wfile.write(inhalt)
+
+            def log_message(self, *a):
+                pass
+
+        dienst = ThreadingHTTPServer(("127.0.0.1", 0), Dienst)
+        threading.Thread(target=dienst.serve_forever, daemon=True).start()
+        self.addCleanup(dienst.shutdown)
+        port = dienst.server_address[1]
+        server._verbindungen.clear()
+        self.addCleanup(lambda: [server._verbindungen.pop().close() for _ in list(server._verbindungen)])
+        verbinden = lambda host, timeout: server.http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)  # noqa: E731
+        with unittest.mock.patch.object(server.http.client, "HTTPSConnection", verbinden), \
+                unittest.mock.patch.multiple(server, SPRACH_KEY="sk_test"):
+            for _ in range(3):
+                self.assertEqual(b"".join(server.sprach_strom("/v1/text-to-speech/x/stream", b"{}")), b"ton" * 5000)
+            self.assertEqual(server.sprach_anfrage("/v1/text-to-speech/x", b"{}"), b"ton" * 5000)
+            self.assertEqual(len(verbindungen), 1, "vier Sätze über eine Verbindung")
+            # abgebrochen (z. B. unterbrochen): diese Verbindung wird nicht wiederverwendet
+            stuecke = server.sprach_strom("/v1/text-to-speech/x/stream", b"{}")
+            next(stuecke)
+            stuecke.close()
+            self.assertEqual(server._verbindungen, [])
+            with unittest.mock.patch.multiple(server, SPRACH_KEY="sk_falsch"):
+                with self.assertRaisesRegex(RuntimeError, "Schlüssel"):
+                    server.sprachdienst("/v1/text-to-speech/x", b"{}")
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(

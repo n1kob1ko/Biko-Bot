@@ -1028,7 +1028,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
         body: JSON.stringify({ text, vorher }), credentials: 'same-origin', signal,
       }),
-      beimStart: () => { tel.zuletzt = Date.now(); if (telefon === tel) stimmung('da'); },
+      beimStart: () => { tel.zuletzt = Date.now(); messungSchicken(tel); if (telefon === tel) stimmung('da'); },
       beimEnde: () => { tel.zuletzt = Date.now(); if (telefon === tel && !sendet) stimmung('hoert'); },
       beimFehler: () => { if (telefon === tel) hinweis(t('stimme_weg')); },
     });
@@ -1092,7 +1092,17 @@
     if (!fertig) return;
     tel.offen = feld.value.trim();
     tel.versuche = 0;
+    tel.messung = { satzEnde: Date.now() };
     tel.sendeUhr = setTimeout(() => abschicken(tel), 500); // wer gleich weiterredet, wird nicht abgeschnitten
+  }
+  // Wie lange es vom Ende des eigenen Satzes bis zu Bikos Stimme gedauert hat: nur die Zahlen gehen ins Server-Protokoll
+  function messungSchicken(tel) {
+    const m = tel.messung;
+    tel.messung = null;
+    if (!m || !m.gesendet || !m.ersteWorte) return;
+    const jetzt = Date.now(), satz = m.ersterSatz || jetzt;
+    api('/api/messung', { gesamt: jetzt - m.satzEnde, pause: m.gesendet - m.satzEnde, ki: m.ersteWorte - m.gesendet,
+      satz: satz - m.ersteWorte, stimme: jetzt - satz }).catch(() => {});
   }
   function abschicken(tel) {
     if (telefon !== tel || !tel.offen) return;
@@ -1100,18 +1110,30 @@
     const text = tel.offen;
     tel.offen = '';
     feld.value = text;
+    if (tel.messung) tel.messung.gesendet = Date.now();
     senden(text);
   }
   function antwortBeginnt(tel) {
     tel.stumm = false;
     tel.gesagt = '';
     tel.puffer = '';
+    tel.angefangen = false;
     tel.sprecher.neueAntwort();
   }
   function antwortStueck(tel, s) {
     tel.gesagt += s;
+    const m = tel.messung;
+    if (m && !m.ersteWorte) m.ersteWorte = Date.now();
     const teil = L.saetzeTeilen(tel.puffer + s);
+    if (!tel.angefangen && !teil.saetze.length) {
+      const frueh = L.fruehStueck(teil.rest);
+      if (frueh) { teil.saetze.push(frueh.stueck); teil.rest = frueh.rest; }
+    }
     tel.puffer = teil.rest;
+    if (teil.saetze.length) {
+      tel.angefangen = true;
+      if (m && !m.ersterSatz) m.ersterSatz = Date.now();
+    }
     if (!tel.stumm) teil.saetze.forEach((satz) => tel.sprecher.sagen(satz));
   }
   function antwortFertig(tel, j) {
