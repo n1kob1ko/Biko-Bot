@@ -34,6 +34,10 @@ def antwort_fuer(frage, werkzeuge):
     if frage.startswith("Erinnere mich"):
         werkzeuge["erinnerung_merken"]["tun"]({"text": "Herztablette", "zeit": "08:00"})
         return "Mach ich. Ich erinnere dich jeden Tag um 8 Uhr an die Herztablette."
+    if frage.startswith("Schreib Milch und Brot"):
+        server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch", "Brot"]})
+        werkzeuge["liste_zeigen"]["tun"]({"liste": "Einkaufen"})
+        return "Hab ich aufgeschrieben. Auf der Einkaufsliste stehen jetzt Milch und Brot."
     if frage.startswith("Ruf Peter an"):
         werkzeuge["anruf_zeigen"]["tun"]({"name": "Peter", "nummer": "0664 123 4567"})
         return "Gern. Tipp auf den Knopf, dann geht das Telefon mit Peters Nummer auf."

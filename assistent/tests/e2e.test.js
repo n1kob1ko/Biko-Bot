@@ -319,6 +319,23 @@ test('In der Android-Blase (?mini): Biko redet ohne Fenster und meldet, was er g
   assert.deepEqual(p.fehler, []);
 });
 
+test('Einkaufsliste: Biko schreibt auf, zeigt die Liste, Gekauftes tippt man weg', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Schreib Milch und Brot auf die Einkaufsliste');
+  await p.waitForSelector('.liste-karte');
+  assert.equal(await p.textContent('.liste-karte .entwurf-an'), 'Einkaufen');
+  assert.deepEqual(await p.locator('.liste-karte .eintrag').allTextContents(), ['Milch', 'Brot']);
+  const weg = p.waitForResponse((r) => r.url().endsWith('/api/liste/weg'));
+  await p.click('.liste-karte .eintrag >> text=Milch');
+  await weg;
+  assert.equal(await p.getAttribute('.liste-karte .eintrag >> nth=0', 'aria-pressed'), 'true');
+  const listen = await p.evaluate(async () => (await fetch('/api/listen')).json());
+  assert.deepEqual(listen.Einkaufen.map((e) => e.text), ['Brot']);
+  await p.click('.liste-karte .eintrag >> text=Brot');
+  await p.waitForFunction(() => document.querySelector('.liste-karte .meldung').textContent === 'Alles erledigt!');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Anrufen und WhatsApp: Biko stellt Knöpfe mit Nummer und fertigem Text unter die Antwort', async (t) => {
   const p = await angemeldet(t);
   await fragen(p, 'Ruf Peter an');

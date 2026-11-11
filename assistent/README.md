@@ -44,6 +44,12 @@ Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden
 Danach fügt man ihn in WeChat, WhatsApp oder SMS ein. Biko verschickt selbst nichts. "Mach sie kürzer" oder
 "lieber mit Sie" ändert den Text im selben Gespräch.
 
+**Einkaufsliste und Notizen:** "Schreib Milch auf die Einkaufsliste", "Was steht drauf?", "Merk dir, der Schlüssel ist bei
+Frau Novak". Biko führt dafür Listen (`listen.json`, Werkzeug `liste_aendern`): "Einkaufen", "Notizen" und was die Person
+sonst braucht. Was draufsteht, steht im Hinweis der App. Mit `liste_zeigen` stellt er eine Liste als Karte unter die Antwort:
+große Zeilen, ein Tipp hakt ab und nimmt es weg (`POST /api/liste/weg`), dazu "Kopieren". Bleibendes über die Person selbst
+bleibt im Gedächtnis, nicht auf einer Liste.
+
 **Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
 (`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
 nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für
@@ -193,7 +199,7 @@ wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst a
 ## Daten
 
 Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
-`erinnerungen.json`, `wissen.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+`erinnerungen.json`, `wissen.json`, `listen.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
 Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
 Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen

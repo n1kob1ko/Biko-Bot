@@ -73,6 +73,7 @@
     $$('.blase.denkt .nur-vorlesen').forEach((el) => { el.textContent = t('denkt'); });
     $$('.notiz').forEach(notizFuellen);
     $$('.entwurf').forEach(entwurfTexte);
+    $$('.liste-karte').forEach(listeTexte);
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
     vorschlaegeZeigen();
@@ -533,6 +534,58 @@
     nachUnten();
   }
 
+  // Eine Liste (Einkaufen, Notizen) als Karte: Gekauftes tippt man weg, Kopieren gibt sie als Text mit
+  function listeTexte(el) {
+    $('.meldung', el).textContent = el._offen ? t('liste_hilfe') : t('liste_fertig');
+    const kop = $('.kopieren', el);
+    kop.lastElementChild.textContent = t(kop.dataset.zustand === 'ok' ? 'kopiert' : 'kopieren');
+  }
+  function listeKarte(k) {
+    const el = neu('div', 'entwurf liste-karte');
+    el._offen = k.eintraege.length;
+    const kopf = neu('p', 'entwurf-an');
+    kopf.innerHTML = icon('liste') + '<span></span>';
+    kopf.lastElementChild.textContent = k.name;
+    const ul = neu('ul', 'liste-eintraege');
+    k.eintraege.forEach((e) => {
+      const li = neu('li');
+      const b = neu('button', 'eintrag druck');
+      b.type = 'button';
+      b.innerHTML = `<span class="haken">${icon('ok')}</span><span></span>`;
+      b.lastElementChild.textContent = e.text;
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', async () => {
+        if (b.classList.contains('erledigt')) return;
+        b.classList.add('erledigt');
+        b.setAttribute('aria-pressed', 'true');
+        el._offen--;
+        listeTexte(el);
+        if (!el._offen) M.fidget('hop');
+        try { await api('/api/liste/weg', { liste: k.name, id: e.id }); } catch (err) { // nicht angekommen: wieder offen
+          b.classList.remove('erledigt');
+          b.setAttribute('aria-pressed', 'false');
+          el._offen++;
+          listeTexte(el);
+        }
+      });
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+    const info = neu('p', 'meldung');
+    info.setAttribute('role', 'status');
+    const kop = neu('button', 'knopf druck kopieren');
+    kop.type = 'button';
+    kop.dataset.zustand = 'ruhe';
+    kop.innerHTML = `<span class="wechsel">${icon('kopieren', 'i-ruhe')}${icon('ok', 'i-ok')}</span><span></span>`;
+    const text = neu('span', '', k.name + ':\n' + k.eintraege.map((e) => '- ' + e.text).join('\n'));
+    kop.addEventListener('click', async () => { if (await kopiere(text)) bestaetigen(kop, 'kopiert', 'kopieren'); });
+    el.append(kopf, ul, info, kop);
+    listeTexte(el);
+    verlauf.appendChild(el);
+    if (!still) B.aufdecken(el);
+    nachUnten();
+  }
+
   // Anrufen: ein großer Knopf, der das Telefon mit der Nummer öffnet. Anrufen muss die Person selbst.
   function anrufeZeigen(liste) {
     const gut = liste.filter((a) => L.telLink(a.nummer));
@@ -560,6 +613,7 @@
     (m.nachrichten || []).forEach(entwurf);
     linksZeigen(m.links || []);
     anrufeZeigen(m.anrufe || []);
+    (m.listen || []).forEach(listeKarte);
     return d;
   }
   function denkBlase() {
