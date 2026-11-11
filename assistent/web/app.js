@@ -177,6 +177,11 @@
     clearInterval(starten.uhr);
     starten.uhr = setInterval(erinnerungPruefen, 15000);
     erinnerungPruefen();
+    // Die Android-App öffnet Biko mit ?reden, wenn man auf die Blase tippt: dann geht das Gespräch gleich los
+    if (new URLSearchParams(location.search).has('reden')) {
+      history.replaceState(null, '', location.pathname);
+      if (kannTelefonieren()) telefonieren();
+    }
   }
 
   // ---------- Bereiche wechseln ----------
