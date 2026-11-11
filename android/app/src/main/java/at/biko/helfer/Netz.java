@@ -19,6 +19,7 @@ import android.webkit.WebViewClient;
 final class Netz {
     static final int MIKRO_ANFRAGE = 7;
     private static PermissionRequest wartend; // Mikrofon-Wunsch der Seite, solange Android noch fragt
+    static int vorne; // wie viele Biko-Fenster gerade vorne sind (dann meldet sich die Seite selbst)
 
     private Netz() {}
 
@@ -38,6 +39,7 @@ final class Netz {
         s.setTextZoom(100);
         CookieManager.getInstance().setAcceptCookie(true); // angemeldet bleiben
         w.setBackgroundColor(0xFFFFF6E8);
+        w.addJavascriptInterface(new Wecker.Bruecke(c), "BikoWecker");
         w.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {

@@ -18,6 +18,23 @@ test('Einmalige Erinnerung ist nur an ihrem Tag fällig', () => {
   assert.equal(L.faelligeErinnerung({ erinnerungen: [arzt], jetzt: um('08:00', '2026-11-11') }), null);
 });
 
+test('Die Wecker der Android-App: kommende Erinnerungen und die Morgenrunde, die nächste zuerst', () => {
+  const arzt = { ...tablette, id: 'arzt', zeit: '15:00', text: 'Arzt', datum: '2026-11-10' };
+  const turnen = { ...tablette, id: 'turnen', zeit: '10:00', text: 'Turnen', tage: ['mi'] };
+  const aus = { ...tablette, id: 'aus', aktiv: false };
+  const liste = L.naechsteMeldungen({ erinnerungen: [tablette, arzt, turnen, aus], morgenrunde: '07:30', jetzt: um('09:00'), stunden: 48 });
+  const kurz = liste.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.art} ${m.id}`);
+  assert.deepEqual(kurz, [
+    '10. 07:30 morgenrunde morgenrunde',
+    '10. 08:00 erinnerung a',
+    '10. 15:00 erinnerung arzt',
+    '11. 07:30 morgenrunde morgenrunde',
+    '11. 08:00 erinnerung a',
+  ]); // heute 8 Uhr ist vorbei, Turnen ist erst am Mittwoch um 10 (nach 48 Stunden)
+  assert.equal(liste[1].text, 'Tablette');
+  assert.deepEqual(L.naechsteMeldungen({ erinnerungen: [], morgenrunde: null, jetzt: um('09:00') }), []);
+});
+
 test('Wann eine Erinnerung kommt, steht kurz und klar da', () => {
   const texte = { jeden_tag: 'jeden Tag', einmal_am: 'einmal am {t}.{m}.', heute: 'heute', morgen: 'morgen', tage: { mo: 'Mo', mi: 'Mi' } };
   const jetzt = um('12:00', '2026-11-09');

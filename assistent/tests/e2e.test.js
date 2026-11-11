@@ -310,6 +310,47 @@ test('In der Android-Blase (?mini): Biko redet ohne Fenster und meldet, was er g
   await p.evaluate(() => window.bikoAuflegen());
   assert.equal(await p.evaluate(() => window.zustaende[window.zustaende.length - 1]), 'aus');
   assert.equal(await p.evaluate(() => window.live.zu), true);
+  // Der Wecker der App geht los: Biko sagt die Erinnerung selbst, die Blase zeigt so lange "spricht"
+  const vorlesen = p.waitForRequest((r) => r.url().endsWith('/api/vorlesen'));
+  await p.evaluate(() => { window.zustaende = []; window.bikoMelden('erinnerung', 'x', 'Herztablette'); });
+  assert.match((await vorlesen).postData(), /Erinnerung: Herztablette/);
+  await p.waitForFunction(() => window.zustaende.includes('spricht'));
+  await p.waitForFunction(() => window.zustaende[window.zustaende.length - 1] === 'aus');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Morgenrunde: im Gespräch eingestellt, die Android-App bekommt die Wecker dafür', async (t) => {
+  const WECKER = () => { window.geplant = []; window.BikoWecker = { planen: (j) => window.geplant.push(JSON.parse(j)) }; };
+  const p = await angemeldet(t, { vorher: WECKER });
+  await erinnerungenSetzen(p, [{ id: 'a', zeit: '17:00', text: 'Blumen gießen', tage: ['mo', 'di', 'mi', 'do', 'fr', 'sa', 'so'], aktiv: true }]);
+  await fragen(p, 'Meld dich jeden Morgen um 8');
+  const zuletzt = await p.evaluate(() => window.geplant[window.geplant.length - 1]);
+  const kurz = zuletzt.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.titel}: ${m.text}`);
+  // Die Uhr der Seite steht auf Montag, 5.1., 15 Uhr
+  assert.deepEqual(kurz.slice(0, 3), [
+    '5. 17:00 Biko: Erinnerung: Blumen gießen',
+    '6. 08:00 Guten Morgen!: Tipp hier, dann erzählt dir Biko, was heute los ist.',
+    '6. 17:00 Biko: Erinnerung: Blumen gießen',
+  ]);
+  await erinnerungenSetzen(p, []);
+  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), '{}');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Morgenrunde: ein Tipp auf die Mitteilung öffnet sie, Biko liest sie vor, und man kann darin weiterreden', async (t) => {
+  // Am Server ist sie in 5 Minuten fällig (Wiener Zeit), eingestellt seit gestern
+  const wien = new Intl.DateTimeFormat('de-AT', { timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const zeit = wien.format(new Date(Date.now() + 5 * 60 * 1000));
+  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), JSON.stringify({ zeit, seit: new Date(Date.now() - 86400000).toISOString() }));
+  const p = await angemeldet(t);
+  const vorlesen = p.waitForRequest((r) => r.url().endsWith('/api/vorlesen'));
+  await p.goto(URL + '?morgenrunde');
+  await p.waitForSelector('.blase.biko-sagt');
+  assert.match(await p.textContent('.blase.biko-sagt'), /Guten Morgen! In Wien wird es heute sonnig/);
+  assert.match((await vorlesen).postData(), /Guten Morgen/);
+  await fragen(p, 'Gibt es Angebote für Kaffee?');
+  assert.equal(await p.locator('.blase.biko-sagt').count(), 2, 'im selben Gespräch');
+  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), '{}');
   assert.deepEqual(p.fehler, []);
 });
 

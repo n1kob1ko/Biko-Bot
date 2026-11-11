@@ -29,6 +29,16 @@ Gespräch daran (zum Beispiel bei "Darf ich Kuchen essen?"). "Vergiss das" strei
 Kontonummern schreibt er nie auf. In "Einstellen" steht die Liste "Das weiß Biko über dich" zum Nachsehen und
 Löschen. Die früheren Felder Diät und Notizen übernimmt der Server beim ersten Start einmal in diese Liste.
 
+**Biko meldet sich von selbst: die Morgenrunde.** "Meld dich jeden Morgen um 8" (oder "每天早上八点跟我打招呼")
+stellt sie ein, "Hör auf mit der Morgenrunde" stellt sie ab. Kurz vor der Zeit schreibt Biko am Server
+(Hintergrund-Faden `hausmeister`) eine kurze Begrüßung mit dem Wetter in Wien, zwei, drei Nachrichten, die die Person
+interessieren (aus dem, was er über sie weiß), und ihren Terminen des Tages, als eigenes Gespräch "Morgenrunde".
+Dafür nimmt er das günstigere Modell mit Websuche (ein paar Cent am Tag). Zur Uhrzeit liest er sie vor: in der offenen
+App, aus der Android-Blase oder nach einem Tipp auf die Mitteilung "Guten Morgen!". Antwortet man, redet man im
+selben Gespräch weiter. `GET /api/morgenrunde` liefert Uhrzeit und die Runde von heute (`?jetzt` schreibt sie gleich,
+falls sie fällig ist und noch fehlt). Die Android-App stellt für Erinnerungen und Morgenrunde Wecker, damit sie auch
+kommen, wenn die App zu ist (siehe `android/README.md`).
+
 **Nachrichten für andere** gehen genauso: "Schreib Anna, dass ich am Sonntag komme." Biko schreibt den fertigen
 Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden mit", wenn das Handy das kann).
 Danach fügt man ihn in WeChat, WhatsApp oder SMS ein. Biko verschickt selbst nichts. "Mach sie kürzer" oder
@@ -176,7 +186,7 @@ wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst a
 ## Daten
 
 Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
-`erinnerungen.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+`erinnerungen.json`, `wissen.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
 Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
 Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen
