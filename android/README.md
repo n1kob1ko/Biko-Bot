@@ -40,6 +40,12 @@ das Dauer-Zuhören nur Google, und es würde den Akku leeren.
 Sagt man der Blase „Ruf Peter an“ oder „Schreib Peter auf WhatsApp …“, öffnet die App nach Bikos Antwort gleich das Telefon
 mit der Nummer (anrufen tippt man selbst) oder WhatsApp bzw. SMS mit dem fertigen Text (`BikoNativ.oeffnen()`).
 
+## Foto von einem Brief
+
+Der Kamera-Knopf links im Eingabefeld öffnet gleich die Kamera (`onShowFileChooser` in `Netz.java`). Biko bekommt das Foto
+und erklärt den Brief. Das Foto liegt danach in der Galerie unter „Bilder/Biko“; beim nächsten Foto löscht die App das alte,
+damit sich dort keine Briefe sammeln.
+
 ## Biko meldet sich von selbst
 
 Erinnerungen und die **Morgenrunde** kommen pünktlich, auch wenn die App gerade zu ist. Die Biko-Seite schickt der App

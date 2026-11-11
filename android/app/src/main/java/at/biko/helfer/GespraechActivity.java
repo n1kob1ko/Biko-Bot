@@ -110,7 +110,13 @@ public class GespraechActivity extends Activity {
         Netz.sichern();
         BlaseService.sichtbar(true);
         super.onStop();
-        if (!isChangingConfigurations()) finish();
+        if (!isChangingConfigurations() && !Netz.waehltFoto()) finish(); // die Kamera ist kein Wegwechseln
+    }
+
+    @Override
+    protected void onActivityResult(int code, int ergebnis, Intent daten) {
+        super.onActivityResult(code, ergebnis, daten);
+        Netz.fotoAntwort(this, code, ergebnis, daten);
     }
 
     @Override
