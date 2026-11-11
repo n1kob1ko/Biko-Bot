@@ -10,7 +10,7 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 |---|---|
 | **Reden / 聊天** | Fragen stellen oder einfach plaudern. Mit Sprachdienst redet man wie am Telefon: einmal auf den großen gelben Knopf tippen, dann hört Biko durchgehend zu, antwortet mit Stimme, und man kann ihm jederzeit ins Wort fallen. Der rote Knopf legt auf. Tippen geht genauso. Antworten kann man sich vorlesen lassen, mit Sprachdienst in einer natürlichen Stimme. Biko sucht bei Bedarf im Internet (Angebote und Deals, Öffnungszeiten, Wetter). Er antwortet in der Sprache, in der man ihn anspricht. |
 | **Verlauf / 记录** | Frühere Gespräche zum Nachlesen und Weiterreden, dazu der Knopf "Neues Gespräch". |
-| **Einstellen / 设置** | Für die Familie: nachsehen, was Biko sich gemerkt hat, dazu Name, Diät-Regeln ("darf ich das essen?"), Notizen, Schriftgröße, immer vorlesen. |
+| **Einstellen / 设置** | Für die Familie: Name und Du/Sie, nachsehen und löschen, woran Biko erinnert und was er über die Person weiß, Schriftgröße, immer vorlesen. |
 
 **Erinnerungen haben keinen eigenen Bereich und kein Formular.** Man sagt es Biko einfach im Gespräch:
 
@@ -22,6 +22,12 @@ Biko schreibt es sich im Hintergrund selbst auf und bestätigt in einem Satz. Un
 "Gemerkt" mit Tag und Uhrzeit, damit man sieht, dass es wirklich notiert ist. Zur Uhrzeit erscheint ein großer
 Hinweis mit Ton, bis "Erledigt" gedrückt wird. Fehlt die Uhrzeit, fragt Biko nach. In "Einstellen" steht nur
 eine Liste zum Nachsehen und Löschen (Löschen fragt zuerst nach).
+
+**Biko merkt sich auch, was man über sich erzählt**, ohne Formular: "Ich hab Diabetes", "Mein Enkel heißt Niko",
+"Ich mag keinen Fisch". Unter der Antwort steht klein "Weiß ich jetzt: ...", und ab dann denkt Biko in jedem
+Gespräch daran (zum Beispiel bei "Darf ich Kuchen essen?"). "Vergiss das" streicht es wieder. Passwörter, PINs und
+Kontonummern schreibt er nie auf. In "Einstellen" steht die Liste "Das weiß Biko über dich" zum Nachsehen und
+Löschen. Die früheren Felder Diät und Notizen übernimmt der Server beim ersten Start einmal in diese Liste.
 
 **Nachrichten für andere** gehen genauso: "Schreib Anna, dass ich am Sonntag komme." Biko schreibt den fertigen
 Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden mit", wenn das Handy das kann).
@@ -57,7 +63,7 @@ offenen Gesprächs mit.
 
 ### Bewusste Grenzen
 
-- **Gesundheit:** Biko erinnert und gibt Hinweise zur hinterlegten Diät, aber keine Diagnosen und keine Änderungen an Medikamenten. Bei Notfällen nennt er 144, bei Beschwerden 1450, bei Krisen die Telefonseelsorge 142.
+- **Gesundheit:** Biko erinnert und gibt Hinweise zur Diät, die er sich im Gespräch gemerkt hat, aber keine Diagnosen und keine Änderungen an Medikamenten. Bei Notfällen nennt er 144, bei Beschwerden 1450, bei Krisen die Telefonseelsorge 142.
 - **Ehrlich KI:** Biko sagt, dass er eine KI ist, und ermutigt zu Kontakt mit Familie und Freunden.
 - **Betrug:** Er warnt bei Enkeltrick, falscher Polizei oder Bank, Links in SMS.
 - **Erinnerungen brauchen die offene App.** Version 1 kann das Handy nicht "aufwecken", wenn die Seite zu ist. Für wichtige Medikamente zusätzlich den Handy-Wecker stellen. Echte Push-Nachrichten sind der nächste Schritt.

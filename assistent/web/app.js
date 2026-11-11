@@ -24,6 +24,7 @@
 
   let profil = {};
   let erinnerungen = [];
+  let wissen = [];      // was Biko über die Person weiß; merkt er sich im Gespräch selbst
   let gespraeche = [];  // Übersicht aller Gespräche, das zuletzt benutzte zuerst
   let gespraechNr = ''; // das offene Gespräch; leer heißt: mit der nächsten Frage beginnt ein neues
   let sitzung = 0;      // zählt hoch, sobald ein anderes Gespräch gezeigt wird: eine späte Antwort gehört dann nicht mehr hierher
@@ -73,6 +74,7 @@
     knopfZeigen();
     vorschlaegeZeigen();
     erinnerungenZeigen();
+    wissenZeigen();
     gespraecheZeigen();
   }
   // Knopf mit Zustand: Symbol und Beschriftung wechseln zusammen
@@ -169,7 +171,7 @@
     }
     if (!s.angemeldet) { loginZeigen(); return; }
     sprachdienst = !!s.sprachdienst;
-    [profil, erinnerungen, gespraeche] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche')]);
+    [profil, erinnerungen, gespraeche, wissen] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen')]);
     angemeldet = true;
     $('#login').hidden = true;
     $('#app').hidden = false;
@@ -400,17 +402,18 @@
     nachUnten(); // ganz nach unten, damit die neue Blase über dem Eingabefeld zu sehen ist
     return d;
   }
-  // Kleine Zeile unter Bikos Antwort: was er sich gerade aufgeschrieben ("Gemerkt") oder gestrichen hat
+  // Kleine Zeile unter Bikos Antwort: was er sich gerade aufgeschrieben ("Gemerkt") oder gestrichen hat,
+  // und was er jetzt über die Person weiß ("Weiß ich jetzt")
   function notizFuellen(n) {
-    const er = n._er, gemerkt = !n.classList.contains('gestrichen');
-    n.innerHTML = icon(gemerkt ? 'erinnern' : 'loeschen');
+    const er = n._er, art = n.classList.contains('gestrichen') ? 'gestrichen' : n.classList.contains('gelernt') ? 'gelernt' : 'gemerkt';
+    n.innerHTML = icon(art === 'gestrichen' ? 'loeschen' : art === 'gelernt' ? 'ok' : 'erinnern');
     const zeile = neu('span');
-    zeile.append(neu('strong', '', t(gemerkt ? 'gemerkt_notiz' : 'gestrichen_notiz')), er.text);
+    zeile.append(neu('strong', '', t(art + '_notiz')), er.text);
     n.appendChild(zeile);
-    if (gemerkt) n.appendChild(neu('span', 'wann', `${L.wannText(er, T[sprache], new Date())}, ${er.zeit}`));
+    if (art === 'gemerkt') n.appendChild(neu('span', 'wann', `${L.wannText(er, T[sprache], new Date())}, ${er.zeit}`));
   }
-  function notiz(er, gemerkt) {
-    const n = neu('div', 'notiz' + (gemerkt ? '' : ' gestrichen'));
+  function notiz(er, art) {
+    const n = neu('div', 'notiz' + (art === 'gemerkt' ? '' : ' ' + art));
     n._er = er;
     notizFuellen(n);
     verlauf.appendChild(n);
@@ -500,8 +503,9 @@
   // Bikos Antwort mit allem, was er dabei getan hat: gemerkt, gestrichen, eine Nachricht geschrieben, Links gefunden
   function bikoSagt(m) {
     const d = blase(m.text, 'biko-sagt', L.vorleseText(m.text, m.nachrichten));
-    (m.vergessen || []).forEach((er) => notiz(er, false));
-    (m.gemerkt || []).forEach((er) => notiz(er, true));
+    (m.vergessen || []).forEach((er) => notiz(er, 'gestrichen'));
+    (m.gemerkt || []).forEach((er) => notiz(er, 'gemerkt'));
+    (m.gelernt || []).forEach((w) => notiz(w, 'gelernt'));
     (m.nachrichten || []).forEach(entwurf);
     linksZeigen(m.links || []);
     return d;
@@ -636,6 +640,7 @@
       }
       gespraecheZeigen();
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
+      if (j.wissen) { wissen = j.wissen; wissenZeigen(); }
     } catch (err) {
       if (hier === sitzung) {
         warte.remove();
@@ -1034,6 +1039,23 @@
     }));
   }
 
+  // Was Biko über die Person weiß: entsteht im Gespräch, hier nur zum Nachsehen und Löschen
+  function wissenZeigen() {
+    const ul = $('#wissen');
+    if (!wissen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_wissen'))); return; }
+    ul.replaceChildren(...wissen.map((w) => {
+      const li = neu('li', 'erinnerung wissen-zeile reihe');
+      const [weg, sicher] = loeschKnopf(w.text, 'wissen_loeschen_frage', async () => {
+        const liste = await api('/api/wissen/loeschen', { id: w.id });
+        await verschwinden(li);
+        wissen = liste;
+        wissenZeigen();
+      });
+      li.append(neu('div', '', w.text), weg, sicher);
+      return li;
+    }));
+  }
+
   // Welche Erinnerung wurde heute schon gezeigt? Das merkt sich das Handy.
   const speicherSchluessel = () => { try { return Object.keys(localStorage); } catch (e) { return []; } };
   const spaeterLesen = () => { try { return JSON.parse(holen('spaeter')) || {}; } catch (e) { return {}; } };
@@ -1122,8 +1144,6 @@
   function profilInsFormular() {
     $('#profil-name').value = profil.name || '';
     $('#profil-anrede').value = profil.anrede === 'Sie' ? 'Sie' : 'du';
-    $('#profil-diaet').value = profil.diaet || '';
-    $('#profil-notizen').value = profil.notizen || '';
   }
   $('#profil-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1133,7 +1153,6 @@
     try {
       profil = await api('/api/profil', {
         name: $('#profil-name').value, anrede: $('#profil-anrede').value, sprache: STIMME[sprache],
-        diaet: $('#profil-diaet').value, notizen: $('#profil-notizen').value,
       });
       $('#gruss').textContent = profil.name ? t('hallo_name').replace('{name}', profil.name) : t('hallo');
       bestaetigen(knopf, 'gespeichert', 'speichern');

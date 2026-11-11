@@ -125,17 +125,17 @@
           <option value="du" data-t="anrede_du"></option>
           <option value="Sie" data-t="anrede_sie"></option>
         </select>
-        <label for="profil-diaet" data-t="diaet"></label>
-        <textarea id="profil-diaet" rows="3" aria-describedby="profil-diaet-hilfe"></textarea>
-        <p class="hilfe detail" id="profil-diaet-hilfe" data-t="diaet_hilfe"></p>
-        <label for="profil-notizen" data-t="notizen"></label>
-        <textarea id="profil-notizen" rows="3" aria-describedby="profil-notizen-hilfe"></textarea>
-        <p class="hilfe detail" id="profil-notizen-hilfe" data-t="notizen_hilfe"></p>
         <button type="submit" class="knopf haupt druck" id="profil-speichern" data-zustand="ruhe">
           <span class="wechsel"><svg class="icon i-ok" aria-hidden="true"><use href="#i-ok"/></svg></span><span id="profil-speichern-text"></span>
         </button>
         <p id="profil-info" class="meldung" role="status"></p>
       </form>
+      <!-- Alles andere über die Person merkt sich Biko im Gespräch selbst. Hier kann die Familie nur nachsehen und löschen. -->
+      <div class="abschnitt reihe">
+        <h2 data-t="weiss_titel"></h2>
+        <p class="leise klein" data-t="weiss_hilfe"></p>
+      </div>
+      <ul id="wissen" class="liste" aria-live="polite"></ul>
       <div class="karte reihe">
         <div class="schalter-zeile">
           <span id="vorlesen-text" data-t="vorlesen_immer"></span>

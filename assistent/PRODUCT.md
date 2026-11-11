@@ -8,7 +8,7 @@ was dort nicht gesagt wurde, ist als Annahme markiert.
 Ältere Menschen aus Familie und Bekanntenkreis. Sie können mit dem Handy telefonieren, mit Apple Pay zahlen
 und in WeChat Sprachnachrichten schicken. KI nutzen sie noch nicht. Sie sprechen Deutsch und Chinesisch.
 
-Eingerichtet wird die App von jemandem aus der Familie (Profil, Diät-Regeln, Passwort).
+Eingerichtet wird die App von jemandem aus der Familie (Name, Du/Sie, Passwort). Alles andere, etwa Diät oder Familie, erzählt man Biko einfach im Gespräch und er merkt es sich.
 
 ## Wofür
 

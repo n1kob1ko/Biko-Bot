@@ -9,7 +9,10 @@ Funktionen, alle über das Gespräch (POST /api/chat):
   4. Links              Findet Biko etwas im Internet, stellt er den Link als Knopf ins Gespräch.
   5. Erinnerungen       Biko schreibt sie sich im Gespräch selbst auf ("erinnere mich um 8 an die Tablette").
                         Die App meldet sich zur Uhrzeit. GET/POST /api/erinnerungen sind nur zum Nachsehen und Löschen da.
-Nachrichten, Links und Erinnerungen sind Werkzeuge, die Claude selbst aufruft.
+  6. Gedächtnis         Erzählt die Person etwas Bleibendes über sich ("ich hab Diabetes", "mein Enkel heißt Niko"),
+                        schreibt Biko es sich selbst auf und denkt beim nächsten Mal daran. GET /api/wissen zeigt die
+                        Liste, POST /api/wissen/loeschen streicht einen Eintrag.
+Nachrichten, Links, Erinnerungen und das Gedächtnis sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -21,7 +24,7 @@ Daneben gibt es noch das Vorlesen einer ganzen Antwort als MP3 (POST /api/vorles
 Aufnahme (POST /api/zuhoeren), falls das Live-Zuhören an einem Handy nicht geht.
 Ohne Schlüssel sprechen und hören die Browser der Handys selbst, so gut sie können.
 
-Dazu ein Profil (GET/POST /api/profil): Name, Diät-Regeln, Notizen. Biko liest es bei jeder Antwort mit.
+Dazu ein Profil (GET/POST /api/profil): nur Name, Du/Sie und Sprache, also was Biko schon vor dem ersten Satz braucht.
 
 Anmelden: ein Passwort (APP_PASSWORT in der .env). Danach bleibt das Handy ein Jahr angemeldet (Cookie).
 Daten liegen als JSON in DATA_DIR (Standard /data). Nach außen gehen nur die Texte an die Claude-API und, wenn
@@ -75,7 +78,7 @@ COOKIE = "biko_assistent"
 COOKIE_TAGE = 365
 
 DATA.mkdir(parents=True, exist_ok=True)
-_lock = threading.Lock()
+_lock = threading.RLock()   # RLock: wissen_lesen() darf auch innerhalb einer Sperre aufgerufen werden
 # Bildschirmfoto aus der Android-App (Biko als Assistent): gilt ein paar Minuten für alle Fragen, nur im Speicher
 _bildschirm = {"bild": None, "zeit": 0.0}
 MAX_BILDSCHIRM = 3_000_000    # Bytes
@@ -86,9 +89,9 @@ STANDARD_PROFIL = {
     "name": "",
     "anrede": "du",          # "du" oder "Sie"
     "sprache": "de-AT",      # Sprache für Sprechen/Vorlesen und wenn unklar ist, wie Biko antworten soll
-    "diaet": "",             # z. B. "wenig Zucker, kein Weißbrot, viel Gemüse"
-    "notizen": "",           # z. B. "Enkel heißt Niko, Hund heißt Bello, hört schlecht"
 }
+# Alles andere über die Person (Diät, Familie, Vorlieben) merkt sich Biko im Gespräch selbst, siehe wissen_lesen().
+MAX_WISSEN = 60
 
 SYSTEM = """Du bist Biko, ein freundlicher gelber Vogel und KI-Helfer im Alltag. Du sprichst mit {name_satz}.
 Viele Menschen, die dich nutzen, sind älter und haben wenig Erfahrung mit Technik.
@@ -122,8 +125,9 @@ Ehrlichkeit:
 
 Gesundheit:
 - Du gibst keine Diagnosen und änderst nie Medikamente oder Dosierungen. Dafür sind Arzt, Ärztin oder Apotheke da.
-- Bei Fragen zum Essen und zur Diät hilfst du anhand der Diät-Regeln unten. Sag klar "passt gut", "lieber wenig" oder
-  "lieber nicht", mit einem kurzen Grund. Wenn keine Regeln hinterlegt sind, gib nur allgemeine, vorsichtige Hinweise.
+- Bei Fragen zum Essen und zur Diät hilfst du anhand dessen, was du über die Person weißt (Liste unten). Sag klar
+  "passt gut", "lieber wenig" oder "lieber nicht", mit einem kurzen Grund. Weißt du nichts dazu, gib nur allgemeine,
+  vorsichtige Hinweise.
 - Bei Notfällen (Brustschmerzen, Atemnot, Sturz, plötzliche Lähmung oder Verwirrtheit): sofort sagen, die Rettung 144 anzurufen.
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
@@ -156,9 +160,20 @@ Erinnerungen:
 Das hast du dir schon gemerkt:
 {erinnerungen}
 
-Was du über die Person weißt (von der Familie eingetragen):
-- Diät-Regeln: {diaet}
-- Notizen: {notizen}
+Dein Gedächtnis über die Person:
+- Erzählt die Person etwas, das auch nächste Woche noch stimmt, schreibst du es dir mit dem Werkzeug wissen_merken auf:
+  Gesundheit und Diät (Krankheiten, Allergien, was sie nicht essen darf), Familie und Freunde mit Namen, Geburtstage,
+  Haustiere, wo sie wohnt, was sie mag oder nicht mag, Hobbys, ob sie schlecht hört oder sieht.
+- Nicht aufschreiben: Dinge nur für heute ("ich bin müde"), was du schon weißt, und nie Passwörter, PINs, TANs,
+  Kontonummern oder Ausweisnummern.
+- Ein kurzer Satz pro Sache, aus Sicht der Person, z. B. "Hat Diabetes Typ 2" oder "Enkel heißt Niko, studiert in Graz".
+- Sag beim Aufschreiben höchstens ganz kurz "Das merk ich mir." und red dann normal weiter. Die Nummer sagst du nie.
+- Hat sich etwas geändert, streichst du den alten Eintrag mit wissen_vergessen und merkst dir den neuen.
+  Sagt die Person "vergiss das", streichst du es.
+- Nutze dein Wissen natürlich im Gespräch (frag nach dem Enkel, denk an die Diät), aber zähl es nicht ungefragt auf.
+- Auf "Was weißt du über mich?" erzählst du es in einfachen Worten.
+Das weißt du schon:
+{wissen}
 
 Heute ist {datum}, es ist {uhrzeit} Uhr."""
 
@@ -196,7 +211,23 @@ SPRACHEN = {"de-AT": "Deutsch", "zh-CN": "Chinesisch (vereinfachte Schriftzeiche
 
 
 def profil():
-    return {**STANDARD_PROFIL, **lesen("profil", {})}
+    p = lesen("profil", {})
+    return {k: p.get(k, v) for k, v in STANDARD_PROFIL.items()}
+
+
+def wissen_lesen():
+    """Was Biko über die Person weiß. Beim ersten Mal kommen die alten Felder Diät und Notizen aus dem Profil hinein."""
+    if not _pfad("wissen").exists():
+        with _lock:
+            if not _pfad("wissen").exists():
+                alt = lesen("profil", {})
+                zeit = jetzt().isoformat(timespec="seconds")
+                liste = [{"id": uuid.uuid4().hex[:10], "text": f"{vorne}{str(alt[k]).strip()}"[:400], "zeit": zeit}
+                         for k, vorne in (("diaet", "Diät: "), ("notizen", "")) if str(alt.get(k) or "").strip()]
+                schreiben("wissen", liste)
+                if "diaet" in alt or "notizen" in alt:
+                    schreiben("profil", {k: v for k, v in alt.items() if k not in ("diaet", "notizen")})
+    return lesen("wissen", [])
 
 
 # ---------- Claude ----------
@@ -502,8 +533,7 @@ def system_prompt(gesprochen=False):
         sprache=SPRACHEN.get(p.get("sprache"), "Deutsch"),
         erinnerungen="\n".join(f"- Nummer {e['id']}: {erinnerung_wann(e)}: {e['text']}" for e in erinnerungen_lesen())
                      or "- noch nichts",
-        diaet=p["diaet"].strip() or "keine eingetragen",
-        notizen=p["notizen"].strip() or "keine",
+        wissen="\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen()) or "- noch nichts",
         datum=f"{tage[t.weekday()]}, {t.day}.{t.month}.{t.year}",
         uhrzeit=t.strftime("%H:%M"),
     ) + (GESPROCHEN if gesprochen else "")
@@ -639,15 +669,17 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         {"type": "text", "text": text}]
     messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": frage}]
     zeigen, entwuerfe, links = zeige_werkzeuge()
-    vorher = erinnerungen_lesen()
+    vorher, wusste = erinnerungen_lesen(), wissen_lesen()
     antwort = frage_claude(system_prompt(gesprochen) + (BILDSCHIRM if bild else ""), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
                            **({"beim_text": beim_text} if beim_text else {}))
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
-    nachher = erinnerungen_lesen()
+    nachher, weiss = erinnerungen_lesen(), wissen_lesen()
     alt, neu = {e["id"] for e in vorher}, {e["id"] for e in nachher}
+    kannte = {w["id"] for w in wusste}
     getan = {"gemerkt": [e for e in nachher if e["id"] not in alt],
              "vergessen": [e for e in vorher if e["id"] not in neu],
+             "gelernt": [w for w in weiss if w["id"] not in kannte],
              "nachrichten": entwuerfe, "links": links}
     zeit = jetzt().isoformat(timespec="seconds")
     with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
@@ -660,7 +692,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         g["titel"] = g["titel"] or titel_aus(text)
         g["zuletzt"] = zeit
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
-    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, **getan}
+    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss, **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -732,7 +764,55 @@ def erinnerung_loeschen(eingabe):
     return f"Gelöscht: {erinnerung_wann(weg[0])}: {weg[0]['text']}"
 
 
+# ---------- Werkzeuge: so merkt sich Biko, was er über die Person weiß ----------
+
+def wissen_merken(eingabe):
+    text = " ".join(str(eingabe.get("text") or "").split())[:400]
+    if not text:
+        raise ValueError("Bitte kurz aufschreiben, was du dir merken willst.")
+    with _lock:
+        liste = wissen_lesen()
+        if any(w["text"].casefold() == text.casefold() for w in liste):
+            return f"Das weißt du schon: {text}"
+        if len(liste) >= MAX_WISSEN:
+            raise ValueError(f"Es sind schon {MAX_WISSEN} Einträge. Streich erst einen alten oder unwichtigen.")
+        schreiben("wissen", liste + [{"id": uuid.uuid4().hex[:10], "text": text,
+                                      "zeit": jetzt().isoformat(timespec="seconds")}])
+    return f"Gemerkt: {text}"
+
+
+def wissen_vergessen(eingabe):
+    nr = str(eingabe.get("id") or "")
+    with _lock:
+        liste = wissen_lesen()
+        weg = [w for w in liste if w["id"] == nr]
+        if not weg:
+            raise ValueError("Unter dieser Nummer ist nichts gespeichert. Die Nummern stehen in deiner Liste.")
+        schreiben("wissen", [w for w in liste if w["id"] != nr])
+    return f"Gestrichen: {weg[0]['text']}"
+
+
 WERKZEUGE = {
+    "wissen_merken": {"tun": wissen_merken, "schema": {
+        "name": "wissen_merken",
+        "description": "Schreibt etwas Bleibendes über die Person auf (Gesundheit, Diät, Familie, Vorlieben). "
+                       "Du weißt es dann in allen künftigen Gesprächen.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "Ein kurzer Satz in der Sprache der Person, "
+                                                                    "z. B. 'Darf wegen Diabetes wenig Zucker essen'."}},
+            "required": ["text"],
+        },
+    }},
+    "wissen_vergessen": {"tun": wissen_vergessen, "schema": {
+        "name": "wissen_vergessen",
+        "description": "Streicht einen Eintrag aus deinem Wissen über die Person. Die Nummer steht in deiner Liste.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "Nummer des Eintrags aus der Liste."}},
+            "required": ["id"],
+        },
+    }},
     "erinnerung_merken": {"tun": erinnerung_merken, "schema": {
         "name": "erinnerung_merken",
         "description": "Schreibt eine Erinnerung auf. Die App meldet sich dann zur Uhrzeit groß mit Ton. "
@@ -910,6 +990,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
                 return self.senden(200, erinnerungen_lesen())
+            if pfad == "/api/wissen":
+                return self.senden(200, wissen_lesen())
             if pfad == "/api/gespraeche":
                 with _lock:
                     return self.senden(200, [uebersicht(g) for g in gespraeche_lesen()])
@@ -963,7 +1045,14 @@ class Handler(BaseHTTPRequestHandler):
                     schreiben("gespraeche", [])
                     _pfad("verlauf").unlink(missing_ok=True)
                 return self.senden(200, {"ok": True})
+            if pfad == "/api/wissen/loeschen":
+                try:
+                    wissen_vergessen(daten)
+                except ValueError:
+                    pass   # schon weg, zum Beispiel auf einem zweiten Handy gelöscht
+                return self.senden(200, wissen_lesen())
             if pfad == "/api/profil":
+                wissen_lesen()   # alte Felder Diät und Notizen vorher übernehmen, sonst gingen sie hier verloren
                 neu = {k: str(daten.get(k, "")).strip()[:1500] for k in STANDARD_PROFIL}
                 neu["anrede"] = "Sie" if neu["anrede"] == "Sie" else "du"
                 neu["sprache"] = neu["sprache"] if neu["sprache"] in SPRACHEN else "de-AT"

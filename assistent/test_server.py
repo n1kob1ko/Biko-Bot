@@ -5,6 +5,7 @@ import os
 import tempfile
 import threading
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.request
 from datetime import timedelta
@@ -89,14 +90,60 @@ class Test(unittest.TestCase):
 
     def test_chat_merkt_verlauf_und_nutzt_profil(self):
         c = self.anmelden()
-        self.rufe("/api/profil", {"name": "Oma Li", "diaet": "wenig Zucker", "sprache": "zh-CN"}, cookie=c)
+        self.rufe("/api/profil", {"name": "Oma Li", "sprache": "zh-CN"}, cookie=c)
+        server.schreiben("wissen", [{"id": "w1", "text": "Darf wenig Zucker essen", "zeit": ""}])
         status, j, _ = self.rufe("/api/chat", {"text": "Darf ich Kuchen essen?"}, cookie=c)
         self.assertEqual((status, j["antwort"]), (200, "Antwort von Biko"))
         letzte = GEFRAGT[-1]
         self.assertTrue(letzte["websuche"])
         self.assertIn("Oma Li", letzte["system"])
-        self.assertIn("wenig Zucker", letzte["system"])
+        self.assertIn("Nummer w1: Darf wenig Zucker essen", letzte["system"])
         self.assertIn("Chinesisch", letzte["system"])
+        server.schreiben("wissen", [])
+
+    def test_alte_felder_diaet_und_notizen_wandern_ins_gedaechtnis(self):
+        c = self.anmelden()
+        server._pfad("wissen").unlink(missing_ok=True)
+        server.schreiben("profil", {"name": "Oma Li", "anrede": "Sie", "diaet": "wenig Zucker", "notizen": "Enkel heißt Niko"})
+        # schon das Speichern des Profils übernimmt sie vorher, damit nichts verloren geht
+        self.rufe("/api/profil", {"name": "Oma Li", "anrede": "Sie"}, cookie=c)
+        self.assertEqual([w["text"] for w in self.rufe("/api/wissen", cookie=c)[1]], ["Diät: wenig Zucker", "Enkel heißt Niko"])
+        self.assertEqual(set(self.rufe("/api/profil", cookie=c)[1]), {"name", "anrede", "sprache"})
+        self.assertNotIn("diaet", server.lesen("profil", {}))
+        server.schreiben("wissen", [])
+
+    def test_biko_merkt_sich_was_die_person_ueber_sich_erzaehlt(self):
+        c = self.anmelden()
+        server.schreiben("wissen", [])
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("wissen_merken", {"text": "Hat Diabetes Typ 2"}),
+                    werkzeug("wissen_merken", {"text": "  "}, "tu_2")),
+            antwort("end_turn", text("Das merk ich mir. Dann schauen wir beim Essen auf den Zucker.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Ich hab übrigens Diabetes"}, cookie=c)[1]
+        self.assertEqual([w["text"] for w in j["gelernt"]], ["Hat Diabetes Typ 2"])
+        self.assertEqual(j["wissen"], self.rufe("/api/wissen", cookie=c)[1])
+        self.assertLessEqual({"wissen_merken", "wissen_vergessen"}, {w["name"] for w in anfragen[0]["tools"]})
+        ergebnisse = anfragen[1]["messages"][-1]["content"]
+        self.assertFalse(ergebnisse[0].get("is_error"))
+        self.assertTrue(ergebnisse[1]["is_error"])   # leerer Text geht als Fehler an Biko zurück
+        # steht auch im gespeicherten Gespräch und beim nächsten Mal im Systemtext
+        letzte = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]["nachrichten"][-1]
+        self.assertEqual([w["text"] for w in letzte["gelernt"]], ["Hat Diabetes Typ 2"])
+        self.assertIn("Hat Diabetes Typ 2", server.system_prompt())
+        # dasselbe nochmal merken gibt keinen zweiten Eintrag
+        self.assertIn("schon", server.wissen_merken({"text": "hat diabetes typ 2"}))
+        self.assertEqual(len(server.wissen_lesen()), 1)
+
+        # "Vergiss das": Biko streicht es, und in den Einstellungen kann man es auch löschen
+        nr = j["wissen"][0]["id"]
+        self.drehbuch(antwort("tool_use", werkzeug("wissen_vergessen", {"id": nr})), antwort("end_turn", text("Gestrichen.")))
+        self.rufe("/api/chat", {"text": "Vergiss das mit dem Diabetes"}, cookie=c)
+        self.assertEqual(server.wissen_lesen(), [])
+        server.wissen_merken({"text": "Mag Gartenarbeit"})
+        nr = server.wissen_lesen()[0]["id"]
+        self.assertEqual(self.rufe("/api/wissen/loeschen", {"id": nr}, cookie=c)[1], [])
+        self.assertEqual(self.rufe("/api/wissen/loeschen", {"id": nr}, cookie=c), (200, [], unittest.mock.ANY))
 
     def test_bildschirm_geht_mit_der_naechsten_frage_mit(self):
         c = self.anmelden()

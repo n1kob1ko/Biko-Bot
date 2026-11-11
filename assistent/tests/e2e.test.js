@@ -779,3 +779,22 @@ test('Schalter lässt sich ziehen: folgt dem Finger ohne Verzögerung und gibt a
   await p.waitForTimeout(300);
   assert.equal(Math.round(await versatz()), 20);
 });
+
+test('Biko merkt sich, was man über sich erzählt, und in den Einstellungen kann man es löschen', async (t) => {
+  const p = await angemeldet(t);
+  await zu(p, 'einstellen');
+  assert.equal(await p.locator('#profil-diaet, #profil-notizen').count(), 0, 'keine Felder für Diät und Notizen mehr');
+  assert.equal(await p.isVisible('#profil-name'), true);
+  await zu(p, 'reden');
+  await fragen(p, 'Ich hab Diabetes');
+  await p.waitForSelector('.notiz.gelernt');
+  assert.match(await p.textContent('.notiz.gelernt'), /Weiß ich jetzt.*Hat Diabetes/s);
+  await zu(p, 'einstellen');
+  const zeile = p.locator('#wissen li.wissen-zeile', { hasText: 'Hat Diabetes' });
+  await zeile.waitFor();
+  await zeile.locator('.weg').click();
+  await zeile.locator('.sicher .ja').click();
+  await p.waitForFunction(() => !document.querySelector('#wissen').textContent.includes('Hat Diabetes'));
+  assert.deepEqual(await p.evaluate(async () => (await fetch('/api/wissen')).json()), []);
+  assert.deepEqual(p.fehler, []);
+});
