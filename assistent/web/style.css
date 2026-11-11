@@ -349,6 +349,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 }
 .erinnerung .zeit { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .erinnerung .tage-text { color: var(--muted); font-size: .875rem; }
+.wissen-zeile { grid-template-columns: 1fr auto; }
 .weg {
   width: 56px; height: 56px; display: grid; place-items: center; border-radius: var(--r-feld);
   border: 2px solid var(--line); background: var(--card); color: var(--down); cursor: pointer;

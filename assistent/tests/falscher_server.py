@@ -29,6 +29,9 @@ def antwort_fuer(frage, werkzeuge):
     if frage.startswith("Erinnere mich"):
         werkzeuge["erinnerung_merken"]["tun"]({"text": "Herztablette", "zeit": "08:00"})
         return "Mach ich. Ich erinnere dich jeden Tag um 8 Uhr an die Herztablette."
+    if frage.startswith("Ich hab Diabetes"):
+        werkzeuge["wissen_merken"]["tun"]({"text": "Hat Diabetes"})
+        return "Das merk ich mir. Dann schauen wir beim Essen auf den Zucker."
     if frage.startswith("Vergiss"):
         werkzeuge["erinnerung_loeschen"]["tun"]({"id": server.erinnerungen_lesen()[0]["id"]})
         return "Erledigt, daran erinnere ich dich nicht mehr."
