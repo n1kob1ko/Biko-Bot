@@ -496,6 +496,59 @@ class Test(unittest.TestCase):
         self.assertFalse(ergebnis.get("is_error"))
         self.leeren(c)
 
+    def test_biko_stellt_die_morgenrunde_im_gespraech_ein(self):
+        c = self.anmelden()
+        server.schreiben("morgenrunde", {})
+        self.drehbuch(
+            antwort("tool_use", werkzeug("morgenrunde_einstellen", {"zeit": "08:00"})),
+            antwort("end_turn", text("Gern, ab jetzt melde ich mich jeden Morgen um 8.")),
+        )
+        status, j, _ = self.rufe("/api/chat", {"text": "Meld dich jeden Morgen um 8"}, cookie=c)
+        self.assertEqual((status, j["morgenrunde"]), (200, "08:00"))
+        self.assertEqual(self.rufe("/api/morgenrunde", cookie=c)[1]["zeit"], "08:00")
+        self.assertIn("Morgenrunde: jeden Tag um 08:00 Uhr.", server.hinweis())
+        self.assertRaises(ValueError, server.morgenrunde_einstellen, {"zeit": "acht"})
+        server.morgenrunde_einstellen({"zeit": "aus"})
+        self.assertIn("Morgenrunde: nicht eingestellt.", server.hinweis())
+        server.schreiben("morgenrunde", {})
+
+    def test_morgenrunde_ist_kurz_vor_der_zeit_faellig_und_nicht_gleich_nach_dem_einstellen(self):
+        heute = server.jetzt().replace(hour=8, minute=0, second=0, microsecond=0)
+        server.schreiben("morgenrunde", {"zeit": "08:00", "seit": (heute - timedelta(days=1)).isoformat()})
+        self.assertIsNone(server.morgenrunde_faellig(heute - timedelta(minutes=30)))
+        self.assertEqual(server.morgenrunde_faellig(heute - timedelta(minutes=10)), (tag(), "08:00"))
+        self.assertIsNotNone(server.morgenrunde_faellig(heute + timedelta(minutes=90)), "Server war kurz weg: nachholen")
+        self.assertIsNone(server.morgenrunde_faellig(heute + timedelta(hours=5)))
+        # Um 9 auf 8 Uhr gestellt: heute nicht mehr, erst morgen
+        server.schreiben("morgenrunde", {"zeit": "08:00", "seit": (heute + timedelta(hours=1)).isoformat()})
+        self.assertIsNone(server.morgenrunde_faellig(heute + timedelta(hours=1, minutes=1)))
+        server.schreiben("morgenrunde", {})
+
+    def test_morgenrunde_wird_einmal_geschrieben_und_man_kann_darin_weiterreden(self):
+        c = self.anmelden()
+        nachher = (server.jetzt() + timedelta(minutes=5)).strftime("%H:%M")
+        server.schreiben("morgenrunde", {"zeit": nachher, "seit": (server.jetzt() - timedelta(days=1)).isoformat()})
+        self.assertIsNone(self.rufe("/api/morgenrunde", cookie=c)[1]["heute"], "ohne ?jetzt schreibt der Hausmeister")
+        vorher = len(GEFRAGT)
+        heute = self.rufe("/api/morgenrunde?jetzt", cookie=c)[1]["heute"]
+        self.assertEqual((heute["datum"], heute["text"]), (tag(), "Antwort von Biko"))
+        anfrage = GEFRAGT[-1]
+        self.assertTrue(anfrage["websuche"])
+        self.assertEqual(anfrage["modell"], server.EINFACH_MODELL)
+        self.assertIn("Morgenrunde", alles(anfrage))
+        self.assertEqual(self.rufe("/api/morgenrunde?jetzt", cookie=c)[1]["heute"], heute)
+        self.assertEqual(len(GEFRAGT), vorher + 1, "nur einmal am Tag")
+        g = self.rufe("/api/gespraech?id=" + heute["gespraech"], cookie=c)[1]
+        self.assertIn(g["titel"], ("Morgenrunde", "早安"))   # je nach Sprache der Person
+        self.assertEqual(g["nachrichten"][0]["von"], "biko")
+        # Die Person antwortet: Claude sieht die Morgenrunde als seine eigene Nachricht
+        self.rufe("/api/chat", {"text": "Danke, und wie wird es morgen?", "gespraech": heute["gespraech"]}, cookie=c)
+        nachrichten = GEFRAGT[-1]["messages"]
+        self.assertEqual([m["role"] for m in nachrichten], ["user", "assistant", "user"])
+        self.assertIn("von selbst gemeldet", nachrichten[0]["content"])
+        self.assertEqual(texte(nachrichten[1]["content"]), ["Antwort von Biko"])
+        server.schreiben("morgenrunde", {})
+
     def test_wiederholte_erinnerung_an_bestimmten_wochentagen(self):
         c = self.anmelden()
         self.leeren(c)

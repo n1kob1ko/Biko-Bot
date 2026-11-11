@@ -33,6 +33,28 @@
     return null;
   }
 
+  // Wann sich Biko in den nächsten Stunden von selbst meldet, für die Wecker der Android-App (die meldet sich auch,
+  // wenn Biko gerade nicht offen ist): [{ wann (ms), art: 'erinnerung' | 'morgenrunde', id, text }], die nächste zuerst
+  function naechsteMeldungen({ erinnerungen, morgenrunde, jetzt, stunden = 48 }) {
+    const ab = jetzt.getTime(), bis = ab + stunden * 3600 * 1000;
+    const liste = [];
+    for (let plus = 0; plus <= Math.ceil(stunden / 24); plus++) {
+      const tag = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() + plus);
+      const um = (zeit) => {
+        const [h, m] = zeit.split(':').map(Number);
+        return new Date(tag.getFullYear(), tag.getMonth(), tag.getDate(), h, m).getTime();
+      };
+      const dazu = (eintrag, wann) => { if (wann > ab && wann <= bis) liste.push({ wann, ...eintrag }); };
+      for (const er of erinnerungen || []) {
+        if (!er.aktiv || !er.tage.includes(JS_TAG[tag.getDay()])) continue;
+        if (er.datum && er.datum !== datum(tag)) continue;
+        dazu({ art: 'erinnerung', id: er.id, text: er.text }, um(er.zeit));
+      }
+      if (morgenrunde) dazu({ art: 'morgenrunde', id: 'morgenrunde', text: '' }, um(morgenrunde));
+    }
+    return liste.sort((a, b) => a.wann - b.wann).slice(0, 30);
+  }
+
   // Wann kommt die Erinnerung? Kurz in Worten: "jeden Tag", "Mo, Mi", "heute", "morgen", "einmal am 24.12." (Vorlage mit {t} und {m})
   function wannText(er, texte, jetzt) {
     if (er.datum) {
@@ -217,5 +239,5 @@
     return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
   }
 
-  return { saetzeTeilen, istEcho, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  return { saetzeTeilen, istEcho, naechsteMeldungen, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

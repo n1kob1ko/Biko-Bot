@@ -24,6 +24,7 @@
 
   let profil = {};
   let erinnerungen = [];
+  let morgenrunde = null; // Uhrzeit der Morgenrunde ("08:00") oder null
   let wissen = [];      // was Biko über die Person weiß; merkt er sich im Gespräch selbst
   let gespraeche = [];  // Übersicht aller Gespräche, das zuletzt benutzte zuerst
   let gespraechNr = ''; // das offene Gespräch; leer heißt: mit der nächsten Frage beginnt ein neues
@@ -40,6 +41,8 @@
   let ruheUhr;
   // In der Android-App läuft Biko auch ganz klein in der Blase (?mini): sie zeigt, ob er zuhört, nachdenkt oder spricht
   const nativ = window.BikoNativ || null;
+  // Die Android-App stellt Wecker: so meldet sich Biko zur Erinnerung und zur Morgenrunde, auch wenn er zu ist
+  const wecker = window.BikoWecker || null;
   const mini = !!nativ && new URLSearchParams(location.search).has('mini');
   function nativMelden(art) {
     if (!nativ) return;
@@ -171,7 +174,9 @@
     }
     if (!s.angemeldet) { loginZeigen(); return; }
     sprachdienst = !!s.sprachdienst;
-    [profil, erinnerungen, gespraeche, wissen] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen')]);
+    let mr;
+    [profil, erinnerungen, gespraeche, wissen, mr] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde')]);
+    morgenrunde = mr.zeit;
     angemeldet = true;
     $('#login').hidden = true;
     $('#app').hidden = false;
@@ -191,9 +196,27 @@
     starten.uhr = setInterval(erinnerungPruefen, 15000);
     erinnerungPruefen();
     // Die Android-App öffnet Biko mit ?reden, wenn man auf die Blase tippt: dann geht das Gespräch gleich los
-    if (new URLSearchParams(location.search).has('reden')) {
+    const seite = new URLSearchParams(location.search);
+    if (seite.has('reden')) {
       history.replaceState(null, '', location.pathname);
       if (kannTelefonieren()) telefonieren();
+    }
+    // Aus der Mitteilung "Guten Morgen!": Biko erzählt die Morgenrunde
+    if (seite.has('morgenrunde')) {
+      history.replaceState(null, '', location.pathname);
+      morgenrundeHoeren();
+    }
+    // In der Blase holt Biko alle 5 Minuten die Erinnerungen neu (vielleicht kam am Handy eine dazu) und stellt die Wecker
+    if (mini) {
+      clearInterval(starten.auffrischen);
+      starten.auffrischen = setInterval(async () => {
+        try {
+          const [liste, m] = await Promise.all([api('/api/erinnerungen'), api('/api/morgenrunde')]);
+          erinnerungen = liste;
+          morgenrunde = m.zeit;
+          erinnerungenZeigen();
+        } catch (e) { /* kein Netz: beim nächsten Mal */ }
+      }, 5 * 60 * 1000);
     }
   }
 
@@ -639,6 +662,7 @@
         }
       }
       gespraecheZeigen();
+      if (j.morgenrunde !== undefined) morgenrunde = j.morgenrunde;
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
       if (j.wissen) { wissen = j.wissen; wissenZeigen(); }
     } catch (err) {
@@ -983,7 +1007,18 @@
       nativMelden('aus');
       try { nativ.hinweis(angemeldet ? t('mikro_verboten') : 'Bitte die Biko-App einmal öffnen und anmelden.'); } catch (e) { /* ältere App */ }
     };
-    window.bikoAuflegen = () => auflegen();
+    window.bikoAuflegen = () => { vorlesenStopp(); auflegen(); };
+    // Der Wecker der App ist losgegangen (die Blase ist zu sehen): Biko sagt es gleich selbst
+    window.bikoMelden = (art, id, text) => {
+      if (!angemeldet || telefon) return;
+      if (art === 'morgenrunde') return morgenrundeHoeren();
+      merken(L.gezeigtSchluessel({ id }, new Date()), '1');
+      ton();
+      const k = neu('button'); // unsichtbar: zeigt nur, wann Biko fertig vorgelesen hat
+      k.appendChild(neu('span'));
+      vorlesen(`${t('erinnerung')}: ${text}`, k);
+      sprichtMelden();
+    };
   }
 
   $('#chat-form').addEventListener('submit', (e) => {
@@ -1022,6 +1057,7 @@
   }
 
   function erinnerungenZeigen() {
+    weckerStellen();
     const ul = $('#erinnerungen');
     if (!erinnerungen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_erinnerungen'))); return; }
     ul.replaceChildren(...erinnerungen.map((er) => {
@@ -1068,7 +1104,8 @@
   let offen = null;
 
   function erinnerungPruefen() {
-    if (offen || !angemeldet) return;
+    if (offen || !angemeldet || mini) return; // in der Blase meldet sich Biko über die Wecker der App
+    morgenrundePruefen();
     const er = L.faelligeErinnerung({
       erinnerungen, jetzt: new Date(),
       gezeigt: new Set(speicherSchluessel().filter((k) => k.startsWith('gezeigt-'))),
@@ -1077,6 +1114,53 @@
     if (er) alarmZeigen(er);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) erinnerungPruefen(); });
+
+  // Die Wecker der Android-App für die nächsten zwei Tage. Sie werden jedes Mal ganz neu gestellt.
+  function weckerStellen() {
+    if (!wecker) return;
+    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
+      ? { ...m, titel: t('morgen_titel'), text: t('morgen_text') }
+      : { ...m, titel: 'Biko: ' + t('erinnerung') }));
+    try { wecker.planen(JSON.stringify(liste)); } catch (e) { /* ältere App */ }
+  }
+
+  // ---------- Die Morgenrunde: Biko meldet sich von selbst ----------
+  // Er schreibt sie am Server kurz vor der eingestellten Zeit (Wetter, Nachrichten, Termine) als eigenes Gespräch.
+  // Zur Zeit liest er sie vor: offen in der App, aus der Blase oder nach einem Tipp auf die Mitteilung.
+  const morgenSchluessel = () => L.gezeigtSchluessel({ id: 'morgenrunde' }, new Date());
+  function morgenrundePruefen() {
+    if (!morgenrunde || document.hidden || holen(morgenSchluessel())) return;
+    const [h, m] = morgenrunde.split(':').map(Number), jetzt = new Date();
+    const seit = jetzt.getHours() * 60 + jetzt.getMinutes() - (h * 60 + m);
+    if (seit >= 0 && seit <= 120) morgenrundeHoeren();
+  }
+  async function morgenrundeHoeren() {
+    if (morgenrundeHoeren.laeuft) return;
+    morgenrundeHoeren.laeuft = true;
+    try {
+      const { heute } = await api('/api/morgenrunde?jetzt');
+      if (!heute) return;
+      merken(morgenSchluessel(), '1');
+      gespraechZeigen(await api('/api/gespraech?id=' + encodeURIComponent(heute.gespraech)));
+      gespraecheLaden();
+      stimmung('winkt', 2600);
+      const d = $$('.biko-sagt', verlauf).pop();
+      vorlesen(heute.text, d && d.querySelector('.vorlesen'));
+      sprichtMelden();
+    } catch (e) { /* kein Netz: die Morgenrunde steht später im Verlauf */ }
+    finally { morgenrundeHoeren.laeuft = false; }
+  }
+  // In der Blase: sie zeigt "spricht", bis Biko fertig vorgelesen hat
+  function sprichtMelden() {
+    if (!mini) return;
+    try { nativ.zustand(liest ? 'spricht' : 'aus'); } catch (e) { /* ältere App */ }
+    clearInterval(sprichtMelden.uhr);
+    sprichtMelden.uhr = setInterval(() => {
+      if (liest && !telefon) return;
+      clearInterval(sprichtMelden.uhr);
+      if (!telefon) nativMelden('da');
+    }, 400);
+  }
 
   // Ein Tonwerk für alles: den Erinnerungston und das Mitlesen der Lautstärke beim Sprechen
   function tonKontext() {

@@ -12,7 +12,11 @@ Funktionen, alle über das Gespräch (POST /api/chat):
   6. Gedächtnis         Erzählt die Person etwas Bleibendes über sich ("ich hab Diabetes", "mein Enkel heißt Niko"),
                         schreibt Biko es sich selbst auf und denkt beim nächsten Mal daran. GET /api/wissen zeigt die
                         Liste, POST /api/wissen/loeschen streicht einen Eintrag.
-Nachrichten, Links, Erinnerungen und das Gedächtnis sind Werkzeuge, die Claude selbst aufruft.
+  7. Morgenrunde        "Meld dich jeden Morgen um 8": Biko bereitet kurz vorher Wetter, Nachrichten nach Interesse und
+                        die Termine des Tages vor (Hausmeister-Faden) und stellt sie als eigenes Gespräch bereit.
+                        Die Android-App meldet sich zur Uhrzeit mit einer Mitteilung und Biko liest vor
+                        (GET /api/morgenrunde).
+Nachrichten, Links, Erinnerungen, das Gedächtnis und die Morgenrunde sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -136,6 +140,14 @@ Gesundheit:
 Sicherheit:
 - Warne vor Betrug, wenn etwas danach klingt (Anrufe von "Polizei" oder "Bank", Gewinnspiele, "Enkeltrick", Links in SMS).
   Nie Passwörter, PINs oder TANs weitergeben.
+
+Von selbst melden:
+- Du kannst dich jeden Morgen von selbst melden ("Morgenrunde"): mit Wetter, ein paar Nachrichten, die die Person
+  interessieren, und ihren Erinnerungen für den Tag. Auf Android kommt dazu eine Mitteilung, und du liest vor.
+- Will die Person das ("meld dich jeden Morgen", "erzähl mir in der Früh die Nachrichten", "每天早上告诉我新闻"),
+  stellst du es mit morgenrunde_einstellen ein. Fehlt die Uhrzeit, frag kurz nach. "Hör auf damit" stellt es ab.
+- Welche Nachrichten sie interessieren (Wien, China, Sport, Gesundheit ...), merkst du dir mit wissen_merken.
+- Erinnerungen an einzelne Dinge bleiben Erinnerungen (erinnerung_merken), die Morgenrunde ist der tägliche Überblick.
 
 Nachrichten für andere:
 - Wenn die Person jemandem etwas schreiben will ("schreib Anna, dass ...", "wie sage ich dem Arzt ab?"), schreibst du die
@@ -631,6 +643,8 @@ def hinweis(gesprochen=False, bild=False):
         "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
                                              or "- noch nichts"),
     ]
+    zeit = morgenrunde_zeit()
+    teile.append(f"Morgenrunde: jeden Tag um {zeit} Uhr." if zeit else "Morgenrunde: nicht eingestellt.")
     if gesprochen:
         teile.append(GESPROCHEN)
     if bild:
@@ -684,9 +698,12 @@ def fuer_claude(nachrichten, bild=None):
     zuviel = len(nachrichten) - (MAX_VERLAUF - 1)
     if zuviel > 0:
         nachrichten = nachrichten[zuviel // 10 * 10:]   # 29 bis 38 Nachrichten
-    while nachrichten and nachrichten[0]["von"] != "ich":   # muss mit der Person beginnen
-        nachrichten = nachrichten[1:]
     messages = []
+    if nachrichten and nachrichten[0].get("vonselbst"):
+        # Biko hat sich von selbst gemeldet (Morgenrunde): Claude braucht trotzdem eine Nachricht der Person davor
+        messages.append({"role": "user", "content": "<app>Du hast dich von selbst gemeldet (Morgenrunde).</app>"})
+    while not messages and nachrichten and nachrichten[0]["von"] != "ich":   # muss mit der Person beginnen
+        nachrichten = nachrichten[1:]
     for i, m in enumerate(nachrichten):
         if m["von"] == "ich":
             if bild and m.get("bildschirm") == bild[0]:
@@ -821,7 +838,8 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         g["titel"] = g["titel"] or titel_aus(text)
         g["zuletzt"] = zeit
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
-    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss, **getan}
+    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss,
+            "morgenrunde": morgenrunde_zeit(), **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -921,7 +939,114 @@ def wissen_vergessen(eingabe):
     return f"Gestrichen: {weg[0]['text']}"
 
 
+# ---------- Morgenrunde: Biko meldet sich jeden Morgen von selbst ----------
+
+MORGEN_VORHER = 15 * 60   # so viele Sekunden vor der Uhrzeit bereitet Biko die Morgenrunde vor
+MORGEN_NACHHER = 2 * 3600  # war der Server so lange weg, holt er sie noch nach, danach erst morgen wieder
+_morgen_lock = threading.Lock()
+
+MORGENRUNDE = """<app>
+Es ist Zeit für deine Morgenrunde. Schreib, was du der Person gleich von selbst sagst, so wie man es vorliest:
+- eine herzliche Begrüßung (mit Namen, wenn du ihn kennst),
+- das Wetter in Wien heute in einem Satz (such kurz danach),
+- zwei oder drei kurze Nachrichten von heute, die sie interessieren (siehe was du über sie weißt; sonst das Wichtigste
+  aus Wien und Österreich, nichts Grausiges), jede in einem Satz, ohne Links,
+- ihre Erinnerungen für heute, falls es welche gibt,
+- zum Schluss eine Frage, über die ihr reden könnt.
+Insgesamt 5 bis 8 kurze Sätze, keine Listen, keine Überschriften, in ihrer Sprache.
+</app>"""
+
+
+def morgenrunde_zeit():
+    return lesen("morgenrunde", {}).get("zeit")
+
+
+def morgenrunde_einstellen(eingabe):
+    zeit = str(eingabe.get("zeit") or "").strip().lower()
+    if zeit in ("aus", "off", "nein", ""):
+        with _lock:
+            schreiben("morgenrunde", {**lesen("morgenrunde", {}), "zeit": None})
+        return "Die Morgenrunde ist abgestellt."
+    if not UHRZEIT.match(zeit):
+        raise ValueError("Bitte die Uhrzeit als HH:MM angeben, z. B. 08:00, oder 'aus'.")
+    with _lock:   # `seit`: eine Uhrzeit, die heute schon vorbei ist, gilt erst ab morgen
+        schreiben("morgenrunde", {**lesen("morgenrunde", {}), "zeit": zeit, "seit": jetzt().isoformat(timespec="seconds")})
+    return f"Eingestellt: jeden Tag um {zeit} Uhr. Die erste Morgenrunde kommt beim nächsten Mal um {zeit}."
+
+
+def morgenrunde_faellig(t=None):
+    """Ist heute die Zeit für die Vorbereitung gekommen? Liefert (datum, zeit) oder None."""
+    daten = lesen("morgenrunde", {})
+    zeit = daten.get("zeit")
+    if not zeit:
+        return None
+    t = t or jetzt()
+    h, m = map(int, zeit.split(":"))
+    um = t.replace(hour=h, minute=m, second=0, microsecond=0)
+    if not -MORGEN_NACHHER <= (um - t).total_seconds() <= MORGEN_VORHER:
+        return None
+    try:
+        seit = datetime.fromisoformat(daten.get("seit") or "")
+    except ValueError:
+        seit = None
+    if seit and seit > um:   # eingestellt, als die Zeit heute schon vorbei war
+        return None
+    return t.strftime("%Y-%m-%d"), zeit
+
+
+def morgenrunde_heute(erzeugen=False):
+    """Die Morgenrunde von heute ({"datum", "zeit", "text", "gespraech"}) oder None. Mit `erzeugen` schreibt Biko sie,
+    wenn sie fällig ist und noch fehlt (dauert ein paar Sekunden, weil er nach Wetter und Nachrichten sucht)."""
+    heute = jetzt().strftime("%Y-%m-%d")
+    fertig = lesen("morgenrunde", {}).get("heute")
+    if fertig and fertig.get("datum") == heute:
+        return fertig
+    if not erzeugen or not morgenrunde_faellig():
+        return None
+    with _morgen_lock:   # nur einmal schreiben, auch wenn zwei Anfragen gleichzeitig kommen
+        fertig = lesen("morgenrunde", {}).get("heute")
+        if fertig and fertig.get("datum") == heute:
+            return fertig
+        try:
+            text = frage_claude(system_prompt(), [{"role": "user", "content": [
+                {"type": "text", "text": hinweis()}, {"type": "text", "text": MORGENRUNDE}]}],
+                websuche=True, modell=EINFACH_MODELL)
+        except RuntimeError as e:
+            protokoll(f"Morgenrunde ging nicht: {e}")
+            name = profil()["name"].strip()
+            text = f"Guten Morgen{', ' + name if name else ''}! Ich bin da, wenn du mich brauchst."
+        zeit = jetzt().isoformat(timespec="seconds")
+        with _lock:
+            g = gespraech_neu([{"von": "biko", "text": text, "zeit": zeit, "vonselbst": "morgenrunde"}])
+            g["titel"] = "早安" if profil()["sprache"].startswith("zh") else "Morgenrunde"
+            schreiben("gespraeche", ([g] + gespraeche_lesen())[:MAX_GESPRAECHE])
+            fertig = {"datum": heute, "zeit": morgenrunde_zeit(), "text": text, "gespraech": g["id"]}
+            schreiben("morgenrunde", {**lesen("morgenrunde", {}), "heute": fertig})
+        protokoll("Morgenrunde für heute ist fertig.")
+        return fertig
+
+
+def hausmeister():
+    """Läuft im Hintergrund: bereitet die Morgenrunde rechtzeitig vor."""
+    while True:
+        try:
+            morgenrunde_heute(erzeugen=True)
+        except Exception as e:   # der Hausmeister darf nie stehen bleiben
+            protokoll(f"Hausmeister-Fehler: {type(e).__name__}")
+        time.sleep(60)
+
+
 WERKZEUGE = {
+    "morgenrunde_einstellen": {"tun": morgenrunde_einstellen, "schema": {
+        "name": "morgenrunde_einstellen",
+        "description": "Stellt ein, um wie viel Uhr du dich jeden Morgen von selbst meldest (Wetter, Nachrichten, "
+                       "Termine des Tages), oder stellt es ab.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"zeit": {"type": "string", "description": "Uhrzeit HH:MM, z. B. 08:00, oder 'aus'."}},
+            "required": ["zeit"],
+        },
+    }},
     "wissen_merken": {"tun": wissen_merken, "schema": {
         "name": "wissen_merken",
         "description": "Schreibt etwas Bleibendes über die Person auf (Gesundheit, Diät, Familie, Vorlieben). "
@@ -1121,6 +1246,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, erinnerungen_lesen())
             if pfad == "/api/wissen":
                 return self.senden(200, wissen_lesen())
+            if pfad == "/api/morgenrunde":
+                # ?jetzt: ist sie fällig und noch nicht fertig, schreibt Biko sie gleich (sonst macht das der Hausmeister)
+                return self.senden(200, {"zeit": morgenrunde_zeit(), "heute": morgenrunde_heute(erzeugen="jetzt" in parse_qs(urlparse(self.path).query, keep_blank_values=True))})
             if pfad == "/api/gespraeche":
                 with _lock:
                     return self.senden(200, [uebersicht(g) for g in gespraeche_lesen()])
@@ -1285,4 +1413,5 @@ if __name__ == "__main__":
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("Achtung: ANTHROPIC_API_KEY ist nicht gesetzt, Biko kann noch nicht antworten.", flush=True)
     print(f"Biko Assistent läuft auf Port {PORT}, Modell {MODELL}", flush=True)
+    threading.Thread(target=hausmeister, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

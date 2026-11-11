@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Wecker für Erinnerungen und Morgenrunde: pünktlich, auch wenn die App zu ist -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="@string/app_name"
@@ -47,6 +51,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Schwebender Helfer: Biko bleibt als Blase über anderen Apps sichtbar." />
         </service>
+
+        <!-- Weckt Biko zur Erinnerung und zur Morgenrunde, stellt die Wecker nach einem Neustart wieder -->
+        <receiver
+            android:name=".Wecker"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Biko als Standard-Assistent (Einstellungen › Apps › Standard-Apps › Digitaler Assistent) -->
         <service

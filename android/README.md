@@ -35,6 +35,21 @@ Einstellen: Einstellungen › Apps › Standard-Apps › Digitaler Assistent ›
 einschalten. Die App bietet das beim Start selbst an. Ein ständiges „Hey Biko“ gibt es nicht: Android erlaubt
 das Dauer-Zuhören nur Google, und es würde den Akku leeren.
 
+## Biko meldet sich von selbst
+
+Erinnerungen und die **Morgenrunde** kommen pünktlich, auch wenn die App gerade zu ist. Die Biko-Seite schickt der App
+die Zeitpunkte der nächsten zwei Tage (`BikoWecker.planen()`), die App stellt dafür Android-Wecker (`Wecker.java`).
+Geht einer los:
+
+- Ist die **Blase** zu sehen, sagt Biko es gleich selbst („Erinnerung: Herztablette“, oder er erzählt die Morgenrunde).
+- Dazu kommt eine **Mitteilung**. Ein Tipp auf „Guten Morgen!“ öffnet Biko als Karte, und er liest die Morgenrunde vor;
+  ein Tipp auf eine Erinnerung öffnet Biko groß mit „Erledigt“ und „Später“.
+- Nach einem Neustart des Tablets stellt die App die Wecker wieder und schaltet die Blase ein.
+
+Die Morgenrunde stellt man im Gespräch ein: „Meld dich jeden Morgen um 8“ (oder „Hör auf mit der Morgenrunde“).
+Biko schreibt sie kurz vorher am Server (Wetter in Wien, zwei, drei Nachrichten, die Termine des Tages) als eigenes Gespräch,
+in dem man gleich weiterreden kann.
+
 ## Installieren (Test)
 
 1. Auf dem Tablet im Browser öffnen:

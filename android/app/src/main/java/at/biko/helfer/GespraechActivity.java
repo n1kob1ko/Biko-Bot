@@ -1,6 +1,7 @@
 package at.biko.helfer;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -57,7 +58,19 @@ public class GespraechActivity extends Activity {
         });
 
         setContentView(wurzel);
-        web.loadUrl(BuildConfig.BIKO_ADRESSE + "?reden");
+        web.loadUrl(adresse(getIntent()));
+    }
+
+    /** Normal hört Biko gleich zu (?reden). Aus der Mitteilung "Guten Morgen!" erzählt er die Morgenrunde. */
+    private static String adresse(Intent i) {
+        String seite = i == null ? null : i.getStringExtra("seite");
+        return BuildConfig.BIKO_ADRESSE + "?" + ("morgenrunde".equals(seite) ? "morgenrunde" : "reden");
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        if (i.hasExtra("seite")) web.loadUrl(adresse(i));
     }
 
     /** Auf dem Handy fast so breit wie der Bildschirm, auf dem Tablet höchstens 560 dp. */
@@ -79,8 +92,15 @@ public class GespraechActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Netz.vorne++;
         web.onResume();
         BlaseService.sichtbar(false);
+    }
+
+    @Override
+    protected void onPause() {
+        Netz.vorne--;
+        super.onPause();
     }
 
     @Override

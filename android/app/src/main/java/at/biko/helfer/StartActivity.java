@@ -47,6 +47,7 @@ public class StartActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Netz.vorne++;
         web.onResume();
         BlaseService.sichtbar(false); // Biko ist ja schon groß da
         if (Settings.canDrawOverlays(this)) {
@@ -93,6 +94,7 @@ public class StartActivity extends Activity {
 
     @Override
     protected void onPause() {
+        Netz.vorne--;
         web.onPause(); // legt auf, wie beim Weglegen in der Web-App
         Netz.sichern();
         super.onPause();

@@ -33,6 +33,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.Manifest;
 import android.content.pm.PackageManager;
+import org.json.JSONObject;
 
 /**
  * Biko als Blase über allen Apps. Antippen: Biko hört gleich zu, ganz ohne Fenster, und die Blase zeigt,
@@ -61,6 +62,16 @@ public class BlaseService extends Service {
         if (!Settings.canDrawOverlays(c)) return;
         Intent i = new Intent(c, BlaseService.class);
         if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
+    }
+
+    /** Ein Wecker ist losgegangen: ist die Blase zu sehen, sagt Biko die Erinnerung (oder die Morgenrunde) selbst. */
+    static void melden(String art, String id, String text) {
+        BlaseService s = laeuft;
+        if (s == null || s.web == null || s.blase == null || s.blase.getVisibility() != View.VISIBLE) return;
+        if (!"aus".equals(s.zustand)) return; // mitten im Gespräch: die Mitteilung reicht
+        s.web.onResume();
+        s.web.evaluateJavascript("window.bikoMelden && bikoMelden(" + JSONObject.quote(art) + ","
+                + JSONObject.quote(id) + "," + JSONObject.quote(text == null ? "" : text) + ")", null);
     }
 
     /** Während Biko groß offen ist, braucht es die Blase nicht. */
