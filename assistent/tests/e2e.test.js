@@ -333,6 +333,18 @@ test('Foto von einem Brief: Biko bekommt das Bild und erklärt es', async (t) =>
   assert.deepEqual(p.fehler, []);
 });
 
+test('Gesundheitstagebuch: Biko notiert den Blutdruck und zeigt das Tagebuch zum Kopieren', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Mein Blutdruck ist 135 zu 85');
+  await p.waitForSelector('.tagebuch-karte');
+  assert.equal(await p.textContent('.tagebuch-karte .entwurf-an'), 'Gesundheitstagebuch');
+  assert.equal(await p.textContent('.tagebuch-zeilen li .was'), 'Blutdruck: 135/85 (morgens)');
+  await p.click('#sprache-knopf');
+  await p.click('[data-sprache="zh"]');
+  assert.equal(await p.textContent('.tagebuch-zeilen li .was'), '血压: 135/85 (morgens)');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Einkaufsliste: Biko schreibt auf, zeigt die Liste, Gekauftes tippt man weg', async (t) => {
   const p = await angemeldet(t);
   await fragen(p, 'Schreib Milch und Brot auf die Einkaufsliste');

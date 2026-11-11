@@ -376,6 +376,34 @@ class Test(unittest.TestCase):
         self.assertEqual(self.rufe("/api/listen", cookie=c)[1], {})
         self.assertIn("Deine Listen:\n- noch keine", server.hinweis())
 
+    def test_gesundheitstagebuch_notieren_im_hinweis_und_als_karte(self):
+        c = self.anmelden()
+        server.schreiben("gesundheit", [])
+        self.assertIn("135/85", server.gesundheit_notieren({"art": "blutdruck", "wert": "135 zu 85", "notiz": "morgens"}))
+        server.gesundheit_notieren({"art": "zucker", "wert": "112 mg/dl"})
+        self.assertRaises(ValueError, server.gesundheit_notieren, {"art": "blutdruck", "wert": "135"})
+        self.assertRaises(ValueError, server.gesundheit_notieren, {"art": "laune", "wert": "gut"})
+        # ein alter Eintrag (vor drei Wochen) steht nicht mehr im Hinweis
+        alt = {"id": "alt1", "zeit": (server.jetzt() - timedelta(days=21)).isoformat(timespec="seconds"),
+               "art": "gewicht", "wert": "70 kg"}
+        server.schreiben("gesundheit", [alt] + server.tagebuch_lesen())
+        h = server.hinweis()
+        self.assertIn("Blutdruck 135/85 (morgens)", h)
+        self.assertIn("Blutzucker 112 mg/dl", h)
+        self.assertNotIn("70 kg", h)
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("tagebuch_zeigen", {"arten": ["blutdruck"]})),
+            antwort("end_turn", text("Diese Woche hattest du einmal 135 zu 85.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Wie war mein Blutdruck diese Woche? Für den Arzt"}, cookie=c)[1]
+        self.assertEqual([(z["art"], z["wert"]) for z in j["tagebuch"][0]["zeilen"]], [("blutdruck", "135/85")])
+        self.assertLessEqual({"gesundheit_notieren", "gesundheit_streichen", "tagebuch_zeigen"},
+                             {w["name"] for w in anfragen[0]["tools"]})
+        nr = server.tagebuch_lesen()[1]["id"]
+        server.gesundheit_streichen({"id": nr})
+        self.assertNotIn("135/85", server.hinweis())
+        server.schreiben("gesundheit", [])
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(
