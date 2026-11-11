@@ -136,9 +136,15 @@ Echo beim Reden wie am Telefon über den Lautsprecher).
 
 ## Kosten
 
-Pro Frage ohne Internetsuche grob 1 Cent, mit Suche grob 5 bis 10 Cent (Standardmodell `claude-opus-5-5`).
-Das sind Schätzungen, die echten Zahlen stehen in der Anthropic-Konsole. Wer sparen will, setzt in der `.env`
-`ASSISTENT_MODELL=claude-haiku-5-5` (viel günstiger, etwas weniger schlau).
+Biko wählt das Modell pro Frage selbst (`modell_fuer` in `server.py`): Plaudern und einfache Fragen gehen an
+`claude-sonnet-5-5` (halb so teuer, antwortet schneller), Wichtiges an `claude-opus-5-5`. Wichtig heißt: ein
+Bildschirmfoto ist dabei, die Frage ist lang (über 400 Zeichen) oder es geht um Briefe, Ämter, Geld, Betrug oder
+Gesundheit (Wortliste `WICHTIG`, Deutsch und Chinesisch). Im Railway-Log steht pro Antwort, welches Modell es war.
+Ändern lassen sich beide über `ASSISTENT_MODELL` (stark) und `ASSISTENT_MODELL_EINFACH` (günstig), etwa
+`ASSISTENT_MODELL_EINFACH=claude-haiku-5-5` für noch weniger Kosten.
+
+Pro Frage ohne Internetsuche grob 1 bis 3 Cent, mit Suche grob 5 bis 15 Cent. Das sind Schätzungen, die echten
+Zahlen stehen in der Anthropic-Konsole.
 
 Der Sprachdienst kostet extra (Stand November 2026, laut Preisliste von ElevenLabs): Vorlesen etwa 0,04 $ pro
 1.000 Zeichen, eine Antwort mit 300 Zeichen also grob 1 Cent. Zuhören etwa 0,22 $ pro Stunde Aufnahme, das fällt

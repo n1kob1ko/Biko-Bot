@@ -54,7 +54,8 @@ PORT = int(os.environ.get("PORT", "8092"))
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
 WEB = Path(os.environ.get("WEB_DIR", Path(__file__).parent / "web"))
 PASSWORT = os.environ.get("APP_PASSWORT", "")
-MODELL = os.environ.get("ASSISTENT_MODELL", "claude-opus-5-5")
+MODELL = os.environ.get("ASSISTENT_MODELL", "claude-opus-5-5")             # für Wichtiges: Briefe, Betrug, Gesundheit, Bildschirm
+EINFACH_MODELL = os.environ.get("ASSISTENT_MODELL_EINFACH", "claude-sonnet-5-5")  # für Plaudern und einfache Fragen: halb so teuer, schneller
 ZEITZONE = ZoneInfo(os.environ.get("TZ", "Europe/Vienna"))
 MAX_VERLAUF = 30          # so viele Nachrichten eines Gesprächs liest Biko bei jeder Antwort mit
 MAX_GESPRAECHE = 40       # so viele Gespräche bleiben im Verlauf, das älteste fällt weg
@@ -248,7 +249,7 @@ def werkzeug_ergebnis(block, werkzeuge):
         return {"type": "tool_result", "tool_use_id": block.id, "content": f"Fehler: {e}", "is_error": True}
 
 
-def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None):
+def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None, modell=None):
     """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung.
     `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen.
     `beim_text`: bekommt jedes Stück Text, sobald es da ist (für das Gespräch wie am Telefon)."""
@@ -271,7 +272,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
 
     def anfrage(tools):
         kw = dict(
-            model=MODELL,
+            model=modell or MODELL,
             max_tokens=max_tokens,
             system=system,
             messages=messages,
@@ -315,7 +316,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
         raise RuntimeError("Biko kann gerade nicht antworten. Bitte gleich nochmal probieren.")
     except anthropic.APIConnectionError:
         raise RuntimeError("Keine Verbindung zur KI. Ist das Internet am Server da?")
-    protokoll(f"Claude: {runde} Anfragen, Ende {r.stop_reason}, Werkzeuge: {', '.join(benutzt) or 'keine'}")
+    protokoll(f"Claude ({modell or MODELL}): {runde} Anfragen, Ende {r.stop_reason}, Werkzeuge: {', '.join(benutzt) or 'keine'}")
     if r.stop_reason == "refusal":
         return "Dabei kann ich leider nicht helfen. Magst du mich etwas anderes fragen?"
     text = "".join(b.text for b in r.content if b.type == "text").strip()
@@ -450,6 +451,22 @@ Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tablet der Person: d
 "übersetz das" oder "was soll ich antworten", geht es um dieses Bild. Lies vor, erkläre oder übersetze in einfachen Worten.
 Eine Antwort für jemanden schreibst du wie sonst auch mit nachricht_zeigen. Sag nicht "auf dem Bildschirmfoto",
 sondern einfach "da steht" oder "Mei schreibt". Hat die Frage nichts mit dem Bild zu tun, beachte es nicht."""
+
+
+# Worum es geht, wenn Biko gründlich sein soll: dann nimmt er das stärkere Modell
+WICHTIG = re.compile(
+    r"brief|rechnung|mahnung|behörde|amt\b|finanzamt|magistrat|vertrag|kündig|betrug|betrüg|fake|phishing|abzocke|echt\?"
+    r"|bank|konto|überweis|zahlen|bezahl|pin\b|passwort|tan\b|versicherung|pension|rente|steuer|frist|anwalt|gericht|polizei"
+    r"|medikament|tablette|arzt|ärztin|krank|schmerz|blutdruck|zucker|allergie|notfall|spital|krankenhaus"
+    r"|诈骗|骗|银行|转账|密码|合同|账单|信件|药|医生|医院|病|疼|保险|税|警察|紧急",
+    re.IGNORECASE)
+
+
+def modell_fuer(text, bild=None):
+    """Plaudern und einfache Fragen gehen an das günstigere Modell, Wichtiges und alles mit Bildschirm an das stärkere."""
+    if bild or len(text) > 400 or WICHTIG.search(text):
+        return MODELL
+    return EINFACH_MODELL
 
 
 def bildschirm_merken(bild):
@@ -624,6 +641,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     zeigen, entwuerfe, links = zeige_werkzeuge()
     vorher = erinnerungen_lesen()
     antwort = frage_claude(system_prompt(gesprochen) + (BILDSCHIRM if bild else ""), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
+                           modell=modell_fuer(text, bild),
                            **({"beim_text": beim_text} if beim_text else {}))
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
     nachher = erinnerungen_lesen()

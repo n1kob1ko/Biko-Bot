@@ -18,8 +18,9 @@ import server  # noqa: E402
 GEFRAGT = []
 
 
-def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None):
-    GEFRAGT.append({"system": system, "messages": list(messages), "websuche": websuche, "werkzeuge": werkzeuge})
+def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, modell=None):
+    GEFRAGT.append({"system": system, "messages": list(messages), "websuche": websuche, "werkzeuge": werkzeuge,
+                    "modell": modell})
     return "Antwort von Biko"
 
 
@@ -123,6 +124,23 @@ class Test(unittest.TestCase):
         self.rufe("/api/chat", {"text": "Und jetzt?"}, cookie=c)
         self.assertEqual(GEFRAGT[-1]["messages"][-1]["content"], "Und jetzt?")
         self.assertNotIn("Bildschirmfoto", GEFRAGT[-1]["system"])
+
+    def test_einfaches_geht_ans_guenstige_modell_wichtiges_ans_starke(self):
+        c = self.anmelden()
+        server._bildschirm.update(bild=None, zeit=0)
+        for text, modell in [("Wie geht es dir heute?", server.EINFACH_MODELL),
+                             ("Erzähl mir einen Witz", server.EINFACH_MODELL),
+                             ("Ist diese SMS von der Bank echt?", server.MODELL),
+                             ("Ich habe einen Brief vom Finanzamt bekommen", server.MODELL),
+                             ("Darf ich das Medikament mit Alkohol nehmen?", server.MODELL),
+                             ("这是诈骗吗？", server.MODELL)]:
+            self.rufe("/api/chat", {"text": text}, cookie=c)
+            self.assertEqual(GEFRAGT[-1]["modell"], modell, text)
+        # mit Bildschirm immer das starke
+        server.bildschirm_merken(b"\xff\xd8bild")
+        self.rufe("/api/chat", {"text": "Was steht da?"}, cookie=c)
+        self.assertEqual(GEFRAGT[-1]["modell"], server.MODELL)
+        server._bildschirm.update(bild=None, zeit=0)
 
     def test_bildschirm_nur_jpeg(self):
         c = self.anmelden()
