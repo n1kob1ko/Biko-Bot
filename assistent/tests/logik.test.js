@@ -227,6 +227,11 @@ test('Antwort in Sätze teilen: fertige Sätze gehen gleich zum Sprechen, der Re
   assert.deepEqual(L.saetzeTeilen('Hallo Anna! Wie geht es dir? Ich hab'), { saetze: ['Hallo Anna!', 'Wie geht es dir?'], rest: ' Ich hab' });
   assert.deepEqual(L.saetzeTeilen('Ein Satz.'), { saetze: [], rest: 'Ein Satz.' }, 'ohne Leerzeichen danach kann noch etwas kommen');
   assert.deepEqual(L.saetzeTeilen('Ein Satz.', true), { saetze: ['Ein Satz.'], rest: '' });
+  // Der Anfang einer langen Antwort geht schon am ersten Komma an die Stimme, kurze Anfänge und Zahlen nicht
+  assert.deepEqual(L.fruehStueck('Das ist eine wirklich gute Frage, und die Antwort'), { stueck: 'Das ist eine wirklich gute Frage,', rest: ' und die Antwort' });
+  assert.equal(L.fruehStueck('Gerne, ich schau nach'), null);
+  assert.equal(L.fruehStueck('Der Preis liegt heute bei 3,50 Euro und'), null);
+  assert.deepEqual(L.fruehStueck('这个问题很好，我来解释'), { stueck: '这个问题很好，', rest: '我来解释' });
   assert.deepEqual(L.saetzeTeilen('Moment, ich schau nach.\nBei Billa'), { saetze: ['Moment, ich schau nach.'], rest: 'Bei Billa' });
 });
 

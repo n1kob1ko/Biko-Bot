@@ -245,6 +245,7 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   const p = await angemeldet(t, { vorher: FALSCHES_TELEFON });
   const stimmen = [];
   p.on('request', (r) => { if (r.url().endsWith('/api/stimme')) stimmen.push(JSON.parse(r.postData()).text); });
+  const messung = p.waitForRequest((r) => r.url().endsWith('/api/messung'));
   await p.click('#chat-knopf');
   await p.waitForSelector('#chat-knopf[data-art=stopp]');
   assert.equal(await p.getAttribute('#chat-knopf', 'aria-label'), 'Gespräch beenden');
@@ -268,6 +269,10 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   // Biko spricht Satz für Satz, kein Abspielen einer ganzen Datei
   await p.waitForFunction(() => document.querySelector('#app .biko').dataset.mood === 'da');
   assert.deepEqual(stimmen.slice(0, 1), ['Diese Woche gibt es bei Billa Kaffee um 30 % günstiger.']);
+  // wie lange es bis zu Bikos Stimme gedauert hat, geht als Zahlen ins Protokoll (die Uhr der Seite steht hier still)
+  const zahlen = JSON.parse((await messung).postData());
+  assert.deepEqual(Object.keys(zahlen), ['gesamt', 'pause', 'ki', 'satz', 'stimme']);
+  assert.ok(Object.values(zahlen).every((z) => typeof z === 'number' && z >= 0), JSON.stringify(zahlen));
   await p.waitForFunction(() => document.querySelectorAll('.blase.ich').length === 1);
   // das Gespräch bleibt offen
   assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'stopp');

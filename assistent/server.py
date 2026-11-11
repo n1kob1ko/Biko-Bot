@@ -55,6 +55,8 @@ import base64
 from collections import OrderedDict
 import hashlib
 import hmac
+import http.client
+import io
 import json
 import os
 import re
@@ -512,27 +514,84 @@ def jetzt():
 
 # ---------- Sprachdienst ----------
 
+# Offene Verbindungen zum Sprachdienst. Jeder Satz braucht eine Anfrage; eine neue Verbindung kostet jedes Mal den
+# Verbindungsaufbau (ein paar hundert Millisekunden), eine offene ist sofort da.
+SPRACH_HOST = "api.elevenlabs.io"
+MAX_VERBINDUNGEN = 4
+_verbindungen = []
+
+
+def _sprach_verbindung():
+    """(Verbindung, ob sie schon offen war)."""
+    with _lock:
+        if _verbindungen:
+            return _verbindungen.pop(), True
+    return http.client.HTTPSConnection(SPRACH_HOST, timeout=40), False
+
+
+def _verbindung_zurueck(v, r):
+    if r.will_close:
+        v.close()
+        return
+    with _lock:
+        if len(_verbindungen) < MAX_VERBINDUNGEN:
+            _verbindungen.append(v)
+            return
+    v.close()
+
+
+def _sprach_senden(pfad, daten, kopf):
+    """Schickt die Anfrage über eine offene Verbindung (sonst eine neue) und liefert (Verbindung, Antwort).
+    Fehler des Dienstes kommen wie bei urllib als HTTPError, eine fehlende Verbindung als OSError."""
+    kopf = {"xi-api-key": SPRACH_KEY, **(kopf or {})}
+    for versuch in (1, 2):
+        v, offen = _sprach_verbindung()
+        try:
+            v.request("GET" if daten is None else "POST", pfad, body=daten, headers=kopf)
+            r = v.getresponse()
+        except (OSError, http.client.HTTPException) as e:
+            v.close()
+            if offen and versuch == 1:
+                continue   # die offene Verbindung hat der Dienst inzwischen zugemacht: einmal mit einer neuen
+            raise OSError(str(e)) from e
+        if r.status >= 400:
+            inhalt = r.read()
+            _verbindung_zurueck(v, r)
+            raise urllib.error.HTTPError("https://" + SPRACH_HOST + pfad, r.status, r.reason, r.headers, io.BytesIO(inhalt))
+        return v, r
+
+
 def sprach_anfrage(pfad, daten=None, kopf=None):
     """Der eine Aufruf des Sprachdienstes. Die Tests ersetzen ihn. Liefert die Antwort als Bytes."""
-    req = urllib.request.Request("https://api.elevenlabs.io" + pfad, data=daten, method="GET" if daten is None else "POST",
-                                 headers={"xi-api-key": SPRACH_KEY, **(kopf or {})})
-    with urllib.request.urlopen(req, timeout=40) as r:
-        return r.read()
+    v, r = _sprach_senden(pfad, daten, kopf)
+    try:
+        inhalt = r.read()
+    except (OSError, http.client.HTTPException) as e:
+        v.close()
+        raise OSError(str(e)) from e
+    _verbindung_zurueck(v, r)
+    return inhalt
 
 
 def sprach_strom(pfad, daten, kopf=None):
     """Wie sprach_anfrage, liefert die Antwort aber in Stücken, sobald sie ankommen. Die Tests ersetzen ihn."""
-    req = urllib.request.Request("https://api.elevenlabs.io" + pfad, data=daten, method="POST",
-                                 headers={"xi-api-key": SPRACH_KEY, **(kopf or {})})
-    r = urllib.request.urlopen(req, timeout=40)
+    v, r = _sprach_senden(pfad, daten, kopf)
 
     def stuecke():
-        with r:
+        fertig = False
+        try:
             while True:
-                stueck = r.read1(8192) if hasattr(r, "read1") else r.read(8192)
+                stueck = r.read1(8192)
                 if not stueck:
+                    fertig = True
                     return
                 yield stueck
+        finally:
+            # ganz gelesen: die Verbindung kann wieder verwendet werden. Abgebrochen: zumachen.
+            if fertig:
+                _verbindung_zurueck(v, r)
+            else:
+                v.close()
     return stuecke()
 
 
@@ -602,11 +661,23 @@ def ton_strom(text, vorher=""):
     body = {"text": text, "model_id": SPRACH_MODELL}
     if vorher:
         body["previous_text"] = vorher[-500:]
-    stuecke = sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}/stream?output_format=pcm_24000",
-                           json.dumps(body).encode(), {"Content-Type": "application/json"}, strom=True)
+    start = time.monotonic()
+    stuecke = mit_erstem_ton(sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}/stream?output_format=pcm_24000",
+                                          json.dumps(body).encode(), {"Content-Type": "application/json"}, strom=True),
+                             start, len(text))
     heute = kosten_dazu(zeichen=len(text))
     protokoll(f"Sprachdienst: {len(text)} Zeichen gesprochen, heute bisher {heute['zeichen']} Zeichen")
     return ton_merken(schluessel, stuecke) if schluessel else stuecke
+
+
+def mit_erstem_ton(stuecke, start, zeichen):
+    """Schreibt ins Protokoll, wie lange es bis zum ersten Ton gedauert hat."""
+    erstes = True
+    for stueck in stuecke:
+        if erstes:
+            erstes = False
+            protokoll(f"Sprachdienst: {zeichen} Zeichen, erster Ton nach {(time.monotonic() - start) * 1000:.0f} ms")
+        yield stueck
 
 
 MAX_GEMERKT_SATZ = 80     # so kurze Sätze merkt sich Biko als fertigen Ton
@@ -1024,9 +1095,17 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
     zeigen, entwuerfe, links, anrufe, karten, tagebuch = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
+    start, erste = time.monotonic(), []
+
+    def beim_stueck(stueck):
+        if not erste:
+            erste.append(time.monotonic() - start)
+        beim_text(stueck)
     antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
-                           **({"beim_text": beim_text} if beim_text else {}))
+                           **({"beim_text": beim_stueck} if beim_text else {}))
+    if erste:
+        protokoll(f"Claude: erste Worte nach {erste[0] * 1000:.0f} ms, fertig nach {(time.monotonic() - start) * 1000:.0f} ms")
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
     nachher, weiss = erinnerungen_lesen(), wissen_lesen()
     alt, neu = {e["id"] for e in vorher}, {e["id"] for e in nachher}
@@ -2052,6 +2131,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, {"ok": True})
             if pfad == "/api/liste/weg":
                 return self.senden(200, liste_wegtippen(str(daten.get("liste") or ""), str(daten.get("id") or "")))
+            if pfad == "/api/messung":   # nur Zahlen: wie lange es beim Reden bis zur Antwort gedauert hat
+                teile = {k: daten.get(k) for k in ("gesamt", "pause", "ki", "satz", "stimme")}
+                if all(isinstance(v, (int, float)) and 0 <= v < 120000 for v in teile.values()):
+                    protokoll("Reden: Biko spricht {gesamt:.0f} ms nach deinem Satz (Pause {pause:.0f}, erste Worte "
+                              "{ki:.0f}, erster Satz {satz:.0f}, Stimme {stimme:.0f}), dazu die Stille, bis der "
+                              "Sprachdienst den Satz für fertig hält".format(**teile))
+                return self.senden(200, {"ok": True})
             if pfad == "/api/lebenszeichen":   # die App wurde geöffnet: die Person ist da
                 lebenszeichen()
                 return self.senden(200, {"gemeldet": True})
