@@ -448,6 +448,54 @@ class Test(unittest.TestCase):
         server.dolmetscher({"an": False})
         self.assertIsNone(self.rufe("/api/dolmetscher", cookie=c)[1]["dolmetscher"])
 
+    def test_checkin_ohne_lebenszeichen_bekommt_die_familie_eine_sms_und_spaeter_eine_entwarnung(self):
+        c = self.anmelden()
+        server.schreiben("checkin", {})
+        self.assertRaises(ValueError, server.checkin_einstellen, {"zeit": "10:00"})   # wer bekommt die SMS?
+        self.assertIn("noch nicht eingerichtet", server.checkin_einstellen(
+            {"zeit": "10:00", "kontakte": [{"name": "Peter", "nummer": "0664 1234567"}]}))
+        self.assertIn("SMS-Dienst ist aber noch nicht eingerichtet", server.hinweis())
+        self.assertRaises(ValueError, server.familie_benachrichtigen, {"text": "Ich bin gestürzt."})
+        self.assertEqual(server.nummer_international("0664 123 45-67"), "+436641234567")
+        self.assertEqual(server.nummer_international("0049 170 1"), "+491701")
+        self.assertEqual(server.nummer_international("+86 138 0013 8000"), "+8613800138000")
+        # seit gestern eingestellt, das letzte Lebenszeichen war gestern
+        heute = server.jetzt()
+        gestern = (heute - timedelta(days=1)).isoformat(timespec="seconds")
+        server.schreiben("checkin", {**server.checkin_lesen(), "seit": gestern, "zuletzt": gestern})
+        um = lambda h, m=0: heute.replace(hour=h, minute=m, second=0, microsecond=0)
+        sms = unittest.mock.Mock()
+        with unittest.mock.patch.multiple(server, TWILIO_SID="AC1", TWILIO_TOKEN="geheim", TWILIO_VON="+4312345",
+                                          sms_schicken=sms):
+            self.assertIsNone(server.checkin_pruefen(um(11)))          # Frist ist erst um 12
+            self.assertEqual(server.checkin_pruefen(um(12, 5)), ["Peter"])
+            self.assertEqual(sms.call_args[0][0], "0664 1234567")
+            self.assertIn("10:00", sms.call_args[0][1])                # in der Sprache der Person (hier Chinesisch)
+            self.assertIsNone(server.checkin_pruefen(um(13)))          # nur einmal am Tag
+            self.assertEqual(self.rufe("/api/lebenszeichen", {}, cookie=c)[1], {"gemeldet": True})
+            self.assertIn("放心", sms.call_args[0][1])                  # Entwarnung
+            server.lebenszeichen()
+            self.assertEqual(sms.call_count, 2)                        # keine zweite Entwarnung
+            # ein Lebenszeichen kurz vor der Uhrzeit zählt schon für heute
+            server.schreiben("checkin", {**server.checkin_lesen(), "alarm": {}, "zuletzt": um(9).isoformat()})
+            self.assertIsNone(server.checkin_pruefen(um(12, 5)))
+            self.assertTrue(server.gemeldet_heute(um(12, 5)))
+            # Notfall auf Wunsch, aber nicht unbegrenzt viele SMS an einem Tag
+            self.assertIn("Peter", server.familie_benachrichtigen({"text": "Ich bin gestürzt, die Rettung kommt."}))
+            self.assertRegex(sms.call_args[0][1], r"^Biko.*: Ich bin gestürzt")
+            for _ in range(3):
+                server.familie_benachrichtigen({"text": "Test"})
+            self.assertRaises(ValueError, server.familie_benachrichtigen, {"text": "Noch eine"})
+            anfragen = self.drehbuch(antwort("end_turn", text("Hallo!")))
+            j = self.rufe("/api/chat", {"text": "Hallo"}, cookie=c)[1]
+            self.assertEqual(j["checkin"], "10:00")
+            self.assertLessEqual({"checkin_einstellen", "familie_benachrichtigen"}, {w["name"] for w in anfragen[0]["tools"]})
+        # heute eingestellt, als 10 Uhr schon vorbei war: gilt erst ab morgen
+        server.schreiben("checkin", {**server.checkin_lesen(), "seit": um(11).isoformat(), "zuletzt": gestern, "alarm": {}})
+        self.assertIsNone(server.checkin_heute(um(12, 5)))
+        self.assertIn("aus", server.checkin_einstellen({"zeit": "aus"}))
+        server.schreiben("checkin", {})
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(

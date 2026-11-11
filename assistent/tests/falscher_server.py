@@ -40,6 +40,9 @@ def antwort_fuer(frage, werkzeuge):
         werkzeuge["gesundheit_notieren"]["tun"]({"art": "blutdruck", "wert": "135/85", "notiz": "morgens"})
         werkzeuge["tagebuch_zeigen"]["tun"]({})
         return "Hab ich ins Tagebuch geschrieben: 135 zu 85. Das liegt etwas über dem üblichen Bereich."
+    if frage.startswith("Frag mich jeden Tag um 10"):
+        server.checkin_einstellen({"zeit": "10:00", "kontakte": [{"name": "Peter", "nummer": "0664 1234567"}]})
+        return "Mach ich. Ich frag dich jeden Tag um 10. Meldest du dich bis 12 nicht, bekommt Peter eine SMS."
     if frage.startswith("Dolmetsch für mich beim Arzt"):
         server.dolmetscher({"an": True, "sprache_a": "Chinesisch", "sprache_b": "Deutsch"})
         return "Gern, ich übersetze jetzt. 好的，我现在帮你翻译。"

@@ -46,6 +46,12 @@ test('Geburtstage: am Tag um 9 Uhr, mit Morgenrunde sagt Biko es dort', () => {
   assert.deepEqual(feb.map((m) => [new Date(m.wann).getMonth() + 1, new Date(m.wann).getDate(), m.alter]), [[2, 28, null]]);
 });
 
+test('Check-in: jeden Tag zur Uhrzeit ein Wecker', () => {
+  const liste = L.naechsteMeldungen({ erinnerungen: [], checkin: '10:00', jetzt: um('09:00') });
+  assert.deepEqual(liste.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.art}`),
+    ['9. 10:00 checkin', '10. 10:00 checkin']);
+});
+
 test('Anrufen, WhatsApp und SMS: Nummern werden zu Links, österreichische Nummern international', () => {
   assert.equal(L.telLink('0664 / 123 45-67'), 'tel:06641234567');
   assert.equal(L.telLink('144'), 'tel:144');

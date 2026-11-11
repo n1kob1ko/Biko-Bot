@@ -26,6 +26,7 @@
   let erinnerungen = [];
   let morgenrunde = null; // Uhrzeit der Morgenrunde ("08:00") oder null
   let geburtstage = []; // [{id, name, tag, monat, jahr}] für die Wecker der Android-App
+  let checkin = null; // Uhrzeit des täglichen Check-ins ("10:00") oder null
   let wissen = [];      // was Biko über die Person weiß; merkt er sich im Gespräch selbst
   let gespraeche = [];  // Übersicht aller Gespräche, das zuletzt benutzte zuerst
   let gespraechNr = ''; // das offene Gespräch; leer heißt: mit der nächsten Frage beginnt ein neues
@@ -178,8 +179,11 @@
     if (!s.angemeldet) { loginZeigen(); return; }
     sprachdienst = !!s.sprachdienst;
     let mr;
-    [profil, erinnerungen, gespraeche, wissen, mr, geburtstage] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde'), api('/api/geburtstage')]);
+    let ci;
+    [profil, erinnerungen, gespraeche, wissen, mr, geburtstage, ci] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde'), api('/api/geburtstage'), api('/api/checkin')]);
     morgenrunde = mr.zeit;
+    checkin = ci.zeit;
+    lebenszeichen();
     api('/api/dolmetscher').then((d) => dolmetscherZeigen(d.dolmetscher), () => {});
     angemeldet = true;
     $('#login').hidden = true;
@@ -215,10 +219,11 @@
       clearInterval(starten.auffrischen);
       starten.auffrischen = setInterval(async () => {
         try {
-          const [liste, m, gb] = await Promise.all([api('/api/erinnerungen'), api('/api/morgenrunde'), api('/api/geburtstage')]);
+          const [liste, m, gb, ci] = await Promise.all([api('/api/erinnerungen'), api('/api/morgenrunde'), api('/api/geburtstage'), api('/api/checkin')]);
           erinnerungen = liste;
           morgenrunde = m.zeit;
           geburtstage = gb;
+          checkin = ci.zeit;
           erinnerungenZeigen();
         } catch (e) { /* kein Netz: beim nächsten Mal */ }
       }, 5 * 60 * 1000);
@@ -806,6 +811,7 @@
       gespraecheZeigen();
       if (j.morgenrunde !== undefined) morgenrunde = j.morgenrunde;
       if (j.geburtstage) geburtstage = j.geburtstage;
+      if (j.checkin !== undefined) checkin = j.checkin;
       if (j.dolmetscher !== undefined) dolmetscherZeigen(j.dolmetscher);
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
       if (j.wissen) { wissen = j.wissen; wissenZeigen(); }
@@ -1172,6 +1178,7 @@
     window.bikoMelden = (art, id, text) => {
       if (!angemeldet || telefon) return;
       if (art === 'morgenrunde') return morgenrundeHoeren();
+      if (art === 'checkin') return checkinFragen();
       merken(L.gezeigtSchluessel({ id }, new Date()), '1');
       ton();
       const k = neu('button'); // unsichtbar: zeigt nur, wann Biko fertig vorgelesen hat
@@ -1315,11 +1322,31 @@
   // Die Wecker der Android-App für die nächsten zwei Tage. Sie werden jedes Mal ganz neu gestellt.
   function weckerStellen() {
     if (!wecker) return;
-    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, geburtstage, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
+    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, geburtstage, checkin, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
       ? { ...m, titel: t('morgen_titel'), text: t('morgen_text') }
       : m.art === 'geburtstag' ? { ...m, titel: 'Biko', text: geburtstagText(m) }
-        : { ...m, titel: 'Biko: ' + t('erinnerung') }));
+        : m.art === 'checkin' ? { ...m, titel: 'Biko', text: t('checkin_frage') }
+          : { ...m, titel: 'Biko: ' + t('erinnerung') }));
     try { wecker.planen(JSON.stringify(liste)); } catch (e) { /* ältere App */ }
+  }
+
+  // ---------- Täglicher Check-in: Biko fragt, ob alles gut ist ----------
+  // Jedes Gespräch und jedes Öffnen der App ist ein Lebenszeichen. Kommt bis zur Frist keins, schickt der Server der
+  // Familie eine SMS. Die unsichtbare Seite in der Blase zählt nicht: dort ist ja niemand.
+  function lebenszeichen() {
+    if (mini || document.hidden || Date.now() - (lebenszeichen.zuletzt || 0) < 5 * 60 * 1000) return;
+    lebenszeichen.zuletzt = Date.now();
+    api('/api/lebenszeichen', {}).catch(() => { lebenszeichen.zuletzt = 0; });
+  }
+  document.addEventListener('visibilitychange', () => { if (angemeldet) lebenszeichen(); });
+  // Der Wecker in der Blase: hat sie sich heute schon gemeldet, bleibt Biko still
+  async function checkinFragen() {
+    try { if ((await api('/api/checkin')).gemeldet) return; } catch (e) { /* kein Netz: lieber fragen */ }
+    ton();
+    const k = neu('button'); // unsichtbar: zeigt nur, wann Biko fertig vorgelesen hat
+    k.appendChild(neu('span'));
+    vorlesen(t('checkin_sagen'), k);
+    sprichtMelden();
   }
 
   // "ich" ist der eigene Geburtstag: dann gratuliert Biko selbst
