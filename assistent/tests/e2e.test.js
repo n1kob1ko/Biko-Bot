@@ -422,6 +422,23 @@ test('Geburtstage: im Gespräch gemerkt, die Android-App meldet sich am Tag um 9
   assert.deepEqual(p.fehler, []);
 });
 
+test('Check-in: im Gespräch eingestellt, die Android-App fragt jeden Tag, die Blase bleibt still, wenn sie sich schon gemeldet hat', async (t) => {
+  const WECKER = () => { window.geplant = []; window.BikoWecker = { planen: (j) => window.geplant.push(JSON.parse(j)) }; };
+  const p = await angemeldet(t, { vorher: WECKER });
+  const zeichen = p.waitForRequest((r) => r.url().endsWith('/api/lebenszeichen'));
+  await p.reload();
+  await zeichen;   // die App geöffnet: die Person ist da
+  await fragen(p, 'Frag mich jeden Tag um 10, ob alles gut ist, sonst gib Peter Bescheid');
+  const zuletzt = await p.evaluate(() => window.geplant[window.geplant.length - 1]);
+  const kurz = zuletzt.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.titel}: ${m.text}`);
+  // Die Uhr der Seite steht auf Montag, 5.1., 15 Uhr
+  assert.deepEqual(kurz, ['6. 10:00', '7. 10:00'].map((w) => `${w} Biko: Ist bei dir alles in Ordnung? Tipp hier und sag kurz Hallo.`));
+  const ci = JSON.parse(fs.readFileSync(path.join(daten, 'checkin.json'), 'utf8'));
+  assert.deepEqual(ci.kontakte, [{ name: 'Peter', nummer: '0664 1234567' }]);
+  fs.writeFileSync(path.join(daten, 'checkin.json'), '{}');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Dolmetscher: im Gespräch eingeschaltet, die Übersetzung steht groß da, "Fertig" schaltet ihn aus', async (t) => {
   const p = await angemeldet(t);
   assert.equal(await p.isVisible('#dolmetscher-leiste'), false);

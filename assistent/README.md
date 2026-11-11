@@ -74,6 +74,22 @@ im Gespräch wie am Telefon, der Sprachdienst erkennt selbst, welche Sprache ges
 damit das Gegenüber mitlesen kann, und ein gelbes Band zeigt "Biko dolmetscht" mit Knopf "Fertig". Aus geht er mit
 "fertig" im Gespräch oder von selbst 30 Minuten nach dem letzten Satz (`GET /api/dolmetscher`).
 
+**Täglicher Check-in und Notfall-SMS an die Familie:** "Frag mich jeden Tag um 10, ob alles gut ist, sonst gib Peter
+Bescheid" (Werkzeug `checkin_einstellen`, `checkin.json`). Die Android-App fragt zur Uhrzeit ("Ist bei dir alles in
+Ordnung?"), hat sie sich heute schon gemeldet, bleibt die Blase still. Jedes Gespräch und jedes Öffnen der App ist ein
+Lebenszeichen (`POST /api/lebenszeichen`), auch bis zu zwei Stunden vor der Uhrzeit. Kommt bis zur Frist (Standard zwei
+Stunden) keins, schickt der Server den eingetragenen Kontakten einmal eine SMS; meldet sie sich danach, eine Entwarnung.
+Im Notfall ("Ich bin gestürzt") zeigt Biko zuerst den Knopf für 144 und schickt auf Wunsch sofort eine SMS
+(`familie_benachrichtigen`). Höchstens 6 SMS am Tag. Die SMS gehen über Twilio:
+
+| Variable | Bedeutung |
+|---|---|
+| `TWILIO_ACCOUNT_SID` | die Account SID aus der Twilio Console (beginnt mit `AC`) |
+| `TWILIO_AUTH_TOKEN` | der Auth Token aus der Twilio Console |
+| `TWILIO_FROM` | der Absender: die Twilio-Nummer im Format `+43...`, oder ein Name wie `Biko`, wo Twilio das erlaubt |
+
+Ohne diese drei Werte fragt Biko trotzdem nach, sagt aber ehrlich, dass er der Familie noch keine SMS schicken kann.
+
 **Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
 (`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
 nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für
@@ -223,7 +239,7 @@ wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst a
 ## Daten
 
 Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
-`erinnerungen.json`, `wissen.json`, `listen.json`, `gesundheit.json`, `geburtstage.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+`erinnerungen.json`, `wissen.json`, `listen.json`, `gesundheit.json`, `geburtstage.json`, `checkin.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
 Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
 Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen

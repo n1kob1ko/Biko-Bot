@@ -26,8 +26,12 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         GET /api/geburtstage.
  11. Dolmetscher       "Dolmetsch für mich beim Arzt": Biko übersetzt jeden Satz in die andere Sprache und sagt ihn laut,
                         bis man "fertig" sagt (oder 30 Minuten nichts kommt). Die App zeigt die Übersetzung groß.
-Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch, die Geburtstage und der
-Dolmetscher sind Werkzeuge, die Claude selbst aufruft.
+ 12. Check-in          "Frag mich jeden Tag um 10, ob alles gut ist, sonst gib Peter Bescheid": Biko fragt zur Uhrzeit nach.
+                        Kommt bis zur Frist kein Lebenszeichen (ein Gespräch, die App geöffnet), bekommt die Familie eine
+                        SMS (Twilio), meldet sie sich später doch, eine Entwarnung. Im Notfall schickt Biko auf Wunsch
+                        sofort eine SMS (familie_benachrichtigen). GET /api/checkin, POST /api/lebenszeichen.
+Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch, die Geburtstage, der
+Dolmetscher und der Check-in sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -64,7 +68,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -90,6 +94,11 @@ LIVE_ADRESSE = "wss://api.elevenlabs.io"                         # dorthin schic
 MAX_VORLESEN = 2500       # so viele Zeichen werden höchstens vorgelesen
 MAX_SATZ = 600            # so viele Zeichen hat ein Stück, das im Gespräch auf einmal gesprochen wird
 MAX_AUFNAHME = 6_000_000  # Bytes; eine Minute Sprechen ist etwa 1 MB
+# SMS an die Familie (Twilio): für den täglichen Check-in und im Notfall. Ohne die drei Werte schickt Biko keine SMS.
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_VON = os.environ.get("TWILIO_FROM", "")                 # die Twilio-Nummer, von der die SMS kommt, z. B. +43...
+MAX_SMS_TAG = 6           # mehr SMS schickt Biko an einem Tag nicht, egal was passiert
 COOKIE = "biko_assistent"
 COOKIE_TAGE = 365
 
@@ -148,6 +157,18 @@ Gesundheit:
   und mit anruf_zeigen den Knopf für 144 zeigen.
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
+
+Täglicher Check-in und die Familie benachrichtigen:
+- Auf Wunsch fragt Biko jeden Tag zu einer Uhrzeit, ob alles gut ist. Kommt bis zur Frist kein Lebenszeichen (irgendein
+  Gespräch mit dir oder die App geöffnet), bekommt die Familie automatisch eine SMS. Meldet sie sich später, eine Entwarnung.
+- Einstellen mit checkin_einstellen: Uhrzeit, wer die SMS bekommt (Name und Nummer aus dem Gedächtnis; kennst du die
+  Nummer nicht, frag danach, erfinde nie eine) und nach wie vielen Stunden (Standard 2). Erklär ihr in ein, zwei Sätzen,
+  wie es geht. Das ist freiwillig, dräng es niemandem auf; anbieten darfst du es, wenn sie allein lebt oder Angst hat.
+- Notfall (gestürzt, kommt nicht auf, Brustschmerzen, Atemnot): zuerst 144 mit anruf_zeigen. Dann der Familie Bescheid:
+  mit familie_benachrichtigen eine kurze, klare SMS (was ist, wo sie ist). Bittet sie selbst darum oder ist es eindeutig ein
+  Notfall, in dem sie um Hilfe bittet, schick sie gleich und sag ihr, dass Peter (oder wer) Bescheid bekommt. Sonst frag kurz.
+- Steht im Hinweis, dass der SMS-Dienst nicht eingerichtet ist, sag ehrlich, dass du der Familie noch keine SMS schicken
+  kannst, und biete an, anzurufen (anruf_zeigen).
 
 Dolmetscher:
 - Bittet die Person dich, für sie zu dolmetschen (beim Arzt, im Geschäft, mit dem Nachbarn), schaltest du mit dolmetscher
@@ -739,6 +760,7 @@ def hinweis(gesprochen=False, bild=False):
                                                 for name, eintraege in listen.items()) or "- noch keine"))
     zeit = morgenrunde_zeit()
     teile.append(f"Morgenrunde: jeden Tag um {zeit} Uhr." if zeit else "Morgenrunde: nicht eingestellt.")
+    teile.append(checkin_text())
     d = dolmetscher_jetzt()
     if d:
         teile.append(DOLMETSCHER.format(a=d["a"], b=d["b"]))
@@ -988,6 +1010,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     with _lock:
         g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
     verlauf = g["nachrichten"] if g else []
+    lebenszeichen()
     dolmetscher_jetzt(verlaengern=True)
     bild = bildschirm_frisch()   # (Zeit, Bytes) oder None
     # Ein Bildschirmfoto geht nur einmal mit, bei der ersten Frage danach. Danach steht es im Verlauf bei dieser
@@ -1026,7 +1049,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
     return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss,
             "morgenrunde": morgenrunde_zeit(), "geburtstage": geburtstage_lesen(),
-            "dolmetscher": dolmetscher_jetzt(), **getan}
+            "dolmetscher": dolmetscher_jetzt(), "checkin": checkin_lesen().get("zeit"), **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -1285,6 +1308,205 @@ def dolmetscher(eingabe):
             "Ab der nächsten Frage übersetzt du nur noch.")
 
 
+# ---------- Check-in: Biko fragt jeden Tag nach, im Notfall bekommt die Familie eine SMS ----------
+
+CHECKIN_VORHER = 2 * 3600   # ein Lebenszeichen so lange vor der Uhrzeit zählt auch schon für heute
+
+
+def sms_bereit():
+    return bool(TWILIO_SID and TWILIO_TOKEN and TWILIO_VON)
+
+
+def nummer_international(nummer):
+    """0664 123 -> +43664123 (österreichische Nummer), 0049 ... -> +49 ..., +86 ... bleibt."""
+    roh = str(nummer).strip()
+    n = re.sub(r"\D", "", roh)
+    if roh.startswith("+"):
+        return "+" + n
+    if n.startswith("00"):
+        return "+" + n[2:]
+    if n.startswith("0"):
+        return "+43" + n[1:]
+    return "+" + n
+
+
+def sms_schicken(nummer, text):
+    """Eine SMS über Twilio. Wirft RuntimeError, wenn es nicht geht."""
+    daten = urlencode({"From": TWILIO_VON, "To": nummer_international(nummer), "Body": text}).encode()
+    anfrage = urllib.request.Request(f"https://api.twilio.com/2010-04-01/Accounts/{quote(TWILIO_SID)}/Messages.json",
+                                     data=daten, method="POST")
+    zugang = base64.b64encode(f"{TWILIO_SID}:{TWILIO_TOKEN}".encode()).decode()
+    anfrage.add_header("Authorization", "Basic " + zugang)
+    anfrage.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(anfrage, timeout=20) as antwort:
+            antwort.read()
+    except urllib.error.HTTPError as e:
+        try:
+            grund = json.loads(e.read()[:500]).get("message", "")   # die Meldung von Twilio, ohne Inhalt der SMS
+        except Exception:
+            grund = ""
+        protokoll(f"SMS-Fehler: {e.code} {grund}")
+        raise RuntimeError("Die SMS ging nicht hinaus.")
+    except OSError:
+        protokoll("SMS-Fehler: keine Verbindung")
+        raise RuntimeError("Die SMS ging nicht hinaus.")
+
+
+def familie_sms(text, kontakte=None):
+    """Schickt `text` an alle Kontakte des Check-ins. Liefert die Namen, die sie bekommen haben."""
+    kontakte = kontakte if kontakte is not None else checkin_lesen().get("kontakte") or []
+    if not sms_bereit():
+        raise ValueError("Der SMS-Dienst ist noch nicht eingerichtet. Biko kann der Familie keine SMS schicken. "
+                         "Biete an, anzurufen (anruf_zeigen).")
+    if not kontakte:
+        raise ValueError("Es ist niemand eingetragen, der eine SMS bekommt. Frag, wen du benachrichtigen sollst, "
+                         "und trag ihn mit checkin_einstellen ein.")
+    heute = jetzt().strftime("%Y-%m-%d")
+    with _lock:
+        d = checkin_lesen()
+        zaehler = d.get("sms_tag") if (d.get("sms_tag") or {}).get("datum") == heute else {"datum": heute, "anzahl": 0}
+        if zaehler["anzahl"] + len(kontakte) > MAX_SMS_TAG:
+            raise ValueError("Heute sind schon genug SMS hinausgegangen. Biete an, anzurufen (anruf_zeigen).")
+        schreiben("checkin", {**d, "sms_tag": {"datum": heute, "anzahl": zaehler["anzahl"] + len(kontakte)}})
+    bekommen = []
+    for k in kontakte:
+        try:
+            sms_schicken(k["nummer"], text[:600])
+            bekommen.append(k["name"])
+        except RuntimeError:
+            pass
+    protokoll(f"SMS: an {len(bekommen)} von {len(kontakte)} Kontakten")
+    if not bekommen:
+        raise ValueError("Die SMS ging nicht hinaus. Biete an, anzurufen (anruf_zeigen).")
+    return bekommen
+
+
+def checkin_lesen():
+    """{"zeit", "stunden", "kontakte": [{"name", "nummer"}], "seit", "zuletzt", "alarm": {"datum", "zeit", "entwarnt"}}"""
+    d = lesen("checkin", {})
+    return d if isinstance(d, dict) else {}
+
+
+def checkin_text():
+    d = checkin_lesen()
+    if not d.get("zeit"):
+        return "Täglicher Check-in: nicht eingestellt." + ("" if sms_bereit() else " Der SMS-Dienst ist nicht eingerichtet.")
+    wer = ", ".join(f"{k['name']} ({k['nummer']})" for k in d.get("kontakte") or []) or "niemand"
+    return (f"Täglicher Check-in: jeden Tag um {d['zeit']} Uhr; ohne Lebenszeichen nach {d.get('stunden', 2)} Stunden "
+            f"bekommt eine SMS: {wer}." + ("" if sms_bereit() else " Der SMS-Dienst ist aber noch nicht eingerichtet."))
+
+
+def checkin_einstellen(eingabe):
+    zeit = str(eingabe.get("zeit") or "").strip().lower()
+    if zeit in ("aus", "off", "nein", ""):
+        with _lock:
+            schreiben("checkin", {**checkin_lesen(), "zeit": None})
+        return "Der tägliche Check-in ist aus."
+    if not UHRZEIT.match(zeit):
+        raise ValueError("Bitte die Uhrzeit als HH:MM angeben, z. B. 10:00, oder 'aus'.")
+    try:
+        stunden = max(1, min(int(eingabe.get("stunden") or 2), 8))
+    except (TypeError, ValueError):
+        stunden = 2
+    kontakte = []
+    for k in (eingabe.get("kontakte") or [])[:3]:
+        name = " ".join(str((k or {}).get("name") or "").split())[:40]
+        if name:
+            kontakte.append({"name": name, "nummer": nummer_pruefen((k or {}).get("nummer"), muss=True)})
+    if not kontakte:
+        raise ValueError("Wer soll die SMS bekommen? Frag nach Name und Nummer (oder nimm sie aus dem Gedächtnis).")
+    with _lock:
+        schreiben("checkin", {**checkin_lesen(), "zeit": zeit, "stunden": stunden, "kontakte": kontakte,
+                              "seit": jetzt().isoformat(timespec="seconds")})
+    wer = " und ".join(k["name"] for k in kontakte)
+    return (f"Eingestellt: jeden Tag um {zeit} Uhr. Kommt bis {stunden} Stunden danach kein Lebenszeichen, bekommt "
+            f"{wer} eine SMS." + ("" if sms_bereit() else " Achtung: Der SMS-Dienst ist noch nicht eingerichtet, bis "
+                                 "dahin geht keine SMS hinaus. Sag ihr das ehrlich; das richtet die Familie ein."))
+
+
+def familie_benachrichtigen(eingabe):
+    text = " ".join(str(eingabe.get("text") or "").split())[:400]
+    if not text:
+        raise ValueError("Was soll in der SMS stehen?")
+    name = profil().get("name") or ""
+    bekommen = familie_sms(f"Biko{' für ' + name if name else ''}: {text}")
+    return f"Die SMS ist an {' und '.join(bekommen)} hinausgegangen. Sag ihr das."
+
+
+def lebenszeichen():
+    """Die Person hat etwas mit Biko gemacht. Kam heute schon eine Warnung hinaus, bekommt die Familie eine Entwarnung."""
+    t = jetzt()
+    with _lock:
+        d = checkin_lesen()
+        alarm = d.get("alarm") or {}
+        entwarnen = alarm.get("datum") == t.strftime("%Y-%m-%d") and not alarm.get("entwarnt")
+        if entwarnen:
+            alarm = {**alarm, "entwarnt": t.isoformat(timespec="seconds")}
+        schreiben("checkin", {**d, "zuletzt": t.isoformat(timespec="seconds"), "alarm": alarm})
+    if entwarnen and alarm.get("geschickt"):
+        name = profil().get("name") or ""
+        try:
+            familie_sms(f"Biko: Entwarnung, {name or 'sie'} hat sich gerade gemeldet."
+                        if not str(profil().get("sprache")).startswith("zh") else f"Biko：放心，{name or '她'}刚刚回复了。")
+        except ValueError:
+            pass
+
+
+def checkin_heute(t=None):
+    """(Uhrzeit heute, Frist heute) oder None, wenn der Check-in heute nicht gilt."""
+    d = checkin_lesen()
+    if not d.get("zeit"):
+        return None
+    t = t or jetzt()
+    h, m = map(int, d["zeit"].split(":"))
+    um = t.replace(hour=h, minute=m, second=0, microsecond=0)
+    try:
+        seit = datetime.fromisoformat(d.get("seit") or "")
+    except ValueError:
+        seit = None
+    if seit and seit > um:   # eingestellt, als die Zeit heute schon vorbei war: gilt ab morgen
+        return None
+    return um, um + timedelta(hours=d.get("stunden", 2))
+
+
+def gemeldet_heute(t=None):
+    t = t or jetzt()
+    heute = checkin_heute(t)
+    zuletzt = checkin_lesen().get("zuletzt")
+    if not heute or not zuletzt:
+        return False
+    return datetime.fromisoformat(zuletzt) >= heute[0] - timedelta(seconds=CHECKIN_VORHER)
+
+
+def checkin_pruefen(t=None):
+    """Vom Hausmeister jede Minute: ist die Frist vorbei, ohne Lebenszeichen, bekommt die Familie (einmal am Tag) eine SMS."""
+    t = t or jetzt()
+    heute = checkin_heute(t)
+    if not heute or t < heute[1] or gemeldet_heute(t):
+        return None
+    datum = t.strftime("%Y-%m-%d")
+    with _lock:
+        d = checkin_lesen()
+        if (d.get("alarm") or {}).get("datum") == datum:
+            return None
+        alarm = {"datum": datum, "zeit": t.isoformat(timespec="seconds")}
+        schreiben("checkin", {**d, "alarm": alarm})
+    name = profil().get("name") or ""
+    text = (f"Biko: {name or 'Sie'} hat sich heute seit {d['zeit']} Uhr nicht gemeldet (täglicher Check-in). "
+            "Bitte ruf kurz an." if not str(profil().get("sprache")).startswith("zh")
+            else f"Biko：{name or '她'}今天从{d['zeit']}起还没有回复（每日问候）。请打个电话问问。")
+    try:
+        bekommen = familie_sms(text, d.get("kontakte") or [])
+        with _lock:
+            schreiben("checkin", {**checkin_lesen(), "alarm": {**alarm, "geschickt": bekommen}})
+        protokoll("Check-in: kein Lebenszeichen, Familie benachrichtigt")
+        return bekommen
+    except ValueError:
+        protokoll("Check-in: kein Lebenszeichen, aber keine SMS möglich")
+        return None
+
+
 # ---------- Geburtstage: Biko denkt rechtzeitig daran ----------
 
 MAX_GEBURTSTAGE = 200
@@ -1435,16 +1657,48 @@ def morgenrunde_heute(erzeugen=False):
 
 
 def hausmeister():
-    """Läuft im Hintergrund: bereitet die Morgenrunde rechtzeitig vor."""
+    """Läuft im Hintergrund: bereitet die Morgenrunde rechtzeitig vor und schaut nach dem täglichen Check-in."""
     while True:
         try:
             morgenrunde_heute(erzeugen=True)
         except Exception as e:   # der Hausmeister darf nie stehen bleiben
             protokoll(f"Hausmeister-Fehler: {type(e).__name__}")
+        try:
+            checkin_pruefen()
+        except Exception as e:
+            protokoll(f"Hausmeister-Fehler beim Check-in: {type(e).__name__}")
         time.sleep(60)
 
 
 WERKZEUGE = {
+    "checkin_einstellen": {"tun": checkin_einstellen, "schema": {
+        "name": "checkin_einstellen",
+        "description": "Stellt den täglichen Check-in ein (oder aus): Biko fragt zur Uhrzeit nach, ob alles gut ist; ohne "
+                       "Lebenszeichen bis zur Frist bekommen die Kontakte eine SMS.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "zeit": {"type": "string", "description": "Uhrzeit HH:MM, z. B. '10:00', oder 'aus'."},
+                "stunden": {"type": "integer", "description": "Nach wie vielen Stunden ohne Lebenszeichen, Standard 2."},
+                "kontakte": {"type": "array", "description": "Wer die SMS bekommt, höchstens 3.", "items": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}, "nummer": {"type": "string"}},
+                    "required": ["name", "nummer"]}},
+            },
+            "required": ["zeit"],
+        },
+    }},
+    "familie_benachrichtigen": {"tun": familie_benachrichtigen, "schema": {
+        "name": "familie_benachrichtigen",
+        "description": "Schickt den Kontakten des Check-ins sofort eine SMS, z. B. im Notfall. Nur wenn die Person es will "
+                       "oder eindeutig um Hilfe bittet.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "Kurz und klar, z. B. 'Ich bin in der Küche gestürzt "
+                                                                     "und komme nicht auf. Die Rettung ist verständigt.'"}},
+            "required": ["text"],
+        },
+    }},
     "dolmetscher": {"tun": dolmetscher, "schema": {
         "name": "dolmetscher",
         "description": "Schaltet den Dolmetscher ein oder aus. An: du übersetzt jeden Satz in die andere Sprache, bis "
@@ -1738,6 +1992,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, geburtstage_lesen())
             if pfad == "/api/dolmetscher":
                 return self.senden(200, {"dolmetscher": dolmetscher_jetzt()})
+            if pfad == "/api/checkin":
+                return self.senden(200, {"zeit": checkin_lesen().get("zeit"), "gemeldet": gemeldet_heute()})
             if pfad == "/api/morgenrunde":
                 # ?jetzt: ist sie fällig und noch nicht fertig, schreibt Biko sie gleich (sonst macht das der Hausmeister)
                 return self.senden(200, {"zeit": morgenrunde_zeit(), "heute": morgenrunde_heute(erzeugen="jetzt" in parse_qs(urlparse(self.path).query, keep_blank_values=True))})
@@ -1796,6 +2052,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, {"ok": True})
             if pfad == "/api/liste/weg":
                 return self.senden(200, liste_wegtippen(str(daten.get("liste") or ""), str(daten.get("id") or "")))
+            if pfad == "/api/lebenszeichen":   # die App wurde geöffnet: die Person ist da
+                lebenszeichen()
+                return self.senden(200, {"gemeldet": True})
             if pfad == "/api/wissen/loeschen":
                 try:
                     wissen_vergessen(daten)
