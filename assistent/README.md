@@ -149,8 +149,23 @@ Gesundheit (Wortliste `WICHTIG`, Deutsch und Chinesisch). Im Railway-Log steht p
 Ändern lassen sich beide über `ASSISTENT_MODELL` (stark) und `ASSISTENT_MODELL_EINFACH` (günstig), etwa
 `ASSISTENT_MODELL_EINFACH=claude-haiku-5-5` für noch weniger Kosten.
 
-Pro Frage ohne Internetsuche grob 1 bis 3 Cent, mit Suche grob 5 bis 15 Cent. Das sind Schätzungen, die echten
-Zahlen stehen in der Anthropic-Konsole.
+**Zwischenspeicher (Prompt Caching):** Was bei jeder Frage gleich bleibt, kommt aus dem Zwischenspeicher von
+Anthropic und kostet dann nur einen Bruchteil (Sonnet 0,10 $, Opus 0,20 $ pro Million statt 2 bzw. 4 $):
+- Die Anleitung (`SYSTEM`) bleibt Wort für Wort gleich. Was sich ändert (Uhrzeit, Erinnerungen, Wissen, "redet wie am
+  Telefon", Bildschirmfoto), steht im Hinweis der App (`hinweis()`) direkt vor der Frage und wird nicht gespeichert.
+- Das Ende des bisherigen Gesprächs ist markiert, das obere `cache_control` nimmt Suchergebnisse und Werkzeug-Runden
+  innerhalb einer Antwort mit. Der Anfang eines langen Gesprächs rückt in Zehnerschritten weiter (29 bis 38 Nachrichten),
+  damit er gleich bleibt.
+- Ein Bildschirmfoto geht nur bei der ersten Frage danach mit und steht dann im Verlauf. Solange es gilt (5 Minuten),
+  sieht Biko es weiter, es kommt aber aus dem Zwischenspeicher.
+- Kurze Sätze am Anfang einer Antwort ("Moment, ich schau kurz nach.") merkt sich der Server als fertigen Ton
+  (die letzten 100) und spricht sie beim nächsten Mal ohne ElevenLabs.
+
+**Echte Zahlen:** Im Railway-Log steht nach jeder Antwort eine Zeile wie
+`Claude (claude-sonnet-5-5): 1 Anfragen, ... | Eingabe 5500 Tokens (davon 4000 aus dem Zwischenspeicher, ...), Ausgabe 200,
+Suchen 1, Kosten 1.57 US-Cent, heute bisher 23.4 US-Cent bei 17 Antworten`. Die Tagessummen (KI in Dollar, Zahl der
+Antworten, vorgelesene Zeichen) stehen in `kosten.json` am Volume. Die Preise stehen in `PREISE` in `server.py`; die
+Abrechnung in der Anthropic-Konsole ist die verbindliche Zahl.
 
 Der Sprachdienst kostet extra (Stand November 2026, laut Preisliste von ElevenLabs): Vorlesen etwa 0,04 $ pro
 1.000 Zeichen, eine Antwort mit 300 Zeichen also grob 1 Cent. Zuhören etwa 0,22 $ pro Stunde Aufnahme, das fällt

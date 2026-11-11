@@ -16,7 +16,10 @@ from http.server import ThreadingHTTPServer  # noqa: E402
 
 def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None, modell=None):
     time.sleep(0.4)  # damit "Biko denkt nach" sichtbar ist
-    antwort = antwort_fuer(messages[-1]["content"], werkzeuge)
+    inhalt = messages[-1]["content"]   # vorne der Hinweis der App, dann die Frage
+    frage = inhalt if isinstance(inhalt, str) else "".join(
+        b["text"] for b in inhalt if b.get("type") == "text" and not b["text"].startswith("<app>"))
+    antwort = antwort_fuer(frage, werkzeuge)
     if beim_text:   # wie die echte KI: die Antwort kommt in Stücken
         for stueck in re.findall(r"\S+\s*", antwort):
             beim_text(stueck)
