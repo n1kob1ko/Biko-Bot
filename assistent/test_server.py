@@ -42,6 +42,23 @@ def antwort(stop, *bloecke):
     return SimpleNamespace(stop_reason=stop, content=list(bloecke))
 
 
+def texte(inhalt):
+    """Alle Texte aus einem Inhalt (Text, Liste von Blöcken oder ein ganzer Systemtext als Blöcke)."""
+    if isinstance(inhalt, str):
+        return [inhalt]
+    return [b["text"] for b in inhalt if isinstance(b, dict) and b.get("type") == "text"]
+
+
+def frage_text(inhalt):
+    """Was die Person gesagt hat, ohne den Hinweis der App davor."""
+    return "".join(t for t in texte(inhalt) if not t.startswith("<app>"))
+
+
+def alles(anfrage):
+    """Der ganze Text einer Anfrage: Anleitung und alle Nachrichten."""
+    return "\n".join(texte(anfrage["system"]) + [t for m in anfrage["messages"] for t in texte(m["content"])])
+
+
 def tag(plus=0):
     return (server.jetzt() + timedelta(days=plus)).strftime("%Y-%m-%d")
 
@@ -97,7 +114,8 @@ class Test(unittest.TestCase):
         letzte = GEFRAGT[-1]
         self.assertTrue(letzte["websuche"])
         self.assertIn("Oma Li", letzte["system"])
-        self.assertIn("Nummer w1: Darf wenig Zucker essen", letzte["system"])
+        self.assertIn("Nummer w1: Darf wenig Zucker essen", alles(letzte))
+        self.assertNotIn("w1", letzte["system"], "was sich ändert, steht nicht in der Anleitung, sonst geht der Zwischenspeicher verloren")
         self.assertIn("Chinesisch", letzte["system"])
         server.schreiben("wissen", [])
 
@@ -130,7 +148,7 @@ class Test(unittest.TestCase):
         # steht auch im gespeicherten Gespräch und beim nächsten Mal im Systemtext
         letzte = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]["nachrichten"][-1]
         self.assertEqual([w["text"] for w in letzte["gelernt"]], ["Hat Diabetes Typ 2"])
-        self.assertIn("Hat Diabetes Typ 2", server.system_prompt())
+        self.assertIn("Hat Diabetes Typ 2", server.hinweis())
         # dasselbe nochmal merken gibt keinen zweiten Eintrag
         self.assertIn("schon", server.wissen_merken({"text": "hat diabetes typ 2"}))
         self.assertEqual(len(server.wissen_lesen()), 1)
@@ -158,19 +176,28 @@ class Test(unittest.TestCase):
         req.add_header("Cookie", c)
         with urllib.request.urlopen(req) as r:
             self.assertEqual(r.status, 200)
-        self.rufe("/api/chat", {"text": "Was schreibt Mei?"}, cookie=c)
+        gid = self.rufe("/api/chat", {"text": "Was schreibt Mei?"}, cookie=c)[1]["gespraech"]["id"]
         frage = GEFRAGT[-1]["messages"][-1]["content"]
-        self.assertEqual(frage[0]["type"], "image")
-        self.assertEqual(frage[1], {"type": "text", "text": "Was schreibt Mei?"})
-        self.assertIn("Bildschirmfoto", GEFRAGT[-1]["system"])
+        self.assertEqual([b["type"] for b in frage], ["text", "image", "text"])
+        self.assertIn("Bildschirmfoto", frage[0]["text"])
+        self.assertEqual(frage[2], {"type": "text", "text": "Was schreibt Mei?"})
+        self.assertNotIn("Zu dieser Frage siehst du ein Bildschirmfoto", GEFRAGT[-1]["system"])
         # gespeichert wird nur der Text
-        g = self.rufe("/api/gespraeche", cookie=c)[1][0]
-        self.assertEqual(self.rufe("/api/gespraech?id=" + g["id"], cookie=c)[1]["nachrichten"][-2]["text"], "Was schreibt Mei?")
+        self.assertEqual(self.rufe("/api/gespraech?id=" + gid, cookie=c)[1]["nachrichten"][-2]["text"], "Was schreibt Mei?")
+        # die nächste Frage schickt das Bild nicht nochmal neu: es steht im Verlauf bei der ersten Frage
+        # (dort kommt es aus dem Zwischenspeicher), Biko sieht es also weiter
+        self.rufe("/api/chat", {"text": "Was soll ich antworten?", "gespraech": gid}, cookie=c)
+        m = GEFRAGT[-1]["messages"]
+        self.assertEqual([b["type"] for b in m[-1]["content"]], ["text", "text"])
+        self.assertEqual([b["type"] for b in m[0]["content"]], ["image", "text"])
+        self.assertIn("Bildschirmfoto", m[-1]["content"][0]["text"])
         # nach ein paar Minuten gilt das Bild nicht mehr
         server._bildschirm["zeit"] -= server.BILDSCHIRM_GILT + 1
-        self.rufe("/api/chat", {"text": "Und jetzt?"}, cookie=c)
-        self.assertEqual(GEFRAGT[-1]["messages"][-1]["content"], "Und jetzt?")
-        self.assertNotIn("Bildschirmfoto", GEFRAGT[-1]["system"])
+        self.rufe("/api/chat", {"text": "Und jetzt?", "gespraech": gid}, cookie=c)
+        m = GEFRAGT[-1]["messages"]
+        self.assertEqual(frage_text(m[-1]["content"]), "Und jetzt?")
+        self.assertNotIn("Bildschirmfoto", json.dumps(m, ensure_ascii=False))
+        self.assertNotIn("image", json.dumps(m))
 
     def test_einfaches_geht_ans_guenstige_modell_wichtiges_ans_starke(self):
         c = self.anmelden()
@@ -207,7 +234,7 @@ class Test(unittest.TestCase):
         j2 = self.rufe("/api/chat", {"text": "Und Obst?", "gespraech": gid}, cookie=c)[1]
         self.assertEqual(j2["gespraech"]["id"], gid)
         # Claude bekommt das ganze Gespräch, als einfachen Text
-        self.assertEqual([(m["role"], m["content"]) for m in GEFRAGT[-1]["messages"]],
+        self.assertEqual([(m["role"], frage_text(m["content"])) for m in GEFRAGT[-1]["messages"]],
                          [("user", "Darf ich Kuchen essen?"), ("assistant", "Antwort von Biko"), ("user", "Und Obst?")])
         liste = self.rufe("/api/gespraeche", cookie=c)[1]
         self.assertEqual([(g["id"], g["titel"], g["anzahl"]) for g in liste], [(gid, "Darf ich Kuchen essen?", 4)])
@@ -223,7 +250,7 @@ class Test(unittest.TestCase):
         alt = self.rufe("/api/chat", {"text": "Erstes Gespräch"}, cookie=c)[1]["gespraech"]["id"]
         neu = self.rufe("/api/chat", {"text": "Zweites Gespräch"}, cookie=c)[1]["gespraech"]["id"]
         self.assertNotEqual(alt, neu)
-        self.assertEqual([m["content"] for m in GEFRAGT[-1]["messages"]], ["Zweites Gespräch"])
+        self.assertEqual([frage_text(m["content"]) for m in GEFRAGT[-1]["messages"]], ["Zweites Gespräch"])
         # das zuletzt benutzte Gespräch steht oben
         self.assertEqual([g["id"] for g in self.rufe("/api/gespraeche", cookie=c)[1]], [neu, alt])
         self.rufe("/api/chat", {"text": "Nochmal im ersten", "gespraech": alt}, cookie=c)
@@ -298,7 +325,7 @@ class Test(unittest.TestCase):
         self.assertEqual((aufruf["type"], aufruf["name"], aufruf["input"]["text"]),
                          ("tool_use", "nachricht_zeigen", "Liebe Anna, danke für die Blumen!"))
         self.assertEqual((ergebnis["type"], ergebnis["tool_use_id"]), ("tool_result", aufruf["id"]))
-        self.assertEqual((m[3]["content"], m[4]["content"]), ("Hier ist die Nachricht für Anna.", "Mach sie kürzer"))
+        self.assertEqual((frage_text(m[3]["content"]), frage_text(m[4]["content"])), ("Hier ist die Nachricht für Anna.", "Mach sie kürzer"))
 
     def test_leere_nachricht_geht_als_fehler_an_biko_zurueck(self):
         c = self.anmelden()
@@ -335,8 +362,8 @@ class Test(unittest.TestCase):
         werkzeuge = {w["name"]: w for w in anfragen[0]["tools"]}
         self.assertGreaterEqual(werkzeuge["web_search"]["max_uses"], 5)
         self.assertEqual(werkzeuge["web_fetch"]["type"], "web_fetch_20260209")
-        self.assertIn("link_zeigen", anfragen[0]["system"])
-        self.assertIn("nachricht_zeigen", anfragen[0]["system"])
+        self.assertIn("link_zeigen", alles(anfragen[0]))
+        self.assertIn("nachricht_zeigen", alles(anfragen[0]))
 
     def test_lehnt_die_ki_das_oeffnen_von_seiten_ab_antwortet_biko_trotzdem(self):
         import anthropic
@@ -395,6 +422,57 @@ class Test(unittest.TestCase):
 
     def leeren(self, c):
         self.assertEqual(self.rufe("/api/erinnerungen", {"erinnerungen": []}, cookie=c)[0], 200)
+
+    def test_zwischenspeicher_anleitung_bleibt_gleich_und_verlauf_ist_markiert(self):
+        c = self.anmelden()
+        self.rufe("/api/verlauf/loeschen", {}, cookie=c)
+        anfragen = self.drehbuch(*[antwort("end_turn", text(f"Antwort {i}")) for i in range(3)])
+        gid = self.rufe("/api/chat", {"text": "Hallo"}, cookie=c)[1]["gespraech"]["id"]
+        server.wissen_merken({"text": "Mag Tee"})
+        self.rufe("/api/chat", {"text": "Wie geht's?", "gespraech": gid}, cookie=c)
+        self.rufe("/api/chat", {"text": "Und morgen?", "gespraech": gid, "gesprochen": True}, cookie=c)
+        # die Anleitung ist Wort für Wort gleich, auch wenn sich Wissen, Uhrzeit oder die Art zu reden ändern
+        self.assertEqual(anfragen[0]["system"], anfragen[2]["system"])
+        self.assertEqual(anfragen[0]["system"][0]["cache_control"], {"type": "ephemeral"})
+        self.assertEqual(anfragen[2]["cache_control"], {"type": "ephemeral"})
+        # das Ende des bisherigen Verlaufs ist markiert, die neue Frage nicht
+        m = anfragen[2]["messages"]
+        self.assertEqual(m[-2]["content"][-1].get("cache_control"), {"type": "ephemeral"})
+        self.assertNotIn("cache_control", json.dumps(m[-1]))
+        self.assertIn("Mag Tee", m[-1]["content"][0]["text"])
+        self.assertIn("wie am Telefon", m[-1]["content"][0]["text"])
+        # der Verlauf davor ist genau so, wie er beim letzten Mal geschickt wurde (bis auf die Markierung)
+        ohne = lambda x: json.loads(json.dumps(x).replace(', "cache_control": {"type": "ephemeral"}', ""))
+        self.assertEqual([frage_text(x["content"]) for x in ohne(anfragen[1]["messages"])[:-1]],
+                         [frage_text(x["content"]) for x in ohne(m)[:2]])
+        server.schreiben("wissen", [])
+
+    def test_langes_gespraech_der_anfang_rueckt_in_zehnerschritten_weiter(self):
+        nachrichten = [{"von": "ich" if i % 2 == 0 else "biko", "text": str(i)} for i in range(60)]
+        fenster = {len(nachrichten[:n]): server.fuer_claude(nachrichten[:n])[0]["content"] for n in range(30, 60, 2)}
+        for n, erste in fenster.items():
+            self.assertGreaterEqual(n - int(erste), server.MAX_VERLAUF - 1, n)   # nie weniger als bisher
+        self.assertEqual(len(set(fenster.values())), 3, "der Anfang bleibt mehrere Fragen lang gleich")
+
+    def test_kosten_stehen_im_protokoll_und_in_der_tagessumme(self):
+        c = self.anmelden()
+        zeilen = []
+        alt = server.protokoll
+        server.protokoll = zeilen.append
+        self.addCleanup(lambda: setattr(server, "protokoll", alt))
+        server.schreiben("kosten", {})
+        verbrauch = SimpleNamespace(input_tokens=1000, output_tokens=200, cache_read_input_tokens=4000,
+                                    cache_creation_input_tokens=500, server_tool_use=SimpleNamespace(web_search_requests=1))
+        r = antwort("end_turn", text("Hallo!"))
+        r.usage, r.model = verbrauch, "claude-sonnet-5-5"
+        self.drehbuch(r)
+        self.rufe("/api/chat", {"text": "Hallo"}, cookie=c)
+        # 1000 × 2 + 200 × 10 + 4000 × 0,10 + 500 × 2,50 = 5650 Dollar pro Million, dazu eine Suche um 1 Cent
+        zeile = next(z for z in zeilen if z.startswith("Claude ("))
+        self.assertIn("Eingabe 5500 Tokens (davon 4000 aus dem Zwischenspeicher, 500 neu gespeichert)", zeile)
+        self.assertIn("Kosten 1.57 US-Cent", zeile)
+        heute = server.lesen("kosten", {})[server.jetzt().strftime("%Y-%m-%d")]
+        self.assertEqual((round(heute["ki"], 5), heute["antworten"]), (0.01565, 1))
 
     def test_biko_merkt_sich_eine_erinnerung_aus_dem_gespraech(self):
         c = self.anmelden()
@@ -457,7 +535,7 @@ class Test(unittest.TestCase):
         c = self.anmelden()
         liste = self.rufe("/api/erinnerungen", {"erinnerungen": [{"zeit": "08:00", "text": "Blutdrucktablette"}]}, cookie=c)[1]
         self.rufe("/api/chat", {"text": "Woran erinnerst du mich?"}, cookie=c)
-        system = GEFRAGT[-1]["system"]
+        system = alles(GEFRAGT[-1])
         self.assertIn("Blutdrucktablette", system)
         self.assertIn(liste[0]["id"], system)
         self.assertIn("erinnerung_merken", system)
@@ -519,6 +597,7 @@ class Test(unittest.TestCase):
         alt = (server.SPRACH_KEY, server.SPRACH_STIMME, server.sprach_anfrage, server._stimme, server.sprach_strom)
         server.SPRACH_KEY, server.SPRACH_STIMME, server.sprach_anfrage, server._stimme = "sk_test", stimme, dienst, None
         server.sprach_strom = dienst_strom
+        server._toene.clear()
         self.addCleanup(lambda: (setattr(server, "SPRACH_KEY", alt[0]), setattr(server, "SPRACH_STIMME", alt[1]),
                                  setattr(server, "sprach_anfrage", alt[2]), setattr(server, "_stimme", alt[3]),
                                  setattr(server, "sprach_strom", alt[4])))
@@ -571,14 +650,14 @@ class Test(unittest.TestCase):
         self.assertEqual(fertig["antwort"], "Gemerkt: morgen um 15 Uhr.")
         self.assertEqual([x["text"] for x in fertig["gemerkt"]], ["Arzt"])
         # am Telefon soll Biko kurz und ohne Listen antworten
-        self.assertIn("wie am Telefon", anfragen[0]["system"])
+        self.assertIn("wie am Telefon", alles(anfragen[0]))
         g = self.rufe("/api/gespraech?id=" + fertig["gespraech"]["id"], cookie=c)[1]
         self.assertEqual([m["text"] for m in g["nachrichten"]],
                          ["Erinnere mich morgen um 15 Uhr an den Arzt", "Gemerkt: morgen um 15 Uhr."])
         # getippt heißt: kein Hinweis aufs Telefonieren
         self.strom_drehbuch((["Hallo!"], antwort("end_turn", text("Hallo!"))))
         self.ereignisse({"text": "Hallo", "gespraech": fertig["gespraech"]["id"]}, c)
-        self.assertNotIn("wie am Telefon", server.system_prompt())
+        self.assertNotIn("wie am Telefon", server.hinweis())
 
     def test_fehler_im_strom_kommt_als_ereignis_und_auf_chinesisch(self):
         c = self.anmelden()
@@ -607,6 +686,24 @@ class Test(unittest.TestCase):
         self.assertNotIn("previous_text", json.loads(anfragen[1]["daten"]))
         self.assertEqual(self.rufe("/api/stimme", {"text": "Hallo"})[0], 401)
         self.assertEqual(self.rufe("/api/stimme", {"text": " "}, cookie=c)[0], 400)
+
+    def test_kurze_saetze_spricht_biko_beim_zweiten_mal_aus_dem_speicher(self):
+        c = self.anmelden()
+        anfragen = self.sprachdienst({"/v1/text-to-speech/": b"PCM-moment"}, stimme="s1")
+        for _ in range(2):
+            status, ton, _ = self.roh("/api/stimme", json.dumps({"text": "Moment, ich schau kurz nach."}).encode(),
+                                      "application/json", c)
+            self.assertEqual((status, ton), (200, b"PCM-moment"))
+        self.assertEqual(len(anfragen), 1, "der zweite Satz kommt aus dem Speicher")
+        # mitten in einer Antwort (mit "vorher") und bei langen Sätzen fragt Biko immer neu, damit es natürlich klingt
+        for daten in ({"text": "Moment, ich schau kurz nach.", "vorher": "Gute Frage."}, {"text": "x" * 200}, {"text": "x" * 200}):
+            self.roh("/api/stimme", json.dumps(daten).encode(), "application/json", c)
+        self.assertEqual(len(anfragen), 4)
+        # wird die Antwort unterbrochen, merkt Biko sich nichts Halbes
+        server._toene.clear()
+        teile = server.ton_strom("Gerne!")
+        next(teile)
+        self.assertEqual(len(server._toene), 0)
 
     def test_stimme_fehler_kommen_freundlich_an(self):
         c = self.anmelden()

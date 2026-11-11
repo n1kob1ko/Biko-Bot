@@ -33,6 +33,7 @@ Nur Python-Standardbibliothek plus das offizielle anthropic-Paket.
 """
 
 import base64
+from collections import OrderedDict
 import hashlib
 import hmac
 import json
@@ -125,7 +126,7 @@ Ehrlichkeit:
 
 Gesundheit:
 - Du gibst keine Diagnosen und änderst nie Medikamente oder Dosierungen. Dafür sind Arzt, Ärztin oder Apotheke da.
-- Bei Fragen zum Essen und zur Diät hilfst du anhand dessen, was du über die Person weißt (Liste unten). Sag klar
+- Bei Fragen zum Essen und zur Diät hilfst du anhand dessen, was du über die Person weißt (siehe Hinweis der App). Sag klar
   "passt gut", "lieber wenig" oder "lieber nicht", mit einem kurzen Grund. Weißt du nichts dazu, gib nur allgemeine,
   vorsichtige Hinweise.
 - Bei Notfällen (Brustschmerzen, Atemnot, Sturz, plötzliche Lähmung oder Verwirrtheit): sofort sagen, die Rettung 144 anzurufen.
@@ -156,9 +157,7 @@ Erinnerungen:
 - Du kannst dich nur melden, solange diese App am Handy offen ist. Bei Wichtigem wie Medikamenten oder Terminen sagst du
   das in einem Satz dazu und empfiehlst zusätzlich den Wecker des Handys.
 - Will die Person etwas nicht mehr, löschst du es mit erinnerung_loeschen. Zum Ändern: löschen und neu merken.
-- Auf "Woran erinnerst du mich?" liest du die Liste unten in einfachen Worten vor.
-Das hast du dir schon gemerkt:
-{erinnerungen}
+- Auf "Woran erinnerst du mich?" liest du deine Erinnerungen aus dem Hinweis der App in einfachen Worten vor.
 
 Dein Gedächtnis über die Person:
 - Erzählt die Person etwas, das auch nächste Woche noch stimmt, schreibst du es dir mit dem Werkzeug wissen_merken auf:
@@ -172,10 +171,11 @@ Dein Gedächtnis über die Person:
   Sagt die Person "vergiss das", streichst du es.
 - Nutze dein Wissen natürlich im Gespräch (frag nach dem Enkel, denk an die Diät), aber zähl es nicht ungefragt auf.
 - Auf "Was weißt du über mich?" erzählst du es in einfachen Worten.
-Das weißt du schon:
-{wissen}
 
-Heute ist {datum}, es ist {uhrzeit} Uhr."""
+Der Hinweis der App:
+- Vor jeder Frage steht ein Hinweis der App zwischen <app> und </app>: Datum und Uhrzeit, deine Erinnerungen mit Nummer,
+  was du über die Person weißt (mit Nummer), und manchmal, dass die Person gerade mit dir redet wie am Telefon oder dass
+  ein Bildschirmfoto dabei ist. Das hat nicht die Person geschrieben. Du nutzt es, erwähnst den Hinweis aber nie."""
 
 # ---------- Daten ----------
 
@@ -280,6 +280,59 @@ def werkzeug_ergebnis(block, werkzeuge):
         return {"type": "tool_result", "tool_use_id": block.id, "content": f"Fehler: {e}", "is_error": True}
 
 
+# Preise in US-Dollar pro Million Tokens (Stand November 2026, laut Anthropic): Eingabe, Ausgabe, aus dem
+# Zwischenspeicher gelesen, in den Zwischenspeicher geschrieben (5 Minuten). Eine Websuche kostet 1 Cent.
+PREISE = {
+    "claude-opus-5-5": (4.00, 20.00, 0.20, 5.00),
+    "claude-sonnet-5-5": (2.00, 10.00, 0.10, 2.50),
+    "claude-haiku-5-5": (0.10, 0.50, 0.01, 0.125),
+}
+PREIS_SUCHE = 0.01
+
+
+def verbrauch_zaehlen(summe, r, modell):
+    """Zählt, was eine Anfrage verbraucht hat, und rechnet es in Dollar um (nur Zahlen, nie Inhalte)."""
+    u = getattr(r, "usage", None)
+    if u is None:
+        return
+    zahl = lambda x: x if isinstance(x, int) else 0
+    neu = {"eingabe": zahl(getattr(u, "input_tokens", 0)), "ausgabe": zahl(getattr(u, "output_tokens", 0)),
+           "gelesen": zahl(getattr(u, "cache_read_input_tokens", 0)),
+           "geschrieben": zahl(getattr(u, "cache_creation_input_tokens", 0)),
+           "suchen": zahl(getattr(getattr(u, "server_tool_use", None), "web_search_requests", 0))}
+    preis = PREISE.get(getattr(r, "model", None) if isinstance(getattr(r, "model", None), str) else modell) or PREISE.get(modell)
+    if preis:
+        neu["dollar"] = (neu["eingabe"] * preis[0] + neu["ausgabe"] * preis[1] + neu["gelesen"] * preis[2]
+                         + neu["geschrieben"] * preis[3]) / 1e6 + neu["suchen"] * PREIS_SUCHE
+    for k, v in neu.items():
+        summe[k] = summe.get(k, 0) + v
+
+
+def verbrauch_text(v):
+    alle = v.get("eingabe", 0) + v.get("gelesen", 0) + v.get("geschrieben", 0)
+    text = (f"Eingabe {alle} Tokens (davon {v.get('gelesen', 0)} aus dem Zwischenspeicher, {v.get('geschrieben', 0)} neu"
+            f" gespeichert), Ausgabe {v.get('ausgabe', 0)}, Suchen {v.get('suchen', 0)}")
+    if "dollar" in v:
+        heute = kosten_dazu(ki=v["dollar"])
+        text += (f", Kosten {v['dollar'] * 100:.2f} US-Cent, heute bisher {heute['ki'] * 100:.1f} US-Cent"
+                 f" bei {heute['antworten']} Antworten")
+    return text
+
+
+def kosten_dazu(ki=0.0, zeichen=0):
+    """Tagessumme in kosten.json: KI-Kosten in Dollar, Zahl der Antworten, vorgelesene Zeichen. Die letzten 62 Tage."""
+    tag = jetzt().strftime("%Y-%m-%d")
+    with _lock:
+        alle = lesen("kosten", {})
+        heute = {"ki": 0.0, "antworten": 0, "zeichen": 0, **alle.get(tag, {})}
+        heute["ki"] = round(heute["ki"] + ki, 6)
+        heute["antworten"] += 1 if ki else 0
+        heute["zeichen"] += zeichen
+        alle[tag] = heute
+        schreiben("kosten", {k: alle[k] for k in sorted(alle)[-62:]})
+    return heute
+
+
 def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=None, beim_text=None, modell=None):
     """Eine Antwort von Claude als Text. Wirft RuntimeError mit freundlicher Meldung.
     `werkzeuge`: {name: {"schema": ..., "tun": funktion(eingabe) -> text}}, Claude darf sie selbst aufrufen.
@@ -290,6 +343,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
     tools = web + [w["schema"] for w in werkzeuge.values()]
     messages = list(messages)
     benutzt = []
+    verbrauch = {}
     # Zwischen zwei Runden (etwa "Ich schau kurz nach." und danach die Suche) beginnt ein neuer Satz
     runde_offen = {"gesagt": False, "trennen": False}
 
@@ -305,7 +359,10 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
         kw = dict(
             model=modell or MODELL,
             max_tokens=max_tokens,
-            system=system,
+            # Die Anleitung bleibt gleich und kommt aus dem Zwischenspeicher. Das obere cache_control nimmt dazu bei
+            # jeder Runde alles bis zum Schluss mit: Suchergebnisse und Werkzeug-Runden zahlt Biko so nur einmal voll.
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            cache_control={"type": "ephemeral"},
             messages=messages,
             # Alltagsgespräch: wenig Nachdenken reicht, ist schneller und günstiger
             output_config={"effort": "low"},
@@ -330,6 +387,7 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
                 tools, _seiten_oeffnen = ohne, False
                 protokoll("Seiten öffnen (web_fetch) wurde abgelehnt, Biko sucht ab jetzt ohne.")
             benutzt += [b.name for b in r.content if b.type in ("tool_use", "server_tool_use")]
+            verbrauch_zaehlen(verbrauch, r, modell or MODELL)
             runde_offen["trennen"] = runde_offen["gesagt"]
             if r.stop_reason == "pause_turn":
                 messages = messages + [{"role": "assistant", "content": r.content}]
@@ -347,7 +405,8 @@ def frage_claude(system, messages, max_tokens=4000, websuche=False, werkzeuge=No
         raise RuntimeError("Biko kann gerade nicht antworten. Bitte gleich nochmal probieren.")
     except anthropic.APIConnectionError:
         raise RuntimeError("Keine Verbindung zur KI. Ist das Internet am Server da?")
-    protokoll(f"Claude ({modell or MODELL}): {runde} Anfragen, Ende {r.stop_reason}, Werkzeuge: {', '.join(benutzt) or 'keine'}")
+    protokoll(f"Claude ({modell or MODELL}): {runde} Anfragen, Ende {r.stop_reason}, Werkzeuge: {', '.join(benutzt) or 'keine'}"
+              f" | {verbrauch_text(verbrauch)}")
     if r.stop_reason == "refusal":
         return "Dabei kann ich leider nicht helfen. Magst du mich etwas anderes fragen?"
     text = "".join(b.text for b in r.content if b.type == "text").strip()
@@ -427,7 +486,8 @@ def ton_holen(text):
     text = text[:MAX_VORLESEN]
     ton = sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}?output_format=mp3_44100_128",
                        json.dumps({"text": text, "model_id": SPRACH_MODELL}).encode(), {"Content-Type": "application/json"})
-    protokoll(f"Sprachdienst: {len(text)} Zeichen vorgelesen")
+    heute = kosten_dazu(zeichen=len(text))
+    protokoll(f"Sprachdienst: {len(text)} Zeichen vorgelesen, heute bisher {heute['zeichen']} Zeichen")
     return ton
 
 
@@ -435,13 +495,42 @@ def ton_strom(text, vorher=""):
     """Ein Stück einer Antwort als Ton, roh als PCM (16 Bit, 24 kHz, mono), Stück für Stück, sobald es entsteht.
     `vorher`: was Biko davor gesagt hat, damit die Stimme im Satzfluss bleibt."""
     text = text[:MAX_SATZ]
+    # Kurze Sätze am Anfang einer Antwort ("Moment, ich schau kurz nach.", "Gerne!") kommen oft wieder. Die hat
+    # Biko schon einmal gesagt: dann kommt der Ton sofort aus dem Speicher, klingt gleich und kostet nichts.
+    schluessel = (stimme(), SPRACH_MODELL, text) if not vorher and len(text) <= MAX_GEMERKT_SATZ else None
+    if schluessel:
+        with _lock:
+            gemerkt = _toene.get(schluessel)
+            if gemerkt is not None:
+                _toene.move_to_end(schluessel)
+        if gemerkt is not None:
+            protokoll(f"Sprachdienst: {len(text)} Zeichen aus dem Speicher gesprochen")
+            return iter(gemerkt)
     body = {"text": text, "model_id": SPRACH_MODELL}
     if vorher:
         body["previous_text"] = vorher[-500:]
     stuecke = sprachdienst(f"/v1/text-to-speech/{quote(stimme(), safe='')}/stream?output_format=pcm_24000",
                            json.dumps(body).encode(), {"Content-Type": "application/json"}, strom=True)
-    protokoll(f"Sprachdienst: {len(text)} Zeichen gesprochen")
-    return stuecke
+    heute = kosten_dazu(zeichen=len(text))
+    protokoll(f"Sprachdienst: {len(text)} Zeichen gesprochen, heute bisher {heute['zeichen']} Zeichen")
+    return ton_merken(schluessel, stuecke) if schluessel else stuecke
+
+
+MAX_GEMERKT_SATZ = 80     # so kurze Sätze merkt sich Biko als fertigen Ton
+MAX_TOENE = 100           # so viele Sätze, der älteste fällt weg (zusammen höchstens etwa 25 MB)
+_toene = OrderedDict()
+
+
+def ton_merken(schluessel, stuecke):
+    """Reicht den Ton weiter und merkt ihn sich, aber nur, wenn er ganz angekommen ist (nicht nach Unterbrechen)."""
+    alle = []
+    for stueck in stuecke:
+        alle.append(stueck)
+        yield stueck
+    with _lock:
+        _toene[schluessel] = alle
+        while len(_toene) > MAX_TOENE:
+            _toene.popitem(last=False)
 
 
 def live_zugang():
@@ -475,9 +564,7 @@ def text_hoeren(ton, art):
     return {"text": str(j.get("text") or "").strip(), "sprache": sprache}
 
 
-BILDSCHIRM = """
-
-Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tablet der Person: das, was sie gerade vor sich hat
+BILDSCHIRM = """Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tablet der Person: das, was sie gerade vor sich hat
 (zum Beispiel einen WeChat-Chat, eine Webseite oder einen Brief). Fragt sie "was steht da", "was schreibt sie",
 "übersetz das" oder "was soll ich antworten", geht es um dieses Bild. Lies vor, erkläre oder übersetze in einfachen Worten.
 Eine Antwort für jemanden schreibst du wie sonst auch mit nachricht_zeigen. Sag nicht "auf dem Bildschirmfoto",
@@ -509,13 +596,11 @@ def bildschirm_frisch():
     """Das Bildschirmfoto, solange es noch gilt, sonst None."""
     with _lock:
         if _bildschirm["bild"] and time.time() - _bildschirm["zeit"] < BILDSCHIRM_GILT:
-            return _bildschirm["bild"]
+            return _bildschirm["zeit"], _bildschirm["bild"]
         return None
 
 
-GESPROCHEN = """
-
-Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt sie zu lesen.
+GESPROCHEN = """Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt sie zu lesen.
 - Antworte so, wie man am Telefon redet: kurz, meistens 1 bis 3 Sätze, natürlich und herzlich. Keine Listen, keine Nummern.
   Bei einer Anleitung sagst du nur den ersten Schritt oder zwei und fragst, ob es weitergehen soll.
 - Frag höchstens eine Sache auf einmal.
@@ -523,20 +608,34 @@ Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt s
 - Was du hörst, wurde automatisch mitgeschrieben. Ist etwas unverständlich oder passt nicht zusammen, frag freundlich nach."""
 
 
-def system_prompt(gesprochen=False):
+def system_prompt():
+    """Der gleichbleibende Teil der Anleitung. Er ändert sich nur, wenn die Familie Name, Anrede oder Sprache ändert,
+    und kommt deshalb fast immer aus dem Zwischenspeicher von Anthropic (ein Zehntel des Preises bzw. weniger).
+    Was sich bei jeder Frage ändert, steht im Hinweis der App (hinweis()), direkt vor der Frage."""
     p = profil()
-    t = jetzt()
-    tage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
     return SYSTEM.format(
         name_satz=p["name"].strip() or "einer Person, deren Namen du noch nicht kennst",
         anrede="Sie" if p.get("anrede") == "Sie" else "du",
         sprache=SPRACHEN.get(p.get("sprache"), "Deutsch"),
-        erinnerungen="\n".join(f"- Nummer {e['id']}: {erinnerung_wann(e)}: {e['text']}" for e in erinnerungen_lesen())
-                     or "- noch nichts",
-        wissen="\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen()) or "- noch nichts",
-        datum=f"{tage[t.weekday()]}, {t.day}.{t.month}.{t.year}",
-        uhrzeit=t.strftime("%H:%M"),
-    ) + (GESPROCHEN if gesprochen else "")
+    )
+
+
+def hinweis(gesprochen=False, bild=False):
+    """Was sich bei jeder Frage ändert: Uhrzeit, Erinnerungen, Wissen, ob man gerade redet, ob ein Bildschirmfoto dabei ist."""
+    t = jetzt()
+    tage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+    teile = [
+        f"Heute ist {tage[t.weekday()]}, {t.day}.{t.month}.{t.year}, es ist {t.strftime('%H:%M')} Uhr.",
+        "Deine Erinnerungen:\n" + ("\n".join(f"- Nummer {e['id']}: {erinnerung_wann(e)}: {e['text']}"
+                                             for e in erinnerungen_lesen()) or "- noch nichts"),
+        "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
+                                             or "- noch nichts"),
+    ]
+    if gesprochen:
+        teile.append(GESPROCHEN)
+    if bild:
+        teile.append(BILDSCHIRM)
+    return "<app>\n" + "\n\n".join(teile) + "\n</app>"
 
 
 # ---------- Funktionen ----------
@@ -576,16 +675,24 @@ def uebersicht(g):
     return {"id": g["id"], "titel": g["titel"], "zuletzt": g["zuletzt"], "anzahl": len(g["nachrichten"])}
 
 
-def fuer_claude(nachrichten):
+def fuer_claude(nachrichten, bild=None):
     """Das bisherige Gespräch so, wie Claude es lesen soll. Eine Nachricht, die Biko für jemanden geschrieben hat,
-    steht wieder als Werkzeug-Aufruf da: so weiß er bei "mach sie kürzer" noch, was drinstand."""
-    nachrichten = nachrichten[-(MAX_VERLAUF - 1):]
+    steht wieder als Werkzeug-Aufruf da: so weiß er bei "mach sie kürzer" noch, was drinstand.
+    Biko liest mindestens die letzten MAX_VERLAUF - 1 Nachrichten. Der Anfang rückt in Zehnerschritten weiter, damit er
+    über mehrere Fragen gleich bleibt: nur dann kommt der Verlauf aus dem Zwischenspeicher.
+    `bild`: das noch gültige Bildschirmfoto als (Zeit, Bytes). Es bleibt bei der Frage, mit der es geschickt wurde."""
+    zuviel = len(nachrichten) - (MAX_VERLAUF - 1)
+    if zuviel > 0:
+        nachrichten = nachrichten[zuviel // 10 * 10:]   # 29 bis 38 Nachrichten
     while nachrichten and nachrichten[0]["von"] != "ich":   # muss mit der Person beginnen
         nachrichten = nachrichten[1:]
     messages = []
     for i, m in enumerate(nachrichten):
         if m["von"] == "ich":
-            messages.append({"role": "user", "content": m["text"]})
+            if bild and m.get("bildschirm") == bild[0]:
+                messages.append({"role": "user", "content": [bild_block(bild[1]), {"type": "text", "text": m["text"]}]})
+            else:
+                messages.append({"role": "user", "content": m["text"]})
             continue
         entwuerfe = m.get("nachrichten") or []
         if entwuerfe:
@@ -597,6 +704,22 @@ def fuer_claude(nachrichten):
                 for k in range(len(entwuerfe))]})
         messages.append({"role": "assistant", "content": m["text"]})
     return messages
+
+
+def bild_block(bild):
+    return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(bild).decode()}}
+
+
+def zwischenspeichern(messages):
+    """Markiert das Ende des bisherigen Verlaufs: bis dahin liest Anthropic bei der nächsten Frage aus dem Zwischenspeicher."""
+    if not messages:
+        return messages
+    letzte = dict(messages[-1])
+    inhalt = letzte["content"]
+    bloecke = [{"type": "text", "text": inhalt}] if isinstance(inhalt, str) else [dict(b) for b in inhalt]
+    bloecke[-1]["cache_control"] = {"type": "ephemeral"}
+    letzte["content"] = bloecke
+    return messages[:-1] + [letzte]
 
 
 NACHRICHT_GEZEIGT = "Die Nachricht steht jetzt unter deiner Antwort, mit einem Knopf zum Kopieren."
@@ -663,14 +786,20 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     """Eine Frage im Gespräch. `beim_text` bekommt die Antwort stückweise, `gesprochen`: man redet gerade wie am Telefon."""
     with _lock:
         g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
-    bild = bildschirm_frisch()
-    frage = text if not bild else [
-        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(bild).decode()}},
-        {"type": "text", "text": text}]
-    messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": frage}]
+    verlauf = g["nachrichten"] if g else []
+    bild = bildschirm_frisch()   # (Zeit, Bytes) oder None
+    # Ein Bildschirmfoto geht nur einmal mit, bei der ersten Frage danach. Danach steht es im Verlauf bei dieser
+    # Frage und kommt, solange es gilt, günstig aus dem Zwischenspeicher, statt jedes Mal neu bezahlt zu werden.
+    schon_da = bool(bild) and any(m.get("bildschirm") == bild[0] for m in verlauf)
+    neu_bild = bool(bild) and not schon_da
+    frage = [{"type": "text", "text": hinweis(gesprochen, bild=bool(bild))}]
+    if neu_bild:
+        frage.append(bild_block(bild[1]))
+    frage.append({"type": "text", "text": text})
+    messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
     zeigen, entwuerfe, links = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
-    antwort = frage_claude(system_prompt(gesprochen) + (BILDSCHIRM if bild else ""), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
+    antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
                            **({"beim_text": beim_text} if beim_text else {}))
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
@@ -686,7 +815,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         liste = gespraeche_lesen()
         g = gespraech_finden(liste, gespraech_nr) or gespraech_neu([])
         g["nachrichten"] = (g["nachrichten"] + [
-            {"von": "ich", "text": text, "zeit": zeit},
+            {"von": "ich", "text": text, "zeit": zeit, **({"bildschirm": bild[0]} if neu_bild else {})},
             {"von": "biko", "text": antwort, "zeit": zeit, **{k: v for k, v in getan.items() if v}},
         ])[-MAX_GESPEICHERT:]
         g["titel"] = g["titel"] or titel_aus(text)
