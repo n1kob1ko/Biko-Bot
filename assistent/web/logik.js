@@ -35,7 +35,9 @@
 
   // Wann sich Biko in den nächsten Stunden von selbst meldet, für die Wecker der Android-App (die meldet sich auch,
   // wenn Biko gerade nicht offen ist): [{ wann (ms), art: 'erinnerung' | 'morgenrunde', id, text }], die nächste zuerst
-  function naechsteMeldungen({ erinnerungen, morgenrunde, jetzt, stunden = 48 }) {
+  // Geburtstage: am Tag um 9 Uhr. Mit Morgenrunde sagt Biko es dort, dann kein eigener Wecker.
+  // Wer am 29.2. Geburtstag hat, bekommt in Jahren ohne Schalttag die Meldung am 28.2.
+  function naechsteMeldungen({ erinnerungen, morgenrunde, geburtstage, jetzt, stunden = 48 }) {
     const ab = jetzt.getTime(), bis = ab + stunden * 3600 * 1000;
     const liste = [];
     for (let plus = 0; plus <= Math.ceil(stunden / 24); plus++) {
@@ -51,6 +53,12 @@
         dazu({ art: 'erinnerung', id: er.id, text: er.text }, um(er.zeit));
       }
       if (morgenrunde) dazu({ art: 'morgenrunde', id: 'morgenrunde', text: '' }, um(morgenrunde));
+      const schalt = new Date(tag.getFullYear(), 1, 29).getMonth() === 1;
+      for (const g of morgenrunde ? [] : geburtstage || []) {
+        const am = g.monat === 2 && g.tag === 29 && !schalt ? 28 : g.tag;
+        if (g.monat - 1 !== tag.getMonth() || am !== tag.getDate()) continue;
+        dazu({ art: 'geburtstag', id: 'gb-' + g.id, name: g.name, alter: g.jahr ? tag.getFullYear() - g.jahr : null }, um('09:00'));
+      }
     }
     return liste.sort((a, b) => a.wann - b.wann).slice(0, 30);
   }

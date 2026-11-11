@@ -8,7 +8,7 @@ import unittest
 import unittest.mock
 import urllib.error
 import urllib.request
-from datetime import timedelta
+from datetime import date, timedelta
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -403,6 +403,32 @@ class Test(unittest.TestCase):
         server.gesundheit_streichen({"id": nr})
         self.assertNotIn("135/85", server.hinweis())
         server.schreiben("gesundheit", [])
+
+    def test_geburtstage_merken_der_naechste_zuerst_im_hinweis(self):
+        c = self.anmelden()
+        server.schreiben("geburtstage", [])
+        heute = server.jetzt().date()
+        morgen = heute + timedelta(days=1)
+        self.assertIn("morgen wird Peter 41", server.geburtstag_merken(
+            {"name": "Peter", "tag": morgen.day, "monat": morgen.month, "jahr": morgen.year - 41}))
+        server.geburtstag_merken({"name": "Lea", "tag": heute.day, "monat": heute.month})
+        server.geburtstag_merken({"name": "Oma Rosa", "tag": 29, "monat": 2})
+        self.assertRaises(ValueError, server.geburtstag_merken, {"name": "Anna", "tag": 31, "monat": 4})
+        self.assertRaises(ValueError, server.geburtstag_merken, {"name": "", "tag": 1, "monat": 1})
+        h = server.hinweis()
+        self.assertLess(h.index("- Lea: "), h.index("- Peter: "))
+        self.assertIn(f"- Lea: {heute.day}.{heute.month}., heute", h)
+        self.assertIn("morgen (wird 41)", h)
+        # 29.2.: in einem Jahr ohne Schalttag am 28.2.
+        self.assertEqual(server.geburtstag_naechster({"tag": 29, "monat": 2, "jahr": 1950}, date(2027, 2, 1)), (27, 77))
+        # ein zweites Mal ersetzt das Datum, statt Peter doppelt zu führen
+        server.geburtstag_merken({"name": "peter", "tag": 1, "monat": 1})
+        self.assertEqual([g["name"] for g in server.geburtstage_lesen()].count("peter"), 1)
+        self.assertNotIn("Peter", [g["name"] for g in server.geburtstage_lesen()])
+        server.geburtstag_streichen({"name": "Oma Rosa"})
+        self.assertEqual(sorted(g["name"] for g in self.rufe("/api/geburtstage", cookie=c)[1]), ["Lea", "peter"])
+        self.assertRaises(ValueError, server.geburtstag_streichen, {"name": "Niemand"})
+        server.schreiben("geburtstage", [])
 
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()

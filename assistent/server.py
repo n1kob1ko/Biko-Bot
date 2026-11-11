@@ -21,8 +21,11 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         (POST /api/liste/weg).
   9. Gesundheit        "Mein Blutdruck ist 135 zu 85": Biko schreibt Messwerte und Befinden ins Gesundheitstagebuch
                         und zeigt es auf Wunsch als Karte für den Arzt (zum Kopieren).
-Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen und das Tagebuch sind Werkzeuge, die Claude
-selbst aufruft.
+ 10. Geburtstage       "Peter hat am 3. März Geburtstag": Biko merkt sich das Datum, sagt rechtzeitig Bescheid und bietet
+                        einen Glückwunsch an. Die Android-App meldet sich am Tag um 9 Uhr (ohne Morgenrunde).
+                        GET /api/geburtstage.
+Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch und die Geburtstage sind
+Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -144,6 +147,15 @@ Gesundheit:
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
 
+Geburtstage:
+- Nennt die Person einen Geburtstag (von sich oder von jemandem), merkst du ihn mit geburtstag_merken (Name, Tag, Monat,
+  das Jahr nur, wenn sie es weiß), nicht mit wissen_merken. Wer das ist ("Sohn Peter") gehört weiter ins Gedächtnis.
+  Steht ein Geburtstag noch im Gedächtnis, trag ihn mit geburtstag_merken ein und streich ihn dort mit wissen_vergessen.
+- Die Geburtstage stehen im Hinweis der App, der nächste zuerst. Ist einer heute, morgen oder in den nächsten Tagen, sag es
+  im Gespräch einmal von selbst und biete an, einen Glückwunsch zu schreiben (nachricht_zeigen) oder anzurufen
+  (anruf_zeigen). Ist er in etwa einer Woche, kannst du an ein Geschenk oder eine Karte erinnern.
+- Falsches Datum? Einfach neu mit geburtstag_merken, das ersetzt den alten. Weg damit: geburtstag_streichen.
+
 Gesundheitstagebuch:
 - Sagt die Person einen Messwert (Blutdruck, Blutzucker, Puls, Gewicht) oder wie es ihr geht ("heute schwindlig", "Knie tut
   weh", "Tablette genommen"), schreibst du es mit gesundheit_notieren ins Tagebuch und bestätigst kurz mit dem Wert.
@@ -213,7 +225,7 @@ Erinnerungen:
 
 Dein Gedächtnis über die Person:
 - Erzählt die Person etwas, das auch nächste Woche noch stimmt, schreibst du es dir mit dem Werkzeug wissen_merken auf:
-  Gesundheit und Diät (Krankheiten, Allergien, was sie nicht essen darf), Familie und Freunde mit Namen, Geburtstage,
+  Gesundheit und Diät (Krankheiten, Allergien, was sie nicht essen darf), Familie und Freunde mit Namen,
   Haustiere, wo sie wohnt, was sie mag oder nicht mag, Hobbys, ob sie schlecht hört oder sieht.
 - Nicht aufschreiben: Dinge nur für heute ("ich bin müde"), was du schon weißt, und nie Passwörter, PINs, TANs,
   Kontonummern oder Ausweisnummern.
@@ -694,6 +706,11 @@ def hinweis(gesprochen=False, bild=False):
         "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
                                              or "- noch nichts"),
     ]
+    geb = sorted((geburtstag_naechster(g, t.date()) + (g,) for g in geburtstage_lesen()), key=lambda x: x[0])[:40]
+    teile.append("Geburtstage (der nächste zuerst):\n" + ("\n".join(
+        f"- {g['name']}: {g['tag']}.{g['monat']}.{g.get('jahr') or ''}, "
+        + ("heute" if tage == 0 else "morgen" if tage == 1 else f"in {tage} Tagen")
+        + (f" (wird {alter})" if alter else "") for tage, alter, g in geb) or "- noch keine"))
     seit = t - timedelta(days=14)
     eintraege = [e for e in tagebuch_lesen() if e["zeit"] >= seit.isoformat(timespec="seconds")][-40:]
     teile.append("Gesundheitstagebuch, letzte zwei Wochen:\n" + ("\n".join(
@@ -986,7 +1003,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         g["zuletzt"] = zeit
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
     return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss,
-            "morgenrunde": morgenrunde_zeit(), **getan}
+            "morgenrunde": morgenrunde_zeit(), "geburtstage": geburtstage_lesen(), **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -1214,6 +1231,67 @@ def gesundheit_streichen(eingabe):
     return "Gestrichen."
 
 
+# ---------- Geburtstage: Biko denkt rechtzeitig daran ----------
+
+MAX_GEBURTSTAGE = 200
+
+
+def geburtstage_lesen():
+    """[{"id", "name", "tag", "monat", "jahr" (oder None)}]."""
+    daten = lesen("geburtstage", [])
+    return daten if isinstance(daten, list) else []
+
+
+def geburtstag_naechster(g, heute):
+    """(Tage bis zum nächsten Geburtstag, Alter an dem Tag oder None). Wer am 29.2. Geburtstag hat, feiert sonst am 28.2."""
+    def am(jahr):
+        schalt = jahr % 4 == 0 and (jahr % 100 != 0 or jahr % 400 == 0)
+        return date(jahr, g["monat"], 28 if (g["monat"], g["tag"]) == (2, 29) and not schalt else g["tag"])
+    d = am(heute.year)
+    if d < heute:
+        d = am(heute.year + 1)
+    return (d - heute).days, (d.year - g["jahr"] if g.get("jahr") else None)
+
+
+def geburtstag_merken(eingabe):
+    name = " ".join(str(eingabe.get("name") or "").split())[:60]
+    if not name:
+        raise ValueError("Wessen Geburtstag? Der Name fehlt.")
+    try:
+        tag, monat = int(eingabe.get("tag")), int(eingabe.get("monat"))
+        date(2000, monat, tag)   # 2000 war ein Schaltjahr, der 29.2. geht also
+    except (TypeError, ValueError):
+        raise ValueError("Das Datum stimmt nicht. Frag nach Tag und Monat.")
+    jahr = eingabe.get("jahr")
+    try:
+        jahr = int(jahr) if jahr not in (None, "", 0) else None
+    except (TypeError, ValueError):
+        jahr = None
+    if jahr and not 1900 <= jahr <= jetzt().year:
+        jahr = None
+    g = {"id": uuid.uuid4().hex[:6], "name": name, "tag": tag, "monat": monat, "jahr": jahr}
+    with _lock:
+        alt = [x for x in geburtstage_lesen() if x["name"].casefold() != name.casefold()]
+        if len(alt) >= MAX_GEBURTSTAGE:
+            raise ValueError(f"Es sind schon {MAX_GEBURTSTAGE} Geburtstage. Streich erst einen.")
+        schreiben("geburtstage", alt + [g])
+    tage, alter = geburtstag_naechster(g, jetzt().date())
+    return (f"Gemerkt: {name} hat am {tag}.{monat}. Geburtstag"
+            + (f", in {tage} Tagen" if tage > 1 else ", morgen" if tage == 1 else ", heute")
+            + (f" wird {name} {alter}." if alter else "."))
+
+
+def geburtstag_streichen(eingabe):
+    name = " ".join(str(eingabe.get("name") or "").split()).casefold()
+    with _lock:
+        liste = geburtstage_lesen()
+        rest = [g for g in liste if g["name"].casefold() != name]
+        if len(rest) == len(liste):
+            raise ValueError("Diesen Geburtstag kenne ich nicht. Schau im Hinweis, wie der Name dort steht.")
+        schreiben("geburtstage", rest)
+    return "Gestrichen."
+
+
 # ---------- Morgenrunde: Biko meldet sich jeden Morgen von selbst ----------
 
 MORGEN_VORHER = 15 * 60   # so viele Sekunden vor der Uhrzeit bereitet Biko die Morgenrunde vor
@@ -1227,6 +1305,7 @@ Es ist Zeit für deine Morgenrunde. Schreib, was du der Person gleich von selbst
 - zwei oder drei kurze Nachrichten von heute, die sie interessieren (siehe was du über sie weißt; sonst das Wichtigste
   aus Wien und Österreich, nichts Grausiges), jede in einem Satz, ohne Links,
 - ihre Erinnerungen für heute, falls es welche gibt,
+- wer heute oder morgen Geburtstag hat, falls jemand, mit dem Angebot, einen Glückwunsch zu schreiben,
 - zum Schluss eine Frage, über die ihr reden könnt.
 Insgesamt 5 bis 8 kurze Sätze, keine Listen, keine Überschriften, in ihrer Sprache.
 </app>"""
@@ -1312,6 +1391,30 @@ def hausmeister():
 
 
 WERKZEUGE = {
+    "geburtstag_merken": {"tun": geburtstag_merken, "schema": {
+        "name": "geburtstag_merken",
+        "description": "Merkt sich einen Geburtstag. Gibt es den Namen schon, wird das Datum ersetzt.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Wer, so wie die Person ihn nennt, z. B. 'Peter' oder 'Enkelin Lea'. "
+                                                         "Ihr eigener Geburtstag: 'ich'."},
+                "tag": {"type": "integer", "description": "Tag, 1 bis 31."},
+                "monat": {"type": "integer", "description": "Monat, 1 bis 12."},
+                "jahr": {"type": "integer", "description": "Geburtsjahr, nur wenn sie es sagt."},
+            },
+            "required": ["name", "tag", "monat"],
+        },
+    }},
+    "geburtstag_streichen": {"tun": geburtstag_streichen, "schema": {
+        "name": "geburtstag_streichen",
+        "description": "Streicht einen Geburtstag. Der Name so, wie er im Hinweis steht.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    }},
     "gesundheit_notieren": {"tun": gesundheit_notieren, "schema": {
         "name": "gesundheit_notieren",
         "description": "Schreibt einen Messwert oder wie es der Person geht ins Gesundheitstagebuch (mit Datum und Uhrzeit).",
@@ -1563,6 +1666,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, wissen_lesen())
             if pfad == "/api/listen":
                 return self.senden(200, listen_lesen())
+            if pfad == "/api/geburtstage":
+                return self.senden(200, geburtstage_lesen())
             if pfad == "/api/morgenrunde":
                 # ?jetzt: ist sie fällig und noch nicht fertig, schreibt Biko sie gleich (sonst macht das der Hausmeister)
                 return self.senden(200, {"zeit": morgenrunde_zeit(), "heute": morgenrunde_heute(erzeugen="jetzt" in parse_qs(urlparse(self.path).query, keep_blank_values=True))})

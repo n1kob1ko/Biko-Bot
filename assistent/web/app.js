@@ -25,6 +25,7 @@
   let profil = {};
   let erinnerungen = [];
   let morgenrunde = null; // Uhrzeit der Morgenrunde ("08:00") oder null
+  let geburtstage = []; // [{id, name, tag, monat, jahr}] für die Wecker der Android-App
   let wissen = [];      // was Biko über die Person weiß; merkt er sich im Gespräch selbst
   let gespraeche = [];  // Übersicht aller Gespräche, das zuletzt benutzte zuerst
   let gespraechNr = ''; // das offene Gespräch; leer heißt: mit der nächsten Frage beginnt ein neues
@@ -177,7 +178,7 @@
     if (!s.angemeldet) { loginZeigen(); return; }
     sprachdienst = !!s.sprachdienst;
     let mr;
-    [profil, erinnerungen, gespraeche, wissen, mr] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde')]);
+    [profil, erinnerungen, gespraeche, wissen, mr, geburtstage] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde'), api('/api/geburtstage')]);
     morgenrunde = mr.zeit;
     angemeldet = true;
     $('#login').hidden = true;
@@ -213,9 +214,10 @@
       clearInterval(starten.auffrischen);
       starten.auffrischen = setInterval(async () => {
         try {
-          const [liste, m] = await Promise.all([api('/api/erinnerungen'), api('/api/morgenrunde')]);
+          const [liste, m, gb] = await Promise.all([api('/api/erinnerungen'), api('/api/morgenrunde'), api('/api/geburtstage')]);
           erinnerungen = liste;
           morgenrunde = m.zeit;
+          geburtstage = gb;
           erinnerungenZeigen();
         } catch (e) { /* kein Netz: beim nächsten Mal */ }
       }, 5 * 60 * 1000);
@@ -802,6 +804,7 @@
       }
       gespraecheZeigen();
       if (j.morgenrunde !== undefined) morgenrunde = j.morgenrunde;
+      if (j.geburtstage) geburtstage = j.geburtstage;
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
       if (j.wissen) { wissen = j.wissen; wissenZeigen(); }
     } catch (err) {
@@ -1171,7 +1174,7 @@
       ton();
       const k = neu('button'); // unsichtbar: zeigt nur, wann Biko fertig vorgelesen hat
       k.appendChild(neu('span'));
-      vorlesen(`${t('erinnerung')}: ${text}`, k);
+      vorlesen(art === 'geburtstag' ? text : `${t('erinnerung')}: ${text}`, k);
       sprichtMelden();
     };
   }
@@ -1302,10 +1305,17 @@
   // Die Wecker der Android-App für die nächsten zwei Tage. Sie werden jedes Mal ganz neu gestellt.
   function weckerStellen() {
     if (!wecker) return;
-    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
+    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, geburtstage, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
       ? { ...m, titel: t('morgen_titel'), text: t('morgen_text') }
-      : { ...m, titel: 'Biko: ' + t('erinnerung') }));
+      : m.art === 'geburtstag' ? { ...m, titel: 'Biko', text: geburtstagText(m) }
+        : { ...m, titel: 'Biko: ' + t('erinnerung') }));
     try { wecker.planen(JSON.stringify(liste)); } catch (e) { /* ältere App */ }
+  }
+
+  // "ich" ist der eigene Geburtstag: dann gratuliert Biko selbst
+  function geburtstagText({ name, alter }) {
+    if (name.toLowerCase() === 'ich') return t('geburtstag_selbst');
+    return t(alter ? 'geburtstag_alter' : 'geburtstag_heute').replace('{name}', name).replace('{alter}', alter);
   }
 
   // ---------- Die Morgenrunde: Biko meldet sich von selbst ----------

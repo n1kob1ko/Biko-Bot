@@ -40,6 +40,9 @@ def antwort_fuer(frage, werkzeuge):
         werkzeuge["gesundheit_notieren"]["tun"]({"art": "blutdruck", "wert": "135/85", "notiz": "morgens"})
         werkzeuge["tagebuch_zeigen"]["tun"]({})
         return "Hab ich ins Tagebuch geschrieben: 135 zu 85. Das liegt etwas über dem üblichen Bereich."
+    if frage.startswith("Peter hat am 6. Jänner Geburtstag"):
+        server.geburtstag_merken({"name": "Peter", "tag": 6, "monat": 1, "jahr": 1986})
+        return "Das merk ich mir. Am 6. Jänner wird Peter 40, ich sag dir rechtzeitig Bescheid."
     if frage.startswith("Schreib Milch und Brot"):
         server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch", "Brot"]})
         werkzeuge["liste_zeigen"]["tun"]({"liste": "Einkaufen"})
