@@ -7,8 +7,8 @@ android {
         applicationId "at.biko.helfer"
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName "0.1"
+        versionCode 2
+        versionName "0.2"
         // Hier wohnt Biko. Für einen anderen Server einfach diese Adresse ändern.
         buildConfigField "String", "BIKO_ADRESSE", '"https://biko-helfer-production.up.railway.app/"'
     }

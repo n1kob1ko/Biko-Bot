@@ -29,6 +29,7 @@ der Sprachdienst eingerichtet ist, vorzulesende Texte und Aufnahmen an ElevenLab
 Nur Python-Standardbibliothek plus das offizielle anthropic-Paket.
 """
 
+import base64
 import hashlib
 import hmac
 import json
@@ -74,6 +75,10 @@ COOKIE_TAGE = 365
 
 DATA.mkdir(parents=True, exist_ok=True)
 _lock = threading.Lock()
+# Bildschirmfoto aus der Android-App (Biko als Assistent): gilt ein paar Minuten für alle Fragen, nur im Speicher
+_bildschirm = {"bild": None, "zeit": 0.0}
+MAX_BILDSCHIRM = 3_000_000    # Bytes
+BILDSCHIRM_GILT = 300         # Sekunden
 _client = None
 
 STANDARD_PROFIL = {
@@ -438,6 +443,28 @@ def text_hoeren(ton, art):
     return {"text": str(j.get("text") or "").strip(), "sprache": sprache}
 
 
+BILDSCHIRM = """
+
+Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tablet der Person: das, was sie gerade vor sich hat
+(zum Beispiel einen WeChat-Chat, eine Webseite oder einen Brief). Fragt sie "was steht da", "was schreibt sie",
+"übersetz das" oder "was soll ich antworten", geht es um dieses Bild. Lies vor, erkläre oder übersetze in einfachen Worten.
+Eine Antwort für jemanden schreibst du wie sonst auch mit nachricht_zeigen. Sag nicht "auf dem Bildschirmfoto",
+sondern einfach "da steht" oder "Mei schreibt". Hat die Frage nichts mit dem Bild zu tun, beachte es nicht."""
+
+
+def bildschirm_merken(bild):
+    with _lock:
+        _bildschirm.update(bild=bild, zeit=time.time())
+
+
+def bildschirm_frisch():
+    """Das Bildschirmfoto, solange es noch gilt, sonst None."""
+    with _lock:
+        if _bildschirm["bild"] and time.time() - _bildschirm["zeit"] < BILDSCHIRM_GILT:
+            return _bildschirm["bild"]
+        return None
+
+
 GESPROCHEN = """
 
 Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt sie zu lesen.
@@ -589,10 +616,14 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     """Eine Frage im Gespräch. `beim_text` bekommt die Antwort stückweise, `gesprochen`: man redet gerade wie am Telefon."""
     with _lock:
         g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
-    messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": text}]
+    bild = bildschirm_frisch()
+    frage = text if not bild else [
+        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(bild).decode()}},
+        {"type": "text", "text": text}]
+    messages = fuer_claude(g["nachrichten"] if g else []) + [{"role": "user", "content": frage}]
     zeigen, entwuerfe, links = zeige_werkzeuge()
     vorher = erinnerungen_lesen()
-    antwort = frage_claude(system_prompt(gesprochen), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
+    antwort = frage_claude(system_prompt(gesprochen) + (BILDSCHIRM if bild else ""), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            **({"beim_text": beim_text} if beim_text else {}))
     # Was Biko in dieser Antwort wirklich getan hat: die App zeigt es unter der Antwort, auch beim Wiederöffnen
     nachher = erinnerungen_lesen()
@@ -877,6 +908,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if pfad == "/api/zuhoeren":
                 return self.zuhoeren()
+            if pfad == "/api/bildschirm":
+                return self.bildschirm()
             daten = self.json_body()
             if pfad == "/api/login":
                 return self.login(daten)
@@ -970,6 +1003,20 @@ class Handler(BaseHTTPRequestHandler):
         if not ton or art not in AUFNAHME_ARTEN:
             raise ValueError("Das hat nicht geklappt, bitte nochmal.")
         return self.senden(200, text_hoeren(ton, art))
+
+    def bildschirm(self):
+        """Die Android-App schickt, was gerade auf dem Bildschirm ist (JPEG). Biko sieht es bei den nächsten Fragen."""
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BILDSCHIRM:
+            raise ValueError("Das Bild ist zu groß.")
+        bild = self.rfile.read(n)
+        if not self.angemeldet():
+            return self.senden(401, {"fehler": "Bitte anmelden."})
+        if not bild.startswith(b"\xff\xd8"):
+            raise ValueError("Das hat nicht geklappt, bitte nochmal.")
+        bildschirm_merken(bild)
+        protokoll(f"Bildschirm: {len(bild) // 1000} kB bekommen")
+        return self.senden(200, {"ok": True})
 
     def login(self, daten):
         ip = self.ip()

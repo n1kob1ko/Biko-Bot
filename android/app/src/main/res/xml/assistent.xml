@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="at.biko.helfer.AssistentSitzungService"
+    android:recognitionService="at.biko.helfer.ErkennungService"
+    android:settingsActivity="at.biko.helfer.StartActivity"
+    android:supportsAssist="true" />
