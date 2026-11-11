@@ -35,6 +35,17 @@ test('Die Wecker der Android-App: kommende Erinnerungen und die Morgenrunde, die
   assert.deepEqual(L.naechsteMeldungen({ erinnerungen: [], morgenrunde: null, jetzt: um('09:00') }), []);
 });
 
+test('Geburtstage: am Tag um 9 Uhr, mit Morgenrunde sagt Biko es dort', () => {
+  const peter = { id: 'p', name: 'Peter', tag: 10, monat: 11, jahr: 1986 };
+  const rosa = { id: 'r', name: 'Rosa', tag: 29, monat: 2, jahr: null };
+  const liste = L.naechsteMeldungen({ erinnerungen: [], geburtstage: [peter, rosa], jetzt: um('09:00') });
+  assert.deepEqual(liste.map((m) => [new Date(m.wann).getDate(), m.art, m.id, m.name, m.alter]), [[10, 'geburtstag', 'gb-p', 'Peter', 40]]);
+  assert.deepEqual(L.naechsteMeldungen({ erinnerungen: [], morgenrunde: '08:00', geburtstage: [peter], jetzt: um('09:00') }).map((m) => m.art), ['morgenrunde', 'morgenrunde']);
+  // 29.2. in einem Jahr ohne Schalttag: am 28.2.
+  const feb = L.naechsteMeldungen({ erinnerungen: [], geburtstage: [rosa], jetzt: um('10:00', '2027-02-27') });
+  assert.deepEqual(feb.map((m) => [new Date(m.wann).getMonth() + 1, new Date(m.wann).getDate(), m.alter]), [[2, 28, null]]);
+});
+
 test('Anrufen, WhatsApp und SMS: Nummern werden zu Links, österreichische Nummern international', () => {
   assert.equal(L.telLink('0664 / 123 45-67'), 'tel:06641234567');
   assert.equal(L.telLink('144'), 'tel:144');

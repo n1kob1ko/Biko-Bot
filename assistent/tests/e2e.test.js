@@ -410,6 +410,18 @@ test('Morgenrunde: im Gespräch eingestellt, die Android-App bekommt die Wecker 
   assert.deepEqual(p.fehler, []);
 });
 
+test('Geburtstage: im Gespräch gemerkt, die Android-App meldet sich am Tag um 9 Uhr', async (t) => {
+  const WECKER = () => { window.geplant = []; window.BikoWecker = { planen: (j) => window.geplant.push(JSON.parse(j)) }; };
+  const p = await angemeldet(t, { vorher: WECKER });
+  await fragen(p, 'Peter hat am 6. Jänner Geburtstag, er wird 40');
+  const zuletzt = await p.evaluate(() => window.geplant[window.geplant.length - 1]);
+  const kurz = zuletzt.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.titel}: ${m.text}`);
+  // Die Uhr der Seite steht auf Montag, 5.1., 15 Uhr
+  assert.deepEqual(kurz, ['6. 09:00 Biko: Heute wird Peter 40! Soll ich dir einen Glückwunsch schreiben?']);
+  fs.writeFileSync(path.join(daten, 'geburtstage.json'), '[]');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Morgenrunde: ein Tipp auf die Mitteilung öffnet sie, Biko liest sie vor, und man kann darin weiterreden', async (t) => {
   // Am Server ist sie in 5 Minuten fällig (Wiener Zeit), eingestellt seit gestern
   const wien = new Intl.DateTimeFormat('de-AT', { timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
