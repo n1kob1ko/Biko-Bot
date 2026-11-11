@@ -88,7 +88,7 @@ COOKIE_TAGE = 365
 DATA.mkdir(parents=True, exist_ok=True)
 _lock = threading.RLock()   # RLock: wissen_lesen() darf auch innerhalb einer Sperre aufgerufen werden
 # Bildschirmfoto aus der Android-App (Biko als Assistent): gilt ein paar Minuten für alle Fragen, nur im Speicher
-_bildschirm = {"bild": None, "zeit": 0.0}
+_bildschirm = {"bild": None, "zeit": 0.0, "art": "bildschirm"}   # art: bildschirm (Android) oder foto (Kamera)
 MAX_BILDSCHIRM = 3_000_000    # Bytes
 BILDSCHIRM_GILT = 300         # Sekunden
 _client = None
@@ -607,6 +607,17 @@ BILDSCHIRM = """Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tabl
 Eine Antwort für jemanden schreibst du wie sonst auch mit nachricht_zeigen. Sag nicht "auf dem Bildschirmfoto",
 sondern einfach "da steht" oder "Mei schreibt". Hat die Frage nichts mit dem Bild zu tun, beachte es nicht."""
 
+FOTO = """Zu dieser Frage hat die Person mit der Kamera ein Foto gemacht, meistens von einem Brief, einer Rechnung, einem Formular,
+einer Packungsbeilage oder einem Schild. Erkläre es in einfachen Worten:
+- Von wem ist es und worum geht es, in ein, zwei Sätzen.
+- Muss sie etwas tun? Was genau, und bis wann? Geld, Fristen und Termine nennst du deutlich. Ist nichts zu tun, sag das.
+- Wirkt es wie Betrug (Druck, Drohung, Zahlung an Fremde, Gewinn, komische Absender), warne klar und rate, bei der
+  Familie oder direkt bei der echten Stelle nachzufragen, nicht über Nummern aus dem Brief.
+- Bei Medikamenten gilt wie immer: keine Dosierung ändern, im Zweifel Apotheke oder Arzt.
+Schreibt sie auf Chinesisch oder ist der Brief schwer, erkläre in ihrer Sprache. Ist das Foto unscharf, abgeschnitten oder
+zu dunkel, sag das freundlich und bitte um ein neues, statt zu raten. Termine kannst du ihr mit erinnerung_merken anbieten.
+Sag nicht "auf dem Foto", sondern "der Brief ist von ..." oder "da steht ..."."""
+
 
 # Worum es geht, wenn Biko gründlich sein soll: dann nimmt er das stärkere Modell
 WICHTIG = re.compile(
@@ -624,16 +635,16 @@ def modell_fuer(text, bild=None):
     return EINFACH_MODELL
 
 
-def bildschirm_merken(bild):
+def bildschirm_merken(bild, art="bildschirm"):
     with _lock:
-        _bildschirm.update(bild=bild, zeit=time.time())
+        _bildschirm.update(bild=bild, zeit=time.time(), art=art)
 
 
 def bildschirm_frisch():
-    """Das Bildschirmfoto, solange es noch gilt, sonst None."""
+    """Das Bildschirmfoto (oder Kamera-Foto) als (Zeit, Bytes, Art), solange es noch gilt, sonst None."""
     with _lock:
         if _bildschirm["bild"] and time.time() - _bildschirm["zeit"] < BILDSCHIRM_GILT:
-            return _bildschirm["zeit"], _bildschirm["bild"]
+            return _bildschirm["zeit"], _bildschirm["bild"], _bildschirm["art"]
         return None
 
 
@@ -676,7 +687,7 @@ def hinweis(gesprochen=False, bild=False):
     if gesprochen:
         teile.append(GESPROCHEN)
     if bild:
-        teile.append(BILDSCHIRM)
+        teile.append(FOTO if bild == "foto" else BILDSCHIRM)
     return "<app>\n" + "\n\n".join(teile) + "\n</app>"
 
 
@@ -897,7 +908,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     # Frage und kommt, solange es gilt, günstig aus dem Zwischenspeicher, statt jedes Mal neu bezahlt zu werden.
     schon_da = bool(bild) and any(m.get("bildschirm") == bild[0] for m in verlauf)
     neu_bild = bool(bild) and not schon_da
-    frage = [{"type": "text", "text": hinweis(gesprochen, bild=bool(bild))}]
+    frage = [{"type": "text", "text": hinweis(gesprochen, bild=bild[2] if bild else False)}]
     if neu_bild:
         frage.append(bild_block(bild[1]))
     frage.append({"type": "text", "text": text})
@@ -1385,7 +1396,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Security-Policy",
-                         "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
+                         "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; "
                          f"connect-src 'self' {LIVE_ADRESSE}; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; "
                          "form-action 'self'")
         for k, v in (extra or {}).items():
@@ -1557,7 +1568,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.senden(200, text_hoeren(ton, art))
 
     def bildschirm(self):
-        """Die Android-App schickt, was gerade auf dem Bildschirm ist (JPEG). Biko sieht es bei den nächsten Fragen."""
+        """Die Android-App schickt, was gerade auf dem Bildschirm ist (JPEG). Biko sieht es bei den nächsten Fragen.
+        Mit ?foto: ein Foto von der Kamera der App (z. B. von einem Brief), Biko erklärt es dann."""
         n = int(self.headers.get("Content-Length") or 0)
         if n > MAX_BILDSCHIRM:
             raise ValueError("Das Bild ist zu groß.")
@@ -1566,8 +1578,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(401, {"fehler": "Bitte anmelden."})
         if not bild.startswith(b"\xff\xd8"):
             raise ValueError("Das hat nicht geklappt, bitte nochmal.")
-        bildschirm_merken(bild)
-        protokoll(f"Bildschirm: {len(bild) // 1000} kB bekommen")
+        art = "foto" if "foto" in parse_qs(urlparse(self.path).query, keep_blank_values=True) else "bildschirm"
+        bildschirm_merken(bild, art)
+        protokoll(f"{'Foto' if art == 'foto' else 'Bildschirm'}: {len(bild) // 1000} kB bekommen")
         return self.senden(200, {"ok": True})
 
     def login(self, daten):

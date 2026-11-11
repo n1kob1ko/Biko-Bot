@@ -705,7 +705,8 @@
   }
 
   // `von`: Stelle, von der die Frage losfliegt (Vorschlag oder Eingabefeld)
-  async function senden(text, von) {
+  // `bild`: Adresse eines Fotos, das mit der Frage mitgeht (klein in der eigenen Blase zu sehen)
+  async function senden(text, von, bild) {
     text = text.trim();
     if (!text || sendet || versteht) return;
     sendet = true;
@@ -716,7 +717,14 @@
     stimmeWecken();
     gespraechBeginnen();
     stimmung('tippt');
-    B.flug(blase(text, 'ich'), start);
+    const meine = blase(text, 'ich');
+    if (bild) {
+      const img = neu('img', 'foto-klein');
+      img.src = bild;
+      img.alt = '';
+      meine.prepend(img);
+    }
+    B.flug(meine, start);
     const warte = denkBlase();
     const hier = sitzung;
     const tel = telefon; // am Telefon spricht Biko schon, während die Antwort noch kommt
@@ -1134,6 +1142,35 @@
     e.preventDefault();
     if (feld.value.trim()) senden(feld.value);
   });
+
+  // ---------- Foto: einen Brief, eine Rechnung oder ein Schild erklären lassen ----------
+  // Das Foto geht wie das Bildschirmfoto der Android-App an den Server (?foto) und gilt für die nächsten Fragen.
+  const fotoWahl = $('#foto-wahl');
+  $('#foto-knopf').addEventListener('click', () => { stimmeWecken(); fotoWahl.click(); });
+  fotoWahl.addEventListener('change', async () => {
+    const datei = fotoWahl.files && fotoWahl.files[0];
+    fotoWahl.value = '';
+    if (!datei || sendet) return;
+    let bild;
+    try { bild = await fotoKlein(datei); } catch (e) { hinweis(t('foto_geht_nicht')); return; }
+    try { await api('/api/bildschirm?foto', bild); } catch (e) { hinweis(e.message); return; }
+    senden(feld.value.trim() || t('foto_frage'), null, URL.createObjectURL(bild));
+  });
+  // Zum Lesen reichen 1600 Pixel: das geht schneller und kostet weniger
+  async function fotoKlein(datei) {
+    const url = URL.createObjectURL(datei);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const f = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * f);
+      c.height = Math.round(img.naturalHeight * f);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return await new Promise((ok, nein) => c.toBlob((b) => (b ? ok(b) : nein(new Error('kein Bild'))), 'image/jpeg', 0.85));
+    } finally { URL.revokeObjectURL(url); }
+  }
 
   // ---------- 3. Erinnerungen ----------
   // Erinnerungen entstehen im Gespräch: Biko schreibt sie sich am Server selbst auf (server.py, Werkzeuge).

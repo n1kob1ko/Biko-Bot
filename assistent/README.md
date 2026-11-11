@@ -44,6 +44,12 @@ Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden
 Danach fügt man ihn in WeChat, WhatsApp oder SMS ein. Biko verschickt selbst nichts. "Mach sie kürzer" oder
 "lieber mit Sie" ändert den Text im selben Gespräch.
 
+**Foto von einem Brief:** Links im Eingabefeld ist ein Kamera-Knopf. Foto von einem Brief, einer Rechnung, einer
+Packungsbeilage oder einem Schild machen, und Biko erklärt es: von wem, worum es geht, was zu tun ist und bis wann, und ob es
+nach Betrug aussieht. Steht nichts im Eingabefeld, fragt die App von selbst "Was steht da?". Die App verkleinert das Foto
+auf 1600 Pixel und schickt es wie das Bildschirmfoto der Android-App an `POST /api/bildschirm?foto`; es gilt 5 Minuten für
+die nächsten Fragen ("Was muss ich tun?") und wird nicht gespeichert. Mit Foto antwortet immer das stärkere Modell.
+
 **Einkaufsliste und Notizen:** "Schreib Milch auf die Einkaufsliste", "Was steht drauf?", "Merk dir, der Schlüssel ist bei
 Frau Novak". Biko führt dafür Listen (`listen.json`, Werkzeug `liste_aendern`): "Einkaufen", "Notizen" und was die Person
 sonst braucht. Was draufsteht, steht im Hinweis der App. Mit `liste_zeigen` stellt er eine Liste als Karte unter die Antwort:

@@ -21,6 +21,8 @@ def falsche_ki(system, messages, max_tokens=4000, websuche=False, werkzeuge=None
         b["text"] for b in inhalt if b.get("type") == "text" and not b["text"].startswith("<app>"))
     if not frage and "Morgenrunde" in json.dumps(inhalt, ensure_ascii=False):   # Biko meldet sich von selbst
         return "Guten Morgen! In Wien wird es heute sonnig. Was hast du heute vor?"
+    if frage.startswith("Was steht da?") and isinstance(inhalt, list) and any(b.get("type") == "image" for b in inhalt):
+        return "Der Brief ist von den Wiener Netzen. Sie lesen am Dienstag den Zähler ab. Du musst nichts tun."
     antwort = antwort_fuer(frage, werkzeuge)
     if beim_text:   # wie die echte KI: die Antwort kommt in Stücken
         for stueck in re.findall(r"\S+\s*", antwort):

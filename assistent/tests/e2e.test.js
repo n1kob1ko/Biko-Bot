@@ -319,6 +319,20 @@ test('In der Android-Blase (?mini): Biko redet ohne Fenster und meldet, was er g
   assert.deepEqual(p.fehler, []);
 });
 
+test('Foto von einem Brief: Biko bekommt das Bild und erklärt es', async (t) => {
+  const p = await angemeldet(t);
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const geschickt = p.waitForRequest((r) => r.url().endsWith('/api/bildschirm?foto'));
+  await p.setInputFiles('#foto-wahl', { name: 'brief.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+  assert.equal((await geschickt).headers()['content-type'], 'image/jpeg', 'verkleinert als JPEG');
+  await p.waitForSelector('.blase.ich img.foto-klein');
+  assert.match(await p.textContent('.blase.ich'), /Was steht da\?/);
+  await p.waitForSelector('.blase.biko-sagt');
+  assert.match(await p.textContent('.blase.biko-sagt'), /Wiener Netzen/);
+  assert.equal(await p.getAttribute('#foto-knopf', 'aria-label'), 'Foto machen, z. B. von einem Brief');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Einkaufsliste: Biko schreibt auf, zeigt die Liste, Gekauftes tippt man weg', async (t) => {
   const p = await angemeldet(t);
   await fragen(p, 'Schreib Milch und Brot auf die Einkaufsliste');

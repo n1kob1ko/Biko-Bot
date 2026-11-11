@@ -199,6 +199,24 @@ class Test(unittest.TestCase):
         self.assertNotIn("Bildschirmfoto", json.dumps(m, ensure_ascii=False))
         self.assertNotIn("image", json.dumps(m))
 
+    def test_foto_von_einem_brief_erklaert_biko_mit_dem_starken_modell(self):
+        c = self.anmelden()
+        server._bildschirm.update(bild=None, zeit=0)
+        req = urllib.request.Request(self.url + "/api/bildschirm?foto", data=b"\xff\xd8\xff\xe0" + b"x" * 100, method="POST")
+        req.add_header("Content-Type", "image/jpeg")
+        req.add_header("Cookie", c)
+        with urllib.request.urlopen(req) as r:
+            self.assertEqual(r.status, 200)
+        self.rufe("/api/chat", {"text": "Was steht da?"}, cookie=c)
+        anfrage = GEFRAGT[-1]
+        frage = anfrage["messages"][-1]["content"]
+        self.assertEqual([b["type"] for b in frage], ["text", "image", "text"])
+        self.assertIn("mit der Kamera ein Foto gemacht", frage[0]["text"])
+        self.assertIn("bis wann", frage[0]["text"])
+        self.assertNotIn("Bildschirmfoto vom Handy", frage[0]["text"])
+        self.assertEqual(anfrage["modell"], server.MODELL)
+        server._bildschirm.update(bild=None, zeit=0, art="bildschirm")
+
     def test_einfaches_geht_ans_guenstige_modell_wichtiges_ans_starke(self):
         c = self.anmelden()
         server._bildschirm.update(bild=None, zeit=0)

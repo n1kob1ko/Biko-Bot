@@ -119,6 +119,12 @@ public class StartActivity extends Activity {
     }
 
     @Override
+    protected void onActivityResult(int code, int ergebnis, Intent daten) {
+        super.onActivityResult(code, ergebnis, daten);
+        Netz.fotoAntwort(this, code, ergebnis, daten);
+    }
+
+    @Override
     public void onRequestPermissionsResult(int code, String[] p, int[] ergebnis) {
         Netz.mikroAntwort(code, ergebnis);
     }
