@@ -180,6 +180,7 @@
     let mr;
     [profil, erinnerungen, gespraeche, wissen, mr, geburtstage] = await Promise.all([api('/api/profil'), api('/api/erinnerungen'), api('/api/gespraeche'), api('/api/wissen'), api('/api/morgenrunde'), api('/api/geburtstage')]);
     morgenrunde = mr.zeit;
+    api('/api/dolmetscher').then((d) => dolmetscherZeigen(d.dolmetscher), () => {});
     angemeldet = true;
     $('#login').hidden = true;
     $('#app').hidden = false;
@@ -805,6 +806,7 @@
       gespraecheZeigen();
       if (j.morgenrunde !== undefined) morgenrunde = j.morgenrunde;
       if (j.geburtstage) geburtstage = j.geburtstage;
+      if (j.dolmetscher !== undefined) dolmetscherZeigen(j.dolmetscher);
       if (j.erinnerungen) erinnerungenUebernehmen(j.erinnerungen, j.gemerkt || []);
       if (j.wissen) { wissen = j.wissen; wissenZeigen(); }
     } catch (err) {
@@ -1193,6 +1195,14 @@
     e.preventDefault();
     if (feld.value.trim()) senden(feld.value);
   });
+
+  // ---------- Dolmetscher: Biko übersetzt hin und her, bis man "fertig" sagt ----------
+  // Ein- und ausgeschaltet wird im Gespräch. Das Band zeigt, dass er gerade übersetzt; "Fertig" sagt es für einen.
+  function dolmetscherZeigen(d) {
+    $('#dolmetscher-leiste').hidden = !d;
+    document.body.classList.toggle('dolmetscht', !!d);
+  }
+  $('#dolmetscher-aus').addEventListener('click', () => { if (!sendet) senden(t('dolmetscher_aus_sagen')); });
 
   // ---------- Foto: einen Brief, eine Rechnung oder ein Schild erklären lassen ----------
   // Das Foto geht wie das Bildschirmfoto der Android-App an den Server (?foto) und gilt für die nächsten Fragen.

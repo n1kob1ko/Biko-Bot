@@ -422,6 +422,26 @@ test('Geburtstage: im Gespräch gemerkt, die Android-App meldet sich am Tag um 9
   assert.deepEqual(p.fehler, []);
 });
 
+test('Dolmetscher: im Gespräch eingeschaltet, die Übersetzung steht groß da, "Fertig" schaltet ihn aus', async (t) => {
+  const p = await angemeldet(t);
+  assert.equal(await p.isVisible('#dolmetscher-leiste'), false);
+  await fragen(p, 'Dolmetsch für mich beim Arzt');
+  await p.waitForSelector('#dolmetscher-leiste:not([hidden])');
+  assert.equal(await p.textContent('#dolmetscher-leiste span'), 'Biko dolmetscht');
+  await fragen(p, '我头疼三天了');
+  const gross = await p.evaluate(() => parseFloat(getComputedStyle([...document.querySelectorAll('.blase.biko-sagt')].pop()).fontSize));
+  const ich = await p.evaluate(() => parseFloat(getComputedStyle([...document.querySelectorAll('.blase.ich')].pop()).fontSize));
+  assert.ok(gross > ich * 1.3, `Übersetzung groß: ${gross} gegen ${ich}`);
+  // nach dem Neuladen weiß die App noch, dass Biko dolmetscht
+  await p.reload();
+  await p.waitForSelector('#dolmetscher-leiste:not([hidden])');
+  await p.click('#dolmetscher-aus');
+  await p.waitForSelector('#dolmetscher-leiste', { state: 'hidden' });
+  assert.match(await p.textContent('.blase.ich >> nth=-1'), /fertig mit dem Dolmetschen/);
+  assert.equal(await p.evaluate(() => document.body.classList.contains('dolmetscht')), false);
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Morgenrunde: ein Tipp auf die Mitteilung öffnet sie, Biko liest sie vor, und man kann darin weiterreden', async (t) => {
   // Am Server ist sie in 5 Minuten fällig (Wiener Zeit), eingestellt seit gestern
   const wien = new Intl.DateTimeFormat('de-AT', { timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });

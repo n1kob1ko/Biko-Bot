@@ -24,8 +24,10 @@ Funktionen, alle über das Gespräch (POST /api/chat):
  10. Geburtstage       "Peter hat am 3. März Geburtstag": Biko merkt sich das Datum, sagt rechtzeitig Bescheid und bietet
                         einen Glückwunsch an. Die Android-App meldet sich am Tag um 9 Uhr (ohne Morgenrunde).
                         GET /api/geburtstage.
-Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch und die Geburtstage sind
-Werkzeuge, die Claude selbst aufruft.
+ 11. Dolmetscher       "Dolmetsch für mich beim Arzt": Biko übersetzt jeden Satz in die andere Sprache und sagt ihn laut,
+                        bis man "fertig" sagt (oder 30 Minuten nichts kommt). Die App zeigt die Übersetzung groß.
+Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch, die Geburtstage und der
+Dolmetscher sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -146,6 +148,12 @@ Gesundheit:
   und mit anruf_zeigen den Knopf für 144 zeigen.
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
+
+Dolmetscher:
+- Bittet die Person dich, für sie zu dolmetschen (beim Arzt, im Geschäft, mit dem Nachbarn), schaltest du mit dolmetscher
+  ein (an: true, dazu die zwei Sprachen) und sagst in beiden Sprachen kurz, dass du jetzt übersetzt. Wie du dann
+  übersetzt, steht im Hinweis der App.
+- Sagt sie "fertig", "danke, das reicht" oder etwas Ähnliches zu dir, schaltest du mit dolmetscher (an: false) aus.
 
 Geburtstage:
 - Nennt die Person einen Geburtstag (von sich oder von jemandem), merkst du ihn mit geburtstag_merken (Name, Tag, Monat,
@@ -675,6 +683,16 @@ def bildschirm_frisch():
         return None
 
 
+DOLMETSCHER = """Du bist gerade Dolmetscher zwischen {a} und {b}. Zwei Menschen reden über dich miteinander.
+- Übersetze, was gesagt wurde, in die andere der beiden Sprachen: genau, vollständig und natürlich, in der Ich-Form,
+  so wie ein guter Dolmetscher. Nur die Übersetzung, ohne "Er sagt", ohne Erklärung, ohne Frage zurück, keine Websuche.
+- Das gilt auch, wenn die Antwort dadurch länger als sonst wird. Zahlen, Namen, Uhrzeiten, Medikamente und Mengen
+  übernimmst du genau.
+- Wurde etwas offensichtlich falsch mitgeschrieben, übersetze das Wahrscheinliche. Ist es ganz unverständlich, sag in
+  beiden Sprachen kurz: bitte nochmal.
+- Spricht die Person dich selbst an ("Biko, was heißt ...", "Biko, fertig"), antwortest du ihr kurz in ihrer Sprache
+  oder schaltest mit dolmetscher aus."""
+
 GESPROCHEN = """Gerade redet die Person mit dir wie am Telefon: sie hört deine Antwort, statt sie zu lesen.
 - Antworte so, wie man am Telefon redet: kurz, meistens 1 bis 3 Sätze, natürlich und herzlich. Keine Listen, keine Nummern.
   Bei einer Anleitung sagst du nur den ersten Schritt oder zwei und fragst, ob es weitergehen soll.
@@ -721,7 +739,10 @@ def hinweis(gesprochen=False, bild=False):
                                                 for name, eintraege in listen.items()) or "- noch keine"))
     zeit = morgenrunde_zeit()
     teile.append(f"Morgenrunde: jeden Tag um {zeit} Uhr." if zeit else "Morgenrunde: nicht eingestellt.")
-    if gesprochen:
+    d = dolmetscher_jetzt()
+    if d:
+        teile.append(DOLMETSCHER.format(a=d["a"], b=d["b"]))
+    elif gesprochen:
         teile.append(GESPROCHEN)
     if bild:
         teile.append(FOTO if bild == "foto" else BILDSCHIRM)
@@ -967,6 +988,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     with _lock:
         g = gespraech_finden(gespraeche_lesen(), gespraech_nr)
     verlauf = g["nachrichten"] if g else []
+    dolmetscher_jetzt(verlaengern=True)
     bild = bildschirm_frisch()   # (Zeit, Bytes) oder None
     # Ein Bildschirmfoto geht nur einmal mit, bei der ersten Frage danach. Danach steht es im Verlauf bei dieser
     # Frage und kommt, solange es gilt, günstig aus dem Zwischenspeicher, statt jedes Mal neu bezahlt zu werden.
@@ -1003,7 +1025,8 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         g["zuletzt"] = zeit
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
     return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss,
-            "morgenrunde": morgenrunde_zeit(), "geburtstage": geburtstage_lesen(), **getan}
+            "morgenrunde": morgenrunde_zeit(), "geburtstage": geburtstage_lesen(),
+            "dolmetscher": dolmetscher_jetzt(), **getan}
 
 
 UHRZEIT = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -1231,6 +1254,37 @@ def gesundheit_streichen(eingabe):
     return "Gestrichen."
 
 
+# ---------- Dolmetscher: Biko übersetzt ein Gespräch hin und her ----------
+
+DOLMETSCHER_GILT = 30 * 60   # so lange nach dem letzten Satz bleibt er an, dann ist er von selbst aus
+_dolmetscher = {"a": "", "b": "", "bis": 0.0}
+
+
+def dolmetscher_jetzt(verlaengern=False):
+    """{"a", "b"} (die zwei Sprachen), solange Biko dolmetscht, sonst None. `verlaengern`: es wurde gerade gesprochen."""
+    with _lock:
+        if not _dolmetscher["a"] or time.time() > _dolmetscher["bis"]:
+            return None
+        if verlaengern:
+            _dolmetscher["bis"] = time.time() + DOLMETSCHER_GILT
+        return {"a": _dolmetscher["a"], "b": _dolmetscher["b"]}
+
+
+def dolmetscher(eingabe):
+    if not eingabe.get("an"):
+        with _lock:
+            _dolmetscher.update(a="", b="", bis=0.0)
+        return "Der Dolmetscher ist aus. Sag es der Person kurz in ihrer Sprache."
+    a = " ".join(str(eingabe.get("sprache_a") or "Chinesisch").split())[:30]
+    b = " ".join(str(eingabe.get("sprache_b") or "Deutsch").split())[:30]
+    if a.casefold() == b.casefold():
+        raise ValueError("Das sind zweimal dieselbe Sprache. Frag, in welche Sprache du übersetzen sollst.")
+    with _lock:
+        _dolmetscher.update(a=a, b=b, bis=time.time() + DOLMETSCHER_GILT)
+    return (f"Der Dolmetscher ist an ({a} und {b}). Sag jetzt in beiden Sprachen in einem kurzen Satz, dass du übersetzt. "
+            "Ab der nächsten Frage übersetzt du nur noch.")
+
+
 # ---------- Geburtstage: Biko denkt rechtzeitig daran ----------
 
 MAX_GEBURTSTAGE = 200
@@ -1391,6 +1445,20 @@ def hausmeister():
 
 
 WERKZEUGE = {
+    "dolmetscher": {"tun": dolmetscher, "schema": {
+        "name": "dolmetscher",
+        "description": "Schaltet den Dolmetscher ein oder aus. An: du übersetzt jeden Satz in die andere Sprache, bis "
+                       "die Person fertig sagt.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "an": {"type": "boolean"},
+                "sprache_a": {"type": "string", "description": "Die Sprache der Person, z. B. 'Chinesisch'."},
+                "sprache_b": {"type": "string", "description": "Die Sprache der anderen, z. B. 'Deutsch'."},
+            },
+            "required": ["an"],
+        },
+    }},
     "geburtstag_merken": {"tun": geburtstag_merken, "schema": {
         "name": "geburtstag_merken",
         "description": "Merkt sich einen Geburtstag. Gibt es den Namen schon, wird das Datum ersetzt.",
@@ -1668,6 +1736,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, listen_lesen())
             if pfad == "/api/geburtstage":
                 return self.senden(200, geburtstage_lesen())
+            if pfad == "/api/dolmetscher":
+                return self.senden(200, {"dolmetscher": dolmetscher_jetzt()})
             if pfad == "/api/morgenrunde":
                 # ?jetzt: ist sie fällig und noch nicht fertig, schreibt Biko sie gleich (sonst macht das der Hausmeister)
                 return self.senden(200, {"zeit": morgenrunde_zeit(), "heute": morgenrunde_heute(erzeugen="jetzt" in parse_qs(urlparse(self.path).query, keep_blank_values=True))})

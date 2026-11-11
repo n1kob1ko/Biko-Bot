@@ -267,6 +267,19 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
   box-shadow: 0 100px 0 var(--bg);   /* deckt auch den Streifen neben und unter der Leiste ab */
 }
 .eingabe-platz .meldung { margin: 0 4px 10px; }
+/* Dolmetscher: oben ein gelbes Band, die Übersetzung groß, damit das Gegenüber mitlesen kann */
+.dolmetscher-leiste {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 6px 6px 6px 16px;
+  background: var(--accent); color: var(--accent-ink); border-radius: 999px; font-weight: 700;
+}
+.dolmetscher-leiste[hidden] { display: none; }
+.dolmetscher-leiste .icon { flex: none; font-size: 1.25rem; }
+.dolmetscher-leiste span { flex: 1; }
+.dolmetscher-leiste button {
+  flex: none; min-height: 48px; padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--card); color: var(--ink); font: inherit; font-weight: 700;
+}
+body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 .eingabe {
   display: flex; align-items: flex-end; gap: 10px; padding: 8px;
   background: var(--card); border: 2px solid var(--line); border-radius: 30px; box-shadow: var(--schatten);

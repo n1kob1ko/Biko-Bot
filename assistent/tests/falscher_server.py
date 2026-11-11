@@ -40,6 +40,14 @@ def antwort_fuer(frage, werkzeuge):
         werkzeuge["gesundheit_notieren"]["tun"]({"art": "blutdruck", "wert": "135/85", "notiz": "morgens"})
         werkzeuge["tagebuch_zeigen"]["tun"]({})
         return "Hab ich ins Tagebuch geschrieben: 135 zu 85. Das liegt etwas über dem üblichen Bereich."
+    if frage.startswith("Dolmetsch für mich beim Arzt"):
+        server.dolmetscher({"an": True, "sprache_a": "Chinesisch", "sprache_b": "Deutsch"})
+        return "Gern, ich übersetze jetzt. 好的，我现在帮你翻译。"
+    if frage.startswith("我头疼三天了"):
+        return "Ich habe seit drei Tagen Kopfschmerzen."
+    if frage.startswith("Danke, fertig mit dem Dolmetschen"):
+        server.dolmetscher({"an": False})
+        return "Gern geschehen. Ich übersetze jetzt nicht mehr."
     if frage.startswith("Peter hat am 6. Jänner Geburtstag"):
         server.geburtstag_merken({"name": "Peter", "tag": 6, "monat": 1, "jahr": 1986})
         return "Das merk ich mir. Am 6. Jänner wird Peter 40, ich sag dir rechtzeitig Bescheid."

@@ -430,6 +430,24 @@ class Test(unittest.TestCase):
         self.assertRaises(ValueError, server.geburtstag_streichen, {"name": "Niemand"})
         server.schreiben("geburtstage", [])
 
+    def test_dolmetscher_an_im_hinweis_und_nach_30_minuten_von_selbst_aus(self):
+        c = self.anmelden()
+        self.assertNotIn("Dolmetscher zwischen", server.hinweis(gesprochen=True))
+        server.dolmetscher({"an": True, "sprache_a": "Chinesisch", "sprache_b": "Deutsch"})
+        h = server.hinweis(gesprochen=True)
+        self.assertIn("Dolmetscher zwischen Chinesisch und Deutsch", h)
+        self.assertNotIn(server.GESPROCHEN, h)   # beim Dolmetschen wird nicht gekürzt
+        self.assertRaises(ValueError, server.dolmetscher, {"an": True, "sprache_a": "Deutsch", "sprache_b": "deutsch"})
+        anfragen = self.drehbuch(antwort("end_turn", text("Ich habe seit drei Tagen Kopfschmerzen.")))
+        j = self.rufe("/api/chat", {"text": "我头疼三天了"}, cookie=c)[1]
+        self.assertEqual(j["dolmetscher"], {"a": "Chinesisch", "b": "Deutsch"})
+        self.assertIn("dolmetscher", {w["name"] for w in anfragen[0]["tools"]})
+        self.assertEqual(self.rufe("/api/dolmetscher", cookie=c)[1]["dolmetscher"]["b"], "Deutsch")
+        with unittest.mock.patch.object(server.time, "time", return_value=server.time.time() + 31 * 60):
+            self.assertIsNone(server.dolmetscher_jetzt())
+        server.dolmetscher({"an": False})
+        self.assertIsNone(self.rufe("/api/dolmetscher", cookie=c)[1]["dolmetscher"])
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(
