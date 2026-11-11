@@ -37,9 +37,20 @@
   // ---------- Biko zeigt, was gerade passiert ----------
   $$('[data-biko]').forEach((el) => M.mount(el, { decorative: el.dataset.biko !== 'haupt' }));
   let ruheUhr;
+  // In der Android-App läuft Biko auch ganz klein in der Blase (?mini): sie zeigt, ob er zuhört, nachdenkt oder spricht
+  const nativ = window.BikoNativ || null;
+  const mini = !!nativ && new URLSearchParams(location.search).has('mini');
+  function nativMelden(art) {
+    if (!nativ) return;
+    try {
+      const z = !telefon ? 'aus' : telefon.sprecher.spricht() ? 'spricht' : art === 'tippt' ? 'denkt' : 'hoert';
+      nativ.zustand(z);
+    } catch (e) { /* noch beim Laden oder ältere App */ }
+  }
   function stimmung(art, zurueckNach) {
     clearTimeout(ruheUhr);
     M.setMood(art);
+    nativMelden(art);
     if (zurueckNach) ruheUhr = setTimeout(() => M.setMood('da'), zurueckNach);
   }
   $('#biko-reden').addEventListener('click', () => M.fidget('boop'));
@@ -686,6 +697,7 @@
   // Sprechen statt tippen: der Satz wird wie eine Sprachnachricht gleich abgeschickt
   const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
   function hinweis(text) {
+    if (mini && text) { try { nativ.hinweis(text); } catch (e) { /* ältere App */ } }
     const p = $('#chat-hinweis');
     p.textContent = text;
     clearTimeout(p._uhr);
@@ -863,7 +875,7 @@
     let zugang;
     try { zugang = await api('/api/live-zugang', {}); } catch (e) { throw { art: 'live' }; }
     tel.hoerer = await Tel.hoeren({
-      ac, zugang,
+      ac, zugang, sprache,
       beimTeil: (text) => gehoert(tel, text, false),
       beimSatz: (text) => gehoert(tel, text, true),
       beimEnde: () => verbindungWeg(tel),
@@ -928,6 +940,8 @@
     tel.puffer = '';
     // Hat Biko eine Nachricht für jemanden geschrieben, liest er sie danach vor
     (j.nachrichten || []).forEach((n) => { saetze.push(...L.saetzeTeilen(n.text, true).saetze); tel.gesagt += ' ' + n.text; });
+    // In der Blase gibt es keinen Kopieren-Knopf: die App legt die Nachricht gleich zum Einfügen bereit
+    if (mini && j.nachrichten && j.nachrichten.length) { try { nativ.kopieren(j.nachrichten[j.nachrichten.length - 1].text); } catch (e) { /* ältere App */ } }
     if (!tel.stumm) saetze.forEach((satz) => tel.sprecher.sagen(satz));
     if (!tel.sprecher.spricht()) stimmung('hoert');
   }
@@ -956,7 +970,16 @@
     if (meldung) hinweis(meldung);
   }
   // Wer die App weglegt oder wechselt, legt auf: sonst hört das Handy im Hintergrund weiter zu
-  document.addEventListener('visibilitychange', () => { if (document.hidden) auflegen(); });
+  // (In der Blase entscheidet die App, wann aufgelegt wird.)
+  document.addEventListener('visibilitychange', () => { if (document.hidden && !mini) auflegen(); });
+  if (mini) {
+    window.bikoReden = () => {
+      if (angemeldet && kannTelefonieren()) return telefonieren();
+      nativMelden('aus');
+      try { nativ.hinweis(angemeldet ? t('mikro_verboten') : 'Bitte die Biko-App einmal öffnen und anmelden.'); } catch (e) { /* ältere App */ }
+    };
+    window.bikoAuflegen = () => auflegen();
+  }
 
   $('#chat-form').addEventListener('submit', (e) => {
     e.preventDefault();

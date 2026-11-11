@@ -26,10 +26,19 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.Manifest;
+import android.content.pm.PackageManager;
 
 /**
- * Biko als Blase über allen Apps. Antippen öffnet das Gespräch, ziehen verschiebt ihn,
- * auf das ✕ unten ziehen blendet ihn aus (bis man die App wieder öffnet).
+ * Biko als Blase über allen Apps. Antippen: Biko hört gleich zu, ganz ohne Fenster, und die Blase zeigt,
+ * ob er zuhört, nachdenkt oder spricht. Nochmal antippen legt auf. Lange drücken öffnet Biko groß.
+ * Ziehen verschiebt ihn, auf das ✕ unten ziehen blendet ihn aus (bis man die App wieder öffnet).
+ * Das Gespräch selbst führt die Biko-Seite in einem winzigen, unsichtbaren Fenster in der Blase (?mini).
  */
 public class BlaseService extends Service {
     private static final String KANAL = "blase";
@@ -41,6 +50,10 @@ public class BlaseService extends Service {
     private WindowManager.LayoutParams blp;
     private TextView weg; // das ✕ unten, nur beim Ziehen sichtbar
     private ValueAnimator atmen;
+    private View ring;        // farbiger Ring um die Blase: zeigt, was Biko gerade tut
+    private ImageView bild;
+    private WebView web;      // führt das Gespräch
+    private String zustand = "aus"; // aus, hoert, denkt, spricht
     private float dp;
     private int groesse;
 
@@ -53,7 +66,9 @@ public class BlaseService extends Service {
     /** Während Biko groß offen ist, braucht es die Blase nicht. */
     static void sichtbar(boolean ja) {
         BlaseService s = laeuft;
-        if (s != null && s.blase != null) s.blase.setVisibility(ja ? View.VISIBLE : View.GONE);
+        if (s == null || s.blase == null) return;
+        if (!ja && !"aus".equals(s.zustand)) s.auflegen(); // Biko groß offen: das kleine Gespräch endet
+        s.blase.setVisibility(ja ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -91,8 +106,20 @@ public class BlaseService extends Service {
                 .addAction(new Notification.Action.Builder(null, "Ausblenden", aus).build())
                 .setOngoing(true)
                 .build();
-        if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        else startForeground(1, n);
+        if (Build.VERSION.SDK_INT >= 34) {
+            // Mit "Mikrofon" darf Biko auch zuhören, während eine andere App vorne ist
+            boolean mikro = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+            try {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                        | (mikro ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0));
+            } catch (Exception e) {
+                startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            }
+        } else if (Build.VERSION.SDK_INT >= 30) {
+            startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        } else {
+            startForeground(1, n);
+        }
     }
 
     private static int typ() {
@@ -109,12 +136,12 @@ public class BlaseService extends Service {
         blase.setElevation(8 * dp);
         int rand = Math.round(6 * dp);
         blase.setPadding(rand, rand, rand, rand);
-        ImageView bild = new ImageView(this);
+        bild = new ImageView(this);
         bild.setImageResource(R.drawable.biko);
         bild.setContentDescription("Biko, zum Reden antippen");
         blase.addView(bild, new FrameLayout.LayoutParams(-1, -1));
 
-        int platz = Math.round(12 * dp); // Platz für den Schatten
+        int platz = Math.round(22 * dp); // Platz für Schatten und Ring
         blp = new WindowManager.LayoutParams(groesse + 2 * platz, groesse + 2 * platz, typ(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
@@ -122,7 +149,16 @@ public class BlaseService extends Service {
         FrameLayout huelle = new FrameLayout(this);
         huelle.setPadding(platz, platz, platz, platz);
         huelle.setClipToPadding(false);
+        // Der Ring liegt hinter der Blase und wächst beim Zuhören und Sprechen über sie hinaus
+        ring = new View(this);
+        ring.setAlpha(0f);
+        huelle.addView(ring, new FrameLayout.LayoutParams(groesse, groesse));
         huelle.addView(blase, new FrameLayout.LayoutParams(groesse, groesse));
+        // Das unsichtbare Fenster für das Gespräch: 1 Pixel, damit die Seite als sichtbar gilt
+        web = Netz.bauen(this, null);
+        web.addJavascriptInterface(new Bruecke(), "BikoNativ");
+        web.loadUrl(BuildConfig.BIKO_ADRESSE + "?mini");
+        huelle.addView(web, new FrameLayout.LayoutParams(1, 1));
 
         SharedPreferences p = getSharedPreferences("biko", MODE_PRIVATE);
         DisplayMetrics m = bildschirm();
@@ -132,21 +168,103 @@ public class BlaseService extends Service {
         wm.addView(huelle, blp);
         blase.setOnTouchListener(new Ziehen(huelle));
         blase = huelle; // sichtbar() blendet die ganze Hülle aus
-        atmenStarten(bild);
+        zustandZeigen("aus");
     }
 
-    /** Biko atmet ganz leicht, damit er lebendig wirkt. */
-    private void atmenStarten(View bild) {
-        atmen = ValueAnimator.ofFloat(1f, 1.05f);
-        atmen.setDuration(1800);
-        atmen.setRepeatMode(ValueAnimator.REVERSE);
+    private void ringFarbe(int farbe) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(farbe & 0x55FFFFFF);
+        g.setStroke(Math.round(4 * dp), farbe);
+        ring.setBackground(g);
+    }
+
+    /** Wie Biko sich bewegt: atmet (aus), Ring pulst (hoert), wackelt (denkt), hüpft beim Reden (spricht). */
+    private void zustandZeigen(String z) {
+        zustand = z;
+        if (atmen != null) atmen.cancel();
+        bild.setRotation(0f);
+        bild.setScaleX(1f);
+        bild.setScaleY(1f);
+        ring.setScaleX(1f);
+        ring.setScaleY(1f);
+        ring.setAlpha(0f);
+        long dauer;
+        switch (z) {
+            case "hoert": ringFarbe(0xFF3FC7A6); dauer = 1300; break;   // mint: ich höre dich
+            case "denkt": ringFarbe(0xFFFFC94D); dauer = 700; break;    // gelb: ich überlege
+            case "spricht": ringFarbe(0xFFFF9F43); dauer = 650; break;  // orange: ich rede
+            default: dauer = 1800;
+        }
+        atmen = ValueAnimator.ofFloat(0f, 1f);
+        atmen.setDuration(dauer);
         atmen.setRepeatCount(ValueAnimator.INFINITE);
+        atmen.setRepeatMode("aus".equals(z) || "denkt".equals(z) ? ValueAnimator.REVERSE : ValueAnimator.RESTART);
         atmen.addUpdateListener(a -> {
             float f = (float) a.getAnimatedValue();
-            bild.setScaleX(f);
-            bild.setScaleY(f);
+            switch (zustand) {
+                case "hoert": // Welle nach außen
+                    ring.setScaleX(1f + 0.45f * f); ring.setScaleY(1f + 0.45f * f); ring.setAlpha(0.9f * (1f - f));
+                    bild.setScaleX(1.03f); bild.setScaleY(1.03f);
+                    break;
+                case "denkt": // Kopf leicht hin und her
+                    ring.setAlpha(0.6f + 0.3f * f); ring.setScaleX(1.12f); ring.setScaleY(1.12f);
+                    bild.setRotation(-7f + 14f * f);
+                    break;
+                case "spricht": // hüpft im Takt
+                    double w = Math.sin(f * Math.PI * 2);
+                    ring.setScaleX(1f + 0.3f * f); ring.setScaleY(1f + 0.3f * f); ring.setAlpha(0.8f * (1f - f));
+                    bild.setScaleY(1f + 0.07f * (float) Math.abs(w)); bild.setScaleX(1f - 0.02f * (float) Math.abs(w));
+                    break;
+                default: // atmet ganz leicht
+                    bild.setScaleX(1f + 0.05f * f); bild.setScaleY(1f + 0.05f * f);
+            }
         });
         atmen.start();
+    }
+
+    /** Was die Biko-Seite der App sagt. */
+    private class Bruecke {
+        @JavascriptInterface
+        public void zustand(String z) {
+            if (bild != null) bild.post(() -> { if (!z.equals(zustand)) zustandZeigen(z); });
+        }
+
+        @JavascriptInterface
+        public void hinweis(String text) {
+            if (bild != null) bild.post(() -> Toast.makeText(BlaseService.this, text, Toast.LENGTH_LONG).show());
+        }
+
+        @JavascriptInterface
+        public void kopieren(String text) {
+            if (bild == null) return;
+            bild.post(() -> {
+                ClipboardManager cm = getSystemService(ClipboardManager.class);
+                cm.setPrimaryClip(ClipData.newPlainText("Biko", text));
+                Toast.makeText(BlaseService.this, "Nachricht kopiert. Im Chat lange drücken und „Einfügen“.",
+                        Toast.LENGTH_LONG).show();
+            });
+        }
+    }
+
+    /** Antippen: reden oder auflegen. */
+    private void tippen() {
+        if (web == null) return;
+        if ("aus".equals(zustand)) {
+            AssistentService.stillesFoto(); // ist Biko der Assistent, sieht er den Bildschirm mit
+            zustandZeigen("denkt");
+            web.onResume();
+            web.evaluateJavascript("window.bikoReden ? bikoReden() : (window.BikoNativ && BikoNativ.zustand('aus'))", null);
+            // Kommt nach 12 Sekunden nichts, war die Seite nicht bereit
+            bild.postDelayed(() -> { if ("denkt".equals(zustand)) zustandZeigen("aus"); }, 12000);
+        } else {
+            auflegen();
+        }
+    }
+
+    private void auflegen() {
+        if (web != null) web.evaluateJavascript("window.bikoAuflegen && bikoAuflegen()", null);
+        zustandZeigen("aus");
     }
 
     private DisplayMetrics bildschirm() {
@@ -219,6 +337,7 @@ public class BlaseService extends Service {
         private float startX, startY;
         private int vonX, vonY;
         private boolean zieht;
+        private long seit;
 
         Ziehen(View huelle) { this.huelle = huelle; }
 
@@ -229,6 +348,7 @@ public class BlaseService extends Service {
                     startX = e.getRawX(); startY = e.getRawY();
                     vonX = blp.x; vonY = blp.y;
                     zieht = false;
+                    seit = System.currentTimeMillis();
                     v.animate().scaleX(0.93f).scaleY(0.93f).setDuration(120).start();
                     return true;
                 case MotionEvent.ACTION_MOVE:
@@ -254,7 +374,8 @@ public class BlaseService extends Service {
                         einpassen();
                         anRand(huelle);
                     } else if (e.getActionMasked() == MotionEvent.ACTION_UP) {
-                        oeffnen();
+                        if (System.currentTimeMillis() - seit > 550) oeffnen(); // lange gedrückt: Biko groß
+                        else tippen();
                     }
                     return true;
             }
@@ -262,7 +383,9 @@ public class BlaseService extends Service {
         }
     }
 
+    /** Biko groß, zum Lesen und Schreiben. */
     private void oeffnen() {
+        if (!"aus".equals(zustand)) auflegen();
         if (AssistentService.oeffnen()) return; // Biko ist Assistent: dann sieht er auch den Bildschirm
         Intent i = new Intent(this, GespraechActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -282,6 +405,7 @@ public class BlaseService extends Service {
         laeuft = null;
         if (atmen != null) atmen.cancel();
         wegZeigen(false);
+        if (web != null) { web.destroy(); web = null; }
         if (blase != null && blase.isAttachedToWindow()) wm.removeView(blase);
         blase = null;
         super.onDestroy();

@@ -23,6 +23,15 @@ public class AssistentService extends VoiceInteractionService {
         super.onShutdown();
     }
 
+    /** Für die Blase: nur ein Bildschirmfoto holen, ohne Fenster. Geht nur, wenn Biko der Assistent ist. */
+    static void stillesFoto() {
+        AssistentService s = laeuft;
+        if (s == null) return;
+        Bundle b = new Bundle();
+        b.putBoolean("still", true);
+        try { s.showSession(b, VoiceInteractionSession.SHOW_WITH_SCREENSHOT); } catch (Exception e) { /* dann ohne */ }
+    }
+
     /** Für die Blase: Biko wie über den Einschaltknopf öffnen, mit Bildschirm. Geht nur, wenn Biko der Assistent ist. */
     static boolean oeffnen() {
         AssistentService s = laeuft;
