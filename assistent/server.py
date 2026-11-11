@@ -16,7 +16,10 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         die Termine des Tages vor (Hausmeister-Faden) und stellt sie als eigenes Gespräch bereit.
                         Die Android-App meldet sich zur Uhrzeit mit einer Mitteilung und Biko liest vor
                         (GET /api/morgenrunde).
-Nachrichten, Links, Erinnerungen, das Gedächtnis und die Morgenrunde sind Werkzeuge, die Claude selbst aufruft.
+  8. Listen            "Schreib Milch auf die Einkaufsliste", "Was steht drauf?": Einkaufsliste, Notizen und andere
+                        Listen. Biko zeigt eine Liste als Karte unter der Antwort; dort tippt man Erledigtes weg
+                        (POST /api/liste/weg).
+Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde und die Listen sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -170,6 +173,16 @@ Anrufen:
 - Die Nummer nimmst du aus dem, was du über die Person weißt. Kennst du sie nicht, frag danach und merk sie dir mit
   wissen_merken (Name, wer das ist, Nummer), z. B. "Sohn Peter, Telefon 0664 1234567". Erfinde nie eine Nummer.
 - Bei WhatsApp-Anrufen oder Videoanrufen sag kurz, dass man das in WhatsApp selbst startet.
+
+Listen und Notizen:
+- Du führst für die Person Listen: die Einkaufsliste ("Einkaufen"), Notizen ("Notizen") und was sie sonst braucht
+  ("Apotheke", "Geschenke"). Was draufsteht, siehst du im Hinweis der App.
+- "Schreib Milch auf", "wir brauchen Brot und Eier": mit liste_aendern dazuschreiben. "Hab ich gekauft", "streich den Käse":
+  wegnehmen. Eine kleine Notiz ("Der Schlüssel ist bei Frau Novak", "Parkplatz Ebene 3") kommt auf "Notizen".
+- Bleibendes über die Person selbst (Gesundheit, Familie, Vorlieben) gehört nicht auf eine Liste, sondern in dein Gedächtnis.
+- Fragt sie, was draufsteht, oder geht sie einkaufen, zeigst du die Liste mit liste_zeigen: dann steht sie als Karte unter
+  deiner Antwort, und sie kann Gekauftes dort wegtippen. Sag dazu kurz, was draufsteht.
+- Soll die Liste an jemanden gehen ("schick sie Peter"), schreib sie mit nachricht_zeigen als Nachricht.
 
 Erinnerungen:
 - Wenn die Person an etwas erinnert werden möchte ("erinnere mich", "vergiss nicht", "weck mich", "提醒我"), schreibst du es dir
@@ -655,6 +668,9 @@ def hinweis(gesprochen=False, bild=False):
         "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
                                              or "- noch nichts"),
     ]
+    listen = listen_lesen()
+    teile.append("Deine Listen:\n" + ("\n".join(f"- {name}: " + ", ".join(e["text"] for e in eintraege)
+                                                for name, eintraege in listen.items()) or "- noch keine"))
     zeit = morgenrunde_zeit()
     teile.append(f"Morgenrunde: jeden Tag um {zeit} Uhr." if zeit else "Morgenrunde: nicht eingestellt.")
     if gesprochen:
@@ -771,7 +787,7 @@ MAX_ZEIGEN = 3   # so viele Nachrichten und so viele Links passen unter eine Ant
 
 def zeige_werkzeuge():
     """Die Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
-    entwuerfe, links, anrufe = [], [], []
+    entwuerfe, links, anrufe, karten = [], [], [], []
 
     def nachricht_zeigen(eingabe):
         text = str(eingabe.get("text") or "").strip()[:1500]
@@ -803,7 +819,27 @@ def zeige_werkzeuge():
             links.append({"titel": titel or urlparse(url).hostname, "url": url})
         return "Der Link steht jetzt als Knopf unter deiner Antwort."
 
+    def liste_zeigen(eingabe):
+        listen = listen_lesen()
+        name = listen_name(eingabe.get("liste"), listen)
+        if name not in listen:
+            raise ValueError(f"Die Liste '{name}' ist leer. Es gibt: " + (", ".join(listen) or "noch keine Listen") + ".")
+        if any(k["name"] == name for k in karten):
+            return "Die Liste steht schon unter deiner Antwort."
+        karten.append({"name": name, "eintraege": listen[name]})
+        return "Die Liste steht jetzt als Karte unter deiner Antwort; dort kann man Erledigtes wegtippen."
+
     werkzeuge = {
+        "liste_zeigen": {"tun": liste_zeigen, "schema": {
+            "name": "liste_zeigen",
+            "description": "Stellt eine Liste der Person (z. B. die Einkaufsliste) als Karte unter deine Antwort. "
+                           "Dort kann sie Gekauftes oder Erledigtes wegtippen.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"liste": {"type": "string", "description": "Name der Liste, z. B. 'Einkaufen'."}},
+                "required": ["liste"],
+            },
+        }},
         "nachricht_zeigen": {"tun": nachricht_zeigen, "schema": {
             "name": "nachricht_zeigen",
             "description": "Stellt eine fertige Nachricht, die die Person jemandem schicken will, unter deine Antwort, "
@@ -848,7 +884,7 @@ def zeige_werkzeuge():
             },
         }},
     }
-    return werkzeuge, entwuerfe, links, anrufe
+    return werkzeuge, entwuerfe, links, anrufe, karten
 
 
 def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
@@ -866,7 +902,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         frage.append(bild_block(bild[1]))
     frage.append({"type": "text", "text": text})
     messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
-    zeigen, entwuerfe, links, anrufe = zeige_werkzeuge()
+    zeigen, entwuerfe, links, anrufe, karten = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
     antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
@@ -878,7 +914,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     getan = {"gemerkt": [e for e in nachher if e["id"] not in alt],
              "vergessen": [e for e in vorher if e["id"] not in neu],
              "gelernt": [w for w in weiss if w["id"] not in kannte],
-             "nachrichten": entwuerfe, "links": links, "anrufe": anrufe}
+             "nachrichten": entwuerfe, "links": links, "anrufe": anrufe, "listen": karten}
     zeit = jetzt().isoformat(timespec="seconds")
     with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
         liste = gespraeche_lesen()
@@ -991,6 +1027,85 @@ def wissen_vergessen(eingabe):
     return f"Gestrichen: {weg[0]['text']}"
 
 
+# ---------- Listen: Einkaufsliste, Notizen und was die Person sonst braucht ----------
+
+MAX_LISTEN = 12
+MAX_EINTRAEGE = 60
+
+
+def listen_lesen():
+    """{"Einkaufen": [{"id", "text"}], ...}. Leere Listen gibt es nicht."""
+    daten = lesen("listen", {})
+    return daten if isinstance(daten, dict) else {}
+
+
+def listen_name(eingabe, listen):
+    """Der Name einer Liste. Gibt es sie schon (auch anders geschrieben), dann diese."""
+    name = " ".join(str(eingabe or "").split())[:40]
+    if not name:
+        raise ValueError("Welche Liste? Zum Beispiel 'Einkaufen' oder 'Notizen'.")
+    return next((n for n in listen if n.casefold() == name.casefold()), name)
+
+
+def liste_aendern(eingabe):
+    dazu = [" ".join(str(x).split())[:200] for x in (eingabe.get("dazu") or []) if str(x).strip()]
+    weg = [" ".join(str(x).split()).casefold() for x in (eingabe.get("weg") or []) if str(x).strip()]
+    leeren = bool(eingabe.get("leeren"))
+    with _lock:
+        listen = listen_lesen()
+        name = listen_name(eingabe.get("liste"), listen)
+        eintraege = listen.get(name, [])
+        if name not in listen and len(listen) >= MAX_LISTEN:
+            raise ValueError(f"Es gibt schon {MAX_LISTEN} Listen. Nimm eine bestehende.")
+        vorher = len(eintraege)
+        if leeren:
+            eintraege = []
+        nicht_da = [w for w in weg if not any(e["text"].casefold() == w or e["id"] == w for e in eintraege)]
+        # "Käse" streicht auch "Käse (Emmentaler)": erst genau, sonst was das Wort enthält
+        for w in nicht_da:
+            treffer = [e for e in eintraege if w in e["text"].casefold()]
+            if len(treffer) == 1:
+                weg.append(treffer[0]["id"])
+        eintraege = [e for e in eintraege if e["text"].casefold() not in weg and e["id"] not in weg]
+        gestrichen = vorher - len(eintraege)
+        neu = []
+        for text in dazu:
+            if any(e["text"].casefold() == text.casefold() for e in eintraege):
+                continue
+            if len(eintraege) >= MAX_EINTRAEGE:
+                raise ValueError(f"Auf einer Liste haben höchstens {MAX_EINTRAEGE} Dinge Platz.")
+            eintraege.append({"id": uuid.uuid4().hex[:8], "text": text})
+            neu.append(text)
+        if eintraege:
+            listen[name] = eintraege
+        else:
+            listen.pop(name, None)
+        schreiben("listen", listen)
+    teile = []
+    if neu:
+        teile.append("Dazugeschrieben: " + ", ".join(neu))
+    if gestrichen:
+        teile.append(f"{gestrichen} weggenommen")
+    if weg and not gestrichen and not leeren:
+        teile.append("Nichts davon stand drauf")
+    return f"{name}: " + ("; ".join(teile) or "unverändert") + f". Jetzt drauf: {len(eintraege)}."
+
+
+def liste_wegtippen(name, nr):
+    """Aus der App: ein Eintrag ist erledigt. Gibt es ihn nicht mehr, ist das auch recht."""
+    with _lock:
+        listen = listen_lesen()
+        name = next((n for n in listen if n == name), None)
+        if name:
+            rest = [e for e in listen[name] if e["id"] != nr]
+            if rest:
+                listen[name] = rest
+            else:
+                listen.pop(name)
+            schreiben("listen", listen)
+        return {"name": name, "eintraege": listen.get(name, []) if name else []}
+
+
 # ---------- Morgenrunde: Biko meldet sich jeden Morgen von selbst ----------
 
 MORGEN_VORHER = 15 * 60   # so viele Sekunden vor der Uhrzeit bereitet Biko die Morgenrunde vor
@@ -1089,6 +1204,23 @@ def hausmeister():
 
 
 WERKZEUGE = {
+    "liste_aendern": {"tun": liste_aendern, "schema": {
+        "name": "liste_aendern",
+        "description": "Schreibt Dinge auf eine Liste der Person (Einkaufen, Notizen, ...) oder nimmt sie weg. "
+                       "Eine neue Liste entsteht von selbst, eine leere verschwindet.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "liste": {"type": "string", "description": "Name der Liste, z. B. 'Einkaufen' oder 'Notizen'."},
+                "dazu": {"type": "array", "items": {"type": "string"},
+                         "description": "Was dazukommt, je ein kurzer Eintrag, z. B. ['Milch', '6 Eier']."},
+                "weg": {"type": "array", "items": {"type": "string"},
+                        "description": "Was weg soll, so wie es auf der Liste steht."},
+                "leeren": {"type": "boolean", "description": "true: alles von der Liste nehmen."},
+            },
+            "required": ["liste"],
+        },
+    }},
     "morgenrunde_einstellen": {"tun": morgenrunde_einstellen, "schema": {
         "name": "morgenrunde_einstellen",
         "description": "Stellt ein, um wie viel Uhr du dich jeden Morgen von selbst meldest (Wetter, Nachrichten, "
@@ -1298,6 +1430,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, erinnerungen_lesen())
             if pfad == "/api/wissen":
                 return self.senden(200, wissen_lesen())
+            if pfad == "/api/listen":
+                return self.senden(200, listen_lesen())
             if pfad == "/api/morgenrunde":
                 # ?jetzt: ist sie fällig und noch nicht fertig, schreibt Biko sie gleich (sonst macht das der Hausmeister)
                 return self.senden(200, {"zeit": morgenrunde_zeit(), "heute": morgenrunde_heute(erzeugen="jetzt" in parse_qs(urlparse(self.path).query, keep_blank_values=True))})
@@ -1354,6 +1488,8 @@ class Handler(BaseHTTPRequestHandler):
                     schreiben("gespraeche", [])
                     _pfad("verlauf").unlink(missing_ok=True)
                 return self.senden(200, {"ok": True})
+            if pfad == "/api/liste/weg":
+                return self.senden(200, liste_wegtippen(str(daten.get("liste") or ""), str(daten.get("id") or "")))
             if pfad == "/api/wissen/loeschen":
                 try:
                     wissen_vergessen(daten)

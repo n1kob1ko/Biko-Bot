@@ -330,6 +330,34 @@ class Test(unittest.TestCase):
         g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
         self.assertEqual(g["nachrichten"][-1]["anrufe"], j["anrufe"])
 
+    def test_einkaufsliste_im_gespraech_fuehren_zeigen_und_wegtippen(self):
+        c = self.anmelden()
+        server.schreiben("listen", {})
+        self.assertIn("Milch", server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch", "6 Eier", "Käse (Emmentaler)"]}))
+        server.liste_aendern({"liste": "einkaufen", "dazu": ["milch", "Brot"]})   # gleiche Liste, Milch nicht doppelt
+        self.assertEqual([e["text"] for e in server.listen_lesen()["Einkaufen"]], ["Milch", "6 Eier", "Käse (Emmentaler)", "Brot"])
+        self.assertIn("Deine Listen:\n- Einkaufen: Milch, 6 Eier, Käse (Emmentaler), Brot", server.hinweis())
+        server.liste_aendern({"liste": "Einkaufen", "weg": ["Käse", "Brot"]})   # "Käse" findet "Käse (Emmentaler)"
+        self.assertEqual([e["text"] for e in server.listen_lesen()["Einkaufen"]], ["Milch", "6 Eier"])
+        self.assertIn("Nichts davon", server.liste_aendern({"liste": "Einkaufen", "weg": ["Bananen"]}))
+        # Biko zeigt die Liste als Karte unter der Antwort
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("liste_zeigen", {"liste": "Einkaufen"}, "tu_1"),
+                    werkzeug("liste_zeigen", {"liste": "Geschenke"}, "tu_2")),
+            antwort("end_turn", text("Auf deiner Einkaufsliste stehen Milch und 6 Eier.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Was muss ich einkaufen?"}, cookie=c)[1]
+        self.assertEqual([(k["name"], [e["text"] for e in k["eintraege"]]) for k in j["listen"]], [("Einkaufen", ["Milch", "6 Eier"])])
+        self.assertTrue(anfragen[1]["messages"][-1]["content"][1].get("is_error"), "leere Liste gibt es nicht")
+        self.assertLessEqual({"liste_aendern", "liste_zeigen"}, {w["name"] for w in anfragen[0]["tools"]})
+        # In der Karte Gekauftes wegtippen, zweimal schadet nicht; die leere Liste verschwindet
+        milch, eier = j["listen"][0]["eintraege"]
+        self.assertEqual(self.rufe("/api/liste/weg", {"liste": "Einkaufen", "id": milch["id"]}, cookie=c)[1]["eintraege"], [eier])
+        self.assertEqual(self.rufe("/api/liste/weg", {"liste": "Einkaufen", "id": milch["id"]}, cookie=c)[0], 200)
+        self.rufe("/api/liste/weg", {"liste": "Einkaufen", "id": eier["id"]}, cookie=c)
+        self.assertEqual(self.rufe("/api/listen", cookie=c)[1], {})
+        self.assertIn("Deine Listen:\n- noch keine", server.hinweis())
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(
