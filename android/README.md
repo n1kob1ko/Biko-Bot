@@ -9,6 +9,21 @@ Die App zeigt die Seite `https://biko-helfer-production.up.railway.app/` (einges
 das Mikrofon und das Fenster dazu. Öffnet sie Biko über die Blase, hängt sie `?reden` an die Adresse,
 dann beginnt die Seite das Gespräch von selbst.
 
+## Biko als Assistent: immer bereit, sieht den Bildschirm
+
+Die App kann der **Standard-Assistent** des Geräts sein (wie sonst Google Gemini). Dann gilt:
+
+- **Einschaltknopf gedrückt halten** (oder aus der unteren Ecke wischen, je nach Gerät): Biko kommt als Karte von unten
+  und hört gleich zu, egal welche App offen ist.
+- Android gibt ihm dabei ein **Bildschirmfoto** mit. Die App schickt es an den Server (`POST /api/bildschirm`),
+  und Biko sieht es 5 Minuten lang bei jeder Frage (nur im Speicher, nicht im Verlauf). So geht „Was schreibt Mei?“,
+  „Übersetz das“ oder „Was soll ich antworten?“.
+- Ein Tipp auf die Blase macht dann dasselbe.
+
+Einstellen: Einstellungen › Apps › Standard-Apps › Digitaler Assistent › „Biko Helfer“, dort „Screenshot verwenden“
+einschalten. Die App bietet das beim Start selbst an. Ein ständiges „Hey Biko“ gibt es nicht: Android erlaubt
+das Dauer-Zuhören nur Google, und es würde den Akku leeren.
+
 ## Installieren (Test)
 
 1. Auf dem Tablet im Browser öffnen:

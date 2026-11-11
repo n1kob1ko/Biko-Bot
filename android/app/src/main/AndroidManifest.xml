@@ -46,5 +46,28 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Schwebender Helfer: Biko bleibt als Blase über anderen Apps sichtbar." />
         </service>
+
+        <!-- Biko als Standard-Assistent (Einstellungen › Apps › Standard-Apps › Digitaler Assistent) -->
+        <service
+            android:name=".AssistentService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/assistent" />
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".AssistentSitzungService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service
+            android:name=".ErkennungService"
+            android:exported="true">
+            <meta-data android:name="android.speech" android:resource="@xml/erkennung" />
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

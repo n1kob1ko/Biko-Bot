@@ -51,6 +51,7 @@ public class StartActivity extends Activity {
         BlaseService.sichtbar(false); // Biko ist ja schon groß da
         if (Settings.canDrawOverlays(this)) {
             BlaseService.starten(this);
+            assistentAnbieten();
         } else if (!gefragt) {
             gefragt = true;
             new AlertDialog.Builder(this)
@@ -63,6 +64,31 @@ public class StartActivity extends Activity {
                     .setNegativeButton("Später", null)
                     .show();
         }
+    }
+
+    private boolean assistentGefragt;
+
+    /** Biko als Standard-Assistent: Einschaltknopf halten öffnet ihn, und er sieht den Bildschirm. */
+    private void assistentAnbieten() {
+        if (assistentGefragt || Build.VERSION.SDK_INT < 29) return;
+        android.app.role.RoleManager rm = getSystemService(android.app.role.RoleManager.class);
+        if (rm == null || rm.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)) return;
+        assistentGefragt = true;
+        new AlertDialog.Builder(this)
+                .setTitle("Biko als Assistent")
+                .setMessage("Dann ist Biko immer bereit: Einschaltknopf gedrückt halten, und Biko hört zu. "
+                        + "Er sieht dabei, was gerade auf dem Bildschirm ist, zum Beispiel einen Chat.\n\n"
+                        + "Gleich öffnen sich die Einstellungen. Dort unter „Digitaler Assistent“ (oder „Assistent“) "
+                        + "„Biko Helfer“ wählen und „Screenshot verwenden“ einschalten.")
+                .setPositiveButton("Einstellen", (d, i) -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+                    } catch (Exception e) {
+                        startActivity(new Intent(Settings.ACTION_SETTINGS));
+                    }
+                })
+                .setNegativeButton("Später", null)
+                .show();
     }
 
     @Override

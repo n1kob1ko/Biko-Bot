@@ -263,6 +263,7 @@ public class BlaseService extends Service {
     }
 
     private void oeffnen() {
+        if (AssistentService.oeffnen()) return; // Biko ist Assistent: dann sieht er auch den Bildschirm
         Intent i = new Intent(this, GespraechActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);

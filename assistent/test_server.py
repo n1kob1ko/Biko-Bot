@@ -97,6 +97,41 @@ class Test(unittest.TestCase):
         self.assertIn("wenig Zucker", letzte["system"])
         self.assertIn("Chinesisch", letzte["system"])
 
+    def test_bildschirm_geht_mit_der_naechsten_frage_mit(self):
+        c = self.anmelden()
+        server._bildschirm.update(bild=None, zeit=0)
+        bild = b"\xff\xd8\xff\xe0" + b"x" * 100
+        req = urllib.request.Request(self.url + "/api/bildschirm", data=bild, method="POST")
+        req.add_header("Content-Type", "image/jpeg")
+        # ohne Anmeldung nicht
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        self.assertEqual(e.exception.code, 401)
+        req.add_header("Cookie", c)
+        with urllib.request.urlopen(req) as r:
+            self.assertEqual(r.status, 200)
+        self.rufe("/api/chat", {"text": "Was schreibt Mei?"}, cookie=c)
+        frage = GEFRAGT[-1]["messages"][-1]["content"]
+        self.assertEqual(frage[0]["type"], "image")
+        self.assertEqual(frage[1], {"type": "text", "text": "Was schreibt Mei?"})
+        self.assertIn("Bildschirmfoto", GEFRAGT[-1]["system"])
+        # gespeichert wird nur der Text
+        g = self.rufe("/api/gespraeche", cookie=c)[1][0]
+        self.assertEqual(self.rufe("/api/gespraech?id=" + g["id"], cookie=c)[1]["nachrichten"][-2]["text"], "Was schreibt Mei?")
+        # nach ein paar Minuten gilt das Bild nicht mehr
+        server._bildschirm["zeit"] -= server.BILDSCHIRM_GILT + 1
+        self.rufe("/api/chat", {"text": "Und jetzt?"}, cookie=c)
+        self.assertEqual(GEFRAGT[-1]["messages"][-1]["content"], "Und jetzt?")
+        self.assertNotIn("Bildschirmfoto", GEFRAGT[-1]["system"])
+
+    def test_bildschirm_nur_jpeg(self):
+        c = self.anmelden()
+        req = urllib.request.Request(self.url + "/api/bildschirm", data=b"kein bild", method="POST")
+        req.add_header("Cookie", c)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        self.assertEqual(e.exception.code, 400)
+
     # ---------- Gespräche: der Verlauf besteht aus mehreren Sitzungen ----------
 
     def test_gespraech_wird_gespeichert_und_laesst_sich_wieder_oeffnen(self):
