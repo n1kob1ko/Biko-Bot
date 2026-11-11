@@ -461,10 +461,11 @@
     }
   }
   function entwurfTexte(el) {
-    const n = el._n, kop = $('.kopieren', el), teil = $('.teilen', el);
+    const n = el._n, kop = $('.kopieren', el), teil = $('.teilen', el), mit = $('.senden-mit', el);
     $('.entwurf-an span', el).textContent = n.an ? t('nachricht_an').replace('{name}', n.an) : t('nachricht_ohne');
     kop.lastElementChild.textContent = t(kop.dataset.zustand === 'ok' ? 'kopiert' : 'kopieren');
     if (teil) teil.lastElementChild.textContent = t('teilen');
+    if (mit) mit.lastElementChild.textContent = t(n.ueber === 'sms' ? 'mit_sms' : 'mit_whatsapp');
     $('.meldung', el).textContent = '';
   }
   function entwurf(n) {
@@ -474,7 +475,16 @@
     an.innerHTML = icon('nachricht') + '<span></span>';
     const text = neu('p', 'entwurf-text', n.text);
     const knoepfe = neu('div', 'zwei');
-    const kop = neu('button', 'knopf haupt druck kopieren');
+    const link = L.sendeLink(n); // WhatsApp oder SMS: gleich dort öffnen, Kopieren bleibt als zweiter Weg
+    if (link) {
+      const mit = neu('a', 'knopf haupt druck senden-mit');
+      mit.href = link;
+      mit.rel = 'noopener noreferrer';
+      if (link.startsWith('https:')) mit.target = '_blank';
+      mit.innerHTML = icon('senden') + '<span></span>';
+      knoepfe.appendChild(mit);
+    }
+    const kop = neu('button', link ? 'knopf druck kopieren' : 'knopf haupt druck kopieren');
     kop.type = 'button';
     kop.dataset.zustand = 'ruhe';
     kop.innerHTML = `<span class="wechsel">${icon('kopieren', 'i-ruhe')}${icon('ok', 'i-ok')}</span><span></span>`;
@@ -489,7 +499,7 @@
       info.scrollIntoView({ block: 'nearest', behavior: B.reduziert() ? 'auto' : 'smooth' });
     });
     knoepfe.appendChild(kop);
-    if (navigator.share) {
+    if (navigator.share && !link) {
       const teil = neu('button', 'knopf druck teilen');
       teil.type = 'button';
       teil.innerHTML = icon('teilen') + '<span></span>';
@@ -523,6 +533,24 @@
     nachUnten();
   }
 
+  // Anrufen: ein großer Knopf, der das Telefon mit der Nummer öffnet. Anrufen muss die Person selbst.
+  function anrufeZeigen(liste) {
+    const gut = liste.filter((a) => L.telLink(a.nummer));
+    if (!gut.length) return;
+    const box = neu('div', 'links');
+    gut.forEach((a) => {
+      const k = neu('a', 'link-knopf anruf druck');
+      k.href = L.telLink(a.nummer);
+      k.innerHTML = icon('telefon');
+      const zeilen = neu('span');
+      zeilen.append(neu('strong', '', t('anrufen').replace('{name}', a.name || a.nummer)), neu('span', 'seite', a.nummer));
+      k.appendChild(zeilen);
+      box.appendChild(k);
+    });
+    verlauf.appendChild(box);
+    nachUnten();
+  }
+
   // Bikos Antwort mit allem, was er dabei getan hat: gemerkt, gestrichen, eine Nachricht geschrieben, Links gefunden
   function bikoSagt(m) {
     const d = blase(m.text, 'biko-sagt', L.vorleseText(m.text, m.nachrichten));
@@ -531,6 +559,7 @@
     (m.gelernt || []).forEach((w) => notiz(w, 'gelernt'));
     (m.nachrichten || []).forEach(entwurf);
     linksZeigen(m.links || []);
+    anrufeZeigen(m.anrufe || []);
     return d;
   }
   function denkBlase() {
@@ -969,10 +998,26 @@
     tel.puffer = '';
     // Hat Biko eine Nachricht für jemanden geschrieben, liest er sie danach vor
     (j.nachrichten || []).forEach((n) => { saetze.push(...L.saetzeTeilen(n.text, true).saetze); tel.gesagt += ' ' + n.text; });
-    // In der Blase gibt es keinen Kopieren-Knopf: die App legt die Nachricht gleich zum Einfügen bereit
-    if (mini && j.nachrichten && j.nachrichten.length) { try { nativ.kopieren(j.nachrichten[j.nachrichten.length - 1].text); } catch (e) { /* ältere App */ } }
+    // In der Blase gibt es keine Knöpfe: Telefon, WhatsApp oder SMS gehen auf, sobald Biko fertig gesprochen hat.
+    // Sonst (z. B. für WeChat) legt die App die Nachricht gleich zum Einfügen bereit.
+    const letzte = (j.nachrichten || [])[(j.nachrichten || []).length - 1];
+    const oeffnen = mini && (L.telLink(((j.anrufe || [])[0] || {}).nummer) || L.sendeLink(letzte));
+    if (oeffnen) nachDemSprechen(tel, () => {
+      auflegen();
+      try { nativ.oeffnen(oeffnen); } catch (e) { location.href = oeffnen; } // ältere App: über die Seite
+    });
+    else if (mini && letzte) { try { nativ.kopieren(letzte.text); } catch (e) { /* ältere App */ } }
     if (!tel.stumm) saetze.forEach((satz) => tel.sprecher.sagen(satz));
     if (!tel.sprecher.spricht()) stimmung('hoert');
+  }
+  // Erst wenn Biko ausgeredet hat (legt die Person vorher auf, passiert nichts)
+  function nachDemSprechen(tel, tun) {
+    const uhr = setInterval(() => {
+      if (telefon !== tel) return clearInterval(uhr);
+      if (tel.sprecher.spricht()) return;
+      clearInterval(uhr);
+      tun();
+    }, 300);
   }
   // Während des Gesprächs geht der Bildschirm nicht aus: sonst sperrt sich das Handy nach kurzer Zeit und Biko legt auf
   async function wachHalten(tel) {

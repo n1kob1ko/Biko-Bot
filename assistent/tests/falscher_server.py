@@ -34,6 +34,13 @@ def antwort_fuer(frage, werkzeuge):
     if frage.startswith("Erinnere mich"):
         werkzeuge["erinnerung_merken"]["tun"]({"text": "Herztablette", "zeit": "08:00"})
         return "Mach ich. Ich erinnere dich jeden Tag um 8 Uhr an die Herztablette."
+    if frage.startswith("Ruf Peter an"):
+        werkzeuge["anruf_zeigen"]["tun"]({"name": "Peter", "nummer": "0664 123 4567"})
+        return "Gern. Tipp auf den Knopf, dann geht das Telefon mit Peters Nummer auf."
+    if frage.startswith("Schreib Peter auf WhatsApp"):
+        werkzeuge["nachricht_zeigen"]["tun"]({"an": "Peter", "text": "Ich komme um 5!", "ueber": "whatsapp",
+                                              "nummer": "0664 123 4567"})
+        return "Hier ist die Nachricht für Peter."
     if frage.startswith("Meld dich"):
         werkzeuge["morgenrunde_einstellen"]["tun"]({"zeit": "08:00"})
         return "Gern. Ab jetzt melde ich mich jeden Morgen um 8 mit Wetter und Nachrichten."

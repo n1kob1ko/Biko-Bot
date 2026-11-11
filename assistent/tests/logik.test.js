@@ -35,6 +35,20 @@ test('Die Wecker der Android-App: kommende Erinnerungen und die Morgenrunde, die
   assert.deepEqual(L.naechsteMeldungen({ erinnerungen: [], morgenrunde: null, jetzt: um('09:00') }), []);
 });
 
+test('Anrufen, WhatsApp und SMS: Nummern werden zu Links, österreichische Nummern international', () => {
+  assert.equal(L.telLink('0664 / 123 45-67'), 'tel:06641234567');
+  assert.equal(L.telLink('144'), 'tel:144');
+  assert.equal(L.telLink('ruf an'), '');
+  assert.equal(L.waNummer('0664 1234567'), '436641234567');
+  assert.equal(L.waNummer('+86 138 0013 8000'), '8613800138000');
+  assert.equal(L.waNummer('0049 170 123'), '49170123');
+  assert.equal(L.sendeLink({ ueber: 'whatsapp', nummer: '0664 1234567', text: 'Ich komme um 5!' }), 'https://wa.me/436641234567?text=Ich%20komme%20um%205!');
+  assert.equal(L.sendeLink({ ueber: 'whatsapp', text: 'Hallo' }), 'https://wa.me/?text=Hallo');
+  assert.equal(L.sendeLink({ ueber: 'sms', nummer: '0664 1234567', text: 'Hallo' }), 'sms:06641234567?body=Hallo');
+  assert.equal(L.sendeLink({ ueber: 'wechat', text: 'Hallo' }), '');
+  assert.equal(L.sendeLink({ text: 'Hallo' }), '');
+});
+
 test('Wann eine Erinnerung kommt, steht kurz und klar da', () => {
   const texte = { jeden_tag: 'jeden Tag', einmal_am: 'einmal am {t}.{m}.', heute: 'heute', morgen: 'morgen', tage: { mo: 'Mo', mi: 'Mi' } };
   const jetzt = um('12:00', '2026-11-09');

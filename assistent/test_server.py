@@ -310,6 +310,26 @@ class Test(unittest.TestCase):
         # den eigenen Bereich mit Formular gibt es nicht mehr
         self.assertEqual(self.rufe("/api/nachricht", {"an": "Enkel", "was": "danke"}, cookie=c)[0], 404)
 
+    def test_whatsapp_mit_nummer_und_anrufen_mit_knopf(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(
+            antwort("tool_use",
+                    werkzeug("nachricht_zeigen", {"an": "Peter", "text": "Ich komme um 5.", "ueber": "whatsapp",
+                                                  "nummer": "0664 123 4567"}, "tu_1"),
+                    werkzeug("anruf_zeigen", {"name": "Peter", "nummer": "0664/1234567"}, "tu_2"),
+                    werkzeug("anruf_zeigen", {"name": "Erfunden", "nummer": "ruf mich an"}, "tu_3")),
+            antwort("end_turn", text("Hier ist die Nachricht, und du kannst Peter gleich anrufen.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Schreib Peter auf WhatsApp, dass ich um 5 komme, und ruf ihn an"}, cookie=c)[1]
+        self.assertEqual(j["nachrichten"], [{"an": "Peter", "text": "Ich komme um 5.", "ueber": "whatsapp",
+                                             "nummer": "0664 123 4567"}])
+        self.assertEqual(j["anrufe"], [{"name": "Peter", "nummer": "0664/1234567"}])
+        ergebnisse = anfragen[1]["messages"][-1]["content"]
+        self.assertEqual([bool(e.get("is_error")) for e in ergebnisse], [False, False, True], "keine erfundene Nummer")
+        self.assertIn("anruf_zeigen", {w["name"] for w in anfragen[0]["tools"]})
+        g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
+        self.assertEqual(g["nachrichten"][-1]["anrufe"], j["anrufe"])
+
     def test_biko_weiss_beim_naechsten_mal_noch_was_in_der_nachricht_stand(self):
         c = self.anmelden()
         anfragen = self.drehbuch(

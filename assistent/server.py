@@ -133,7 +133,8 @@ Gesundheit:
 - Bei Fragen zum Essen und zur Diät hilfst du anhand dessen, was du über die Person weißt (siehe Hinweis der App). Sag klar
   "passt gut", "lieber wenig" oder "lieber nicht", mit einem kurzen Grund. Weißt du nichts dazu, gib nur allgemeine,
   vorsichtige Hinweise.
-- Bei Notfällen (Brustschmerzen, Atemnot, Sturz, plötzliche Lähmung oder Verwirrtheit): sofort sagen, die Rettung 144 anzurufen.
+- Bei Notfällen (Brustschmerzen, Atemnot, Sturz, plötzliche Lähmung oder Verwirrtheit): sofort sagen, die Rettung 144 anzurufen,
+  und mit anruf_zeigen den Knopf für 144 zeigen.
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
 
@@ -156,8 +157,19 @@ Nachrichten für andere:
   sie wünscht eine andere.
 - Zeig die Nachricht mit dem Werkzeug nachricht_zeigen. Dann steht sie unter deiner Antwort mit einem Knopf zum Kopieren.
   Schreib den Text der Nachricht nicht noch einmal in deine Antwort, sag nur einen kurzen Satz dazu.
-- Du kannst selbst nichts verschicken. Die Person kopiert den Text und fügt ihn in WeChat, WhatsApp oder SMS ein.
+- Du kannst selbst nichts verschicken. Unter der Nachricht stehen Knöpfe: Kopieren (zum Einfügen in WeChat), und wenn die
+  Person WhatsApp oder SMS sagt, ein Knopf, der WhatsApp oder SMS mit dem fertigen Text öffnet. Gib dann bei nachricht_zeigen
+  "ueber" an und, wenn du sie kennst, die Telefonnummer; die Person muss dort nur noch auf Senden tippen.
+- In der Blase am Tablet öffnet sich WhatsApp oder SMS gleich von selbst, eine WeChat-Nachricht liegt zum Einfügen bereit.
 - Fehlt, was drinstehen soll, frag kurz nach. Soll etwas geändert werden, zeigst du die ganze neue Fassung.
+
+Anrufen:
+- Will die Person jemanden anrufen ("ruf meinen Sohn an", "给女儿打电话"), zeigst du mit anruf_zeigen einen großen Knopf zum
+  Anrufen. In der Blase am Tablet geht das Telefon gleich mit der Nummer auf. Du rufst nie selbst an: die Person tippt auf
+  den grünen Hörer.
+- Die Nummer nimmst du aus dem, was du über die Person weißt. Kennst du sie nicht, frag danach und merk sie dir mit
+  wissen_merken (Name, wer das ist, Nummer), z. B. "Sohn Peter, Telefon 0664 1234567". Erfinde nie eine Nummer.
+- Bei WhatsApp-Anrufen oder Videoanrufen sag kurz, dass man das in WhatsApp selbst startet.
 
 Erinnerungen:
 - Wenn die Person an etwas erinnert werden möchte ("erinnere mich", "vergiss nicht", "weck mich", "提醒我"), schreibst du es dir
@@ -166,8 +178,8 @@ Erinnerungen:
 - Einmalig (heute, morgen, am Freitag, in einer Stunde): mit Datum. Regelmäßig (jeden Tag, jeden Montag): mit Wochentagen.
   Ist unklar, ob einmal oder regelmäßig, frag kurz nach.
 - Bestätige danach in einem kurzen Satz mit Tag und Uhrzeit. Die Nummer einer Erinnerung sagst du nie dazu.
-- Du kannst dich nur melden, solange diese App am Handy offen ist. Bei Wichtigem wie Medikamenten oder Terminen sagst du
-  das in einem Satz dazu und empfiehlst zusätzlich den Wecker des Handys.
+- In der Android-App meldest du dich zur Uhrzeit auch, wenn sie zu ist. Im Browser (z. B. am iPhone) nur, solange die Seite
+  offen ist: Dort sagst du bei Wichtigem wie Medikamenten in einem Satz dazu, zusätzlich den Wecker des Handys zu stellen.
 - Will die Person etwas nicht mehr, löschst du es mit erinnerung_loeschen. Zum Ändern: löschen und neu merken.
 - Auf "Woran erinnerst du mich?" liest du deine Erinnerungen aus dem Hinweis der App in einfachen Worten vor.
 
@@ -741,12 +753,25 @@ def zwischenspeichern(messages):
 
 NACHRICHT_GEZEIGT = "Die Nachricht steht jetzt unter deiner Antwort, mit einem Knopf zum Kopieren."
 LINK = re.compile(r"^https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/\S*)?$")
+NUMMER = re.compile(r"^\+?[0-9][0-9 ()/-]*$")
+UEBER = {"whatsapp", "sms", "wechat"}
+
+
+def nummer_pruefen(eingabe, muss=False):
+    """Eine Telefonnummer, nur mit Ziffern, Leerzeichen, + / - ( ). Liefert sie ordentlich oder ''."""
+    nummer = " ".join(str(eingabe or "").split())
+    if not nummer and not muss:
+        return ""
+    ziffern = re.sub(r"\D", "", nummer)
+    if not NUMMER.match(nummer) or not 3 <= len(ziffern) <= 15:
+        raise ValueError("Das ist keine gültige Telefonnummer. Nimm nur eine Nummer, die dir die Person genannt hat.")
+    return nummer
 MAX_ZEIGEN = 3   # so viele Nachrichten und so viele Links passen unter eine Antwort
 
 
 def zeige_werkzeuge():
-    """Die zwei Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
-    entwuerfe, links = [], []
+    """Die Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
+    entwuerfe, links, anrufe = [], [], []
 
     def nachricht_zeigen(eingabe):
         text = str(eingabe.get("text") or "").strip()[:1500]
@@ -754,8 +779,18 @@ def zeige_werkzeuge():
             raise ValueError("Der Text der Nachricht fehlt. Frag nach, was drinstehen soll.")
         if len(entwuerfe) >= MAX_ZEIGEN:
             raise ValueError(f"Höchstens {MAX_ZEIGEN} Nachrichten pro Antwort.")
-        entwuerfe.append({"an": " ".join(str(eingabe.get("an") or "").split())[:80], "text": text})
+        ueber = str(eingabe.get("ueber") or "").strip().lower()
+        nummer = nummer_pruefen(eingabe.get("nummer"))
+        entwuerfe.append({"an": " ".join(str(eingabe.get("an") or "").split())[:80], "text": text,
+                          **({"ueber": ueber} if ueber in UEBER else {}), **({"nummer": nummer} if nummer else {})})
         return NACHRICHT_GEZEIGT
+
+    def anruf_zeigen(eingabe):
+        nummer = nummer_pruefen(eingabe.get("nummer"), muss=True)
+        if anrufe:
+            raise ValueError("Pro Antwort nur ein Anruf.")
+        anrufe.append({"name": " ".join(str(eingabe.get("name") or "").split())[:60], "nummer": nummer})
+        return "Der Knopf zum Anrufen steht jetzt unter deiner Antwort (in der Blase geht das Telefon gleich auf)."
 
     def link_zeigen(eingabe):
         url = str(eingabe.get("url") or "").strip()
@@ -778,6 +813,10 @@ def zeige_werkzeuge():
                 "properties": {
                     "an": {"type": "string", "description": "Für wen die Nachricht ist, z. B. 'Anna' oder 'Dr. Huber'."},
                     "text": {"type": "string", "description": "Die ganze Nachricht, fertig zum Verschicken, ohne Anführungszeichen."},
+                    "ueber": {"type": "string", "enum": ["whatsapp", "sms", "wechat"],
+                              "description": "Womit die Person sie schicken will, wenn sie es gesagt hat."},
+                    "nummer": {"type": "string", "description": "Telefonnummer der Person, an die es geht, falls bekannt "
+                                                                "(für WhatsApp oder SMS)."},
                 },
                 "required": ["text"],
             },
@@ -795,8 +834,21 @@ def zeige_werkzeuge():
                 "required": ["titel", "url"],
             },
         }},
+        "anruf_zeigen": {"tun": anruf_zeigen, "schema": {
+            "name": "anruf_zeigen",
+            "description": "Stellt einen großen Knopf zum Anrufen unter deine Antwort (in der Blase geht das Telefon gleich "
+                           "mit der Nummer auf). Ruft nicht selbst an.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Wen man anruft, z. B. 'Peter' oder 'Rettung'."},
+                    "nummer": {"type": "string", "description": "Die Telefonnummer, z. B. '0664 1234567' oder '144'."},
+                },
+                "required": ["name", "nummer"],
+            },
+        }},
     }
-    return werkzeuge, entwuerfe, links
+    return werkzeuge, entwuerfe, links, anrufe
 
 
 def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
@@ -814,7 +866,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         frage.append(bild_block(bild[1]))
     frage.append({"type": "text", "text": text})
     messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
-    zeigen, entwuerfe, links = zeige_werkzeuge()
+    zeigen, entwuerfe, links, anrufe = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
     antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
@@ -826,7 +878,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     getan = {"gemerkt": [e for e in nachher if e["id"] not in alt],
              "vergessen": [e for e in vorher if e["id"] not in neu],
              "gelernt": [w for w in weiss if w["id"] not in kannte],
-             "nachrichten": entwuerfe, "links": links}
+             "nachrichten": entwuerfe, "links": links, "anrufe": anrufe}
     zeit = jetzt().isoformat(timespec="seconds")
     with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
         liste = gespraeche_lesen()
