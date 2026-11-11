@@ -246,6 +246,23 @@ public class BlaseService extends Service {
             if (bild != null) bild.post(() -> Toast.makeText(BlaseService.this, text, Toast.LENGTH_LONG).show());
         }
 
+        /** Telefon (mit Nummer, anrufen tippt die Person selbst), SMS oder WhatsApp mit fertigem Text öffnen. */
+        @JavascriptInterface
+        public void oeffnen(String adresse) {
+            if (bild == null || adresse == null) return;
+            android.net.Uri u = android.net.Uri.parse(adresse);
+            String art = u.getScheme();
+            if (!"tel".equals(art) && !"sms".equals(art) && !"https".equals(art)) return;
+            bild.post(() -> {
+                try {
+                    startActivity(new Intent("tel".equals(art) ? Intent.ACTION_DIAL : Intent.ACTION_VIEW, u)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    Toast.makeText(BlaseService.this, "Das geht auf diesem Gerät leider nicht.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
         @JavascriptInterface
         public void kopieren(String text) {
             if (bild == null) return;

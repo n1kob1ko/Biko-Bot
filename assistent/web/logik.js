@@ -55,6 +55,28 @@
     return liste.sort((a, b) => a.wann - b.wann).slice(0, 30);
   }
 
+  // Anrufen: die Nummer so, wie sie gesagt wurde, nur Ziffern und +
+  function telLink(nummer) {
+    const n = String(nummer || '').replace(/[^\d+]/g, '');
+    return n ? 'tel:' + n : '';
+  }
+  // WhatsApp braucht die Nummer international ohne +: 0664 123 -> 43664123 (österreichische Nummer), 0049 ... -> 49 ...
+  function waNummer(nummer) {
+    const roh = String(nummer || '').trim(), n = roh.replace(/\D/g, '');
+    if (roh.startsWith('+')) return n;
+    if (n.startsWith('00')) return n.slice(2);
+    if (n.startsWith('0')) return '43' + n.slice(1);
+    return n;
+  }
+  // Eine Nachricht für jemanden gleich in WhatsApp oder als SMS öffnen, mit fertigem Text. Ohne Nummer wählt man in
+  // WhatsApp selbst, an wen. WeChat kann das nicht: dort bleibt Kopieren und Einfügen.
+  function sendeLink(n) {
+    if (!n || !n.text) return '';
+    if (n.ueber === 'whatsapp') return `https://wa.me/${waNummer(n.nummer)}?text=${encodeURIComponent(n.text)}`;
+    if (n.ueber === 'sms') return `sms:${String(n.nummer || '').replace(/[^\d+]/g, '')}?body=${encodeURIComponent(n.text)}`;
+    return '';
+  }
+
   // Wann kommt die Erinnerung? Kurz in Worten: "jeden Tag", "Mo, Mi", "heute", "morgen", "einmal am 24.12." (Vorlage mit {t} und {m})
   function wannText(er, texte, jetzt) {
     if (er.datum) {
@@ -239,5 +261,5 @@
     return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
   }
 
-  return { saetzeTeilen, istEcho, naechsteMeldungen, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  return { saetzeTeilen, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

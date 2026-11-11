@@ -319,6 +319,36 @@ test('In der Android-Blase (?mini): Biko redet ohne Fenster und meldet, was er g
   assert.deepEqual(p.fehler, []);
 });
 
+test('Anrufen und WhatsApp: Biko stellt Knöpfe mit Nummer und fertigem Text unter die Antwort', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Ruf Peter an');
+  assert.equal(await p.getAttribute('.link-knopf.anruf', 'href'), 'tel:06641234567');
+  assert.match(await p.textContent('.link-knopf.anruf'), /Peter anrufen/);
+  await fragen(p, 'Schreib Peter auf WhatsApp, dass ich um 5 komme');
+  assert.equal(await p.getAttribute('.entwurf .senden-mit', 'href'), 'https://wa.me/436641234567?text=Ich%20komme%20um%205!');
+  assert.equal(await p.textContent('.entwurf .senden-mit'), 'WhatsApp');
+  assert.equal(await p.locator('.entwurf .kopieren').count(), 1, 'Kopieren bleibt als zweiter Weg');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('In der Android-Blase geht das Telefon nach Bikos Antwort gleich mit der Nummer auf', async (t) => {
+  const NATIV = () => {
+    window.zustaende = [];
+    window.geoeffnet = [];
+    window.BikoNativ = { zustand: (z) => window.zustaende.push(z), hinweis: () => {}, kopieren: () => {}, oeffnen: (u) => window.geoeffnet.push(u) };
+  };
+  const p = await angemeldet(t, { vorher: `(${FALSCHES_TELEFON})(); (${NATIV})();` });
+  await p.goto(URL + '?mini');
+  await p.waitForSelector('#app:not([hidden])');
+  await p.evaluate(() => window.bikoReden());
+  await p.waitForFunction(() => window.zustaende.includes('hoert'));
+  await p.evaluate(() => window.liveSagt('Ruf Peter an', true));
+  await p.waitForFunction(() => window.geoeffnet.length > 0, null, { timeout: 15000 });
+  assert.deepEqual(await p.evaluate(() => window.geoeffnet), ['tel:06641234567']);
+  assert.equal(await p.evaluate(() => window.zustaende[window.zustaende.length - 1]), 'aus', 'Biko hat aufgelegt');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Morgenrunde: im Gespräch eingestellt, die Android-App bekommt die Wecker dafür', async (t) => {
   const WECKER = () => { window.geplant = []; window.BikoWecker = { planen: (j) => window.geplant.push(JSON.parse(j)) }; };
   const p = await angemeldet(t, { vorher: WECKER });

@@ -44,6 +44,13 @@ Text und stellt ihn unter seine Antwort, mit einem Knopf "Kopieren" (und "Senden
 Danach fügt man ihn in WeChat, WhatsApp oder SMS ein. Biko verschickt selbst nichts. "Mach sie kürzer" oder
 "lieber mit Sie" ändert den Text im selben Gespräch.
 
+**Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
+(`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
+nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für
+144. Sagt die Person "auf WhatsApp" oder "als SMS", hat die Nachricht einen Knopf, der WhatsApp (`wa.me`) oder SMS mit dem
+fertigen Text öffnet; man tippt dort nur noch auf Senden. In der Android-Blase gehen Telefon, WhatsApp oder SMS gleich von
+selbst auf, sobald Biko ausgeredet hat. WeChat kann keinen Text vorgeben: dort bleibt Kopieren und Einfügen.
+
 **Angebote und Links:** Bei Fragen nach Angeboten sucht Biko zuerst selbst und gründlich (mehrere Suchen, er darf
 Trefferseiten auch öffnen). Adressen schreibt er nie in den Text, sondern stellt sie als großen Knopf unter die
 Antwort. Findet er nichts Genaues, sagt er das in einem Satz und stellt den Link zum aktuellen Prospekt des

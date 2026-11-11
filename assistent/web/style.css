@@ -316,6 +316,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 .link-knopf > span { display: grid; min-width: 0; }
 .link-knopf strong { overflow-wrap: anywhere; line-height: 1.25; }
 .link-knopf .seite { color: var(--muted); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Anrufen: der wichtigste Knopf unter der Antwort, in Biko-Gelb */
+.link-knopf.anruf { background: var(--accent); border-color: var(--accent-stark); color: var(--accent-ink); }
+.link-knopf.anruf .seite { color: inherit; opacity: .8; }
+a.knopf { text-decoration: none; }
 
 /* ---------- Gespräche: frühere Sitzungen ---------- */
 /* Im Gespräch steht neben dem kleinen Biko statt der Begrüßung der Knopf für ein neues Gespräch */

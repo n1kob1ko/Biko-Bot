@@ -35,6 +35,11 @@ Einstellen: Einstellungen › Apps › Standard-Apps › Digitaler Assistent ›
 einschalten. Die App bietet das beim Start selbst an. Ein ständiges „Hey Biko“ gibt es nicht: Android erlaubt
 das Dauer-Zuhören nur Google, und es würde den Akku leeren.
 
+## Anrufen und WhatsApp aus der Blase
+
+Sagt man der Blase „Ruf Peter an“ oder „Schreib Peter auf WhatsApp …“, öffnet die App nach Bikos Antwort gleich das Telefon
+mit der Nummer (anrufen tippt man selbst) oder WhatsApp bzw. SMS mit dem fertigen Text (`BikoNativ.oeffnen()`).
+
 ## Biko meldet sich von selbst
 
 Erinnerungen und die **Morgenrunde** kommen pünktlich, auch wenn die App gerade zu ist. Die Biko-Seite schickt der App
