@@ -68,6 +68,12 @@ der nächste zuerst, mit "heute", "morgen" oder "in 12 Tagen". So sagt Biko es v
 (WhatsApp, SMS oder Anruf). Die Morgenrunde nennt Geburtstage von heute und morgen; ohne Morgenrunde stellt die Android-App
 am Tag um 9 Uhr einen Wecker ("Heute wird Peter 40!"). Am 29.2. Geborene bekommen ihn sonst am 28.2.
 
+**Dolmetscher:** "Dolmetsch für mich beim Arzt" schaltet ihn ein (Werkzeug `dolmetscher`, Standard Chinesisch und Deutsch,
+andere Sprachen gehen auch). Dann übersetzt Biko jeden Satz vollständig in die andere Sprache und sagt ihn laut; am besten
+im Gespräch wie am Telefon, der Sprachdienst erkennt selbst, welche Sprache gesprochen wird. Die Übersetzung steht groß da,
+damit das Gegenüber mitlesen kann, und ein gelbes Band zeigt "Biko dolmetscht" mit Knopf "Fertig". Aus geht er mit
+"fertig" im Gespräch oder von selbst 30 Minuten nach dem letzten Satz (`GET /api/dolmetscher`).
+
 **Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
 (`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
 nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für

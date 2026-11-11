@@ -77,6 +77,11 @@
       <div id="vorschlaege" class="vorschlaege"></div>
       <div id="verlauf" class="verlauf" aria-live="polite"></div>
       <div class="eingabe-platz">
+        <div id="dolmetscher-leiste" class="dolmetscher-leiste" role="status" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-sprache"/></svg>
+          <span data-t="dolmetscher_an"></span>
+          <button type="button" id="dolmetscher-aus" class="druck" data-t="dolmetscher_fertig"></button>
+        </div>
         <p id="chat-hinweis" class="meldung klein" role="status"></p>
         <form id="chat-form" class="eingabe">
           <button type="button" id="foto-knopf" class="druck" data-t-label="foto"><svg class="icon" aria-hidden="true"><use href="#i-kamera"/></svg></button>
