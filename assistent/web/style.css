@@ -325,6 +325,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 .eintrag.erledigt { color: var(--muted); text-decoration: line-through; }
 .eintrag.erledigt .haken { background: var(--accent); }
 .eintrag.erledigt .haken .icon { opacity: 1; }
+/* Gesundheitstagebuch: Tag und Uhrzeit links, Wert rechts, gut zum Vorzeigen beim Arzt */
+.tagebuch-zeilen { list-style: none; margin: 10px 0 14px; padding: 0; display: grid; }
+.tagebuch-zeilen li { display: grid; grid-template-columns: 6.5em 1fr; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.tagebuch-zeilen li:last-child { border-bottom: 0; }
+.tagebuch-zeilen .wann { color: var(--muted); font-size: .9375rem; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.tagebuch-zeilen .was { font-size: 1.1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.tagebuch-zeilen .was strong { font-variant-numeric: tabular-nums; }
 .liste-karte .meldung { color: var(--muted); font-size: .9375rem; margin: 0 0 12px; }
 .entwurf-text { font-size: 1.15rem; line-height: 1.45; margin: 8px 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .entwurf .meldung { scroll-margin-bottom: 250px; }

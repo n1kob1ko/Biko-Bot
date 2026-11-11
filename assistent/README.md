@@ -56,6 +56,12 @@ sonst braucht. Was draufsteht, steht im Hinweis der App. Mit `liste_zeigen` stel
 große Zeilen, ein Tipp hakt ab und nimmt es weg (`POST /api/liste/weg`), dazu "Kopieren". Bleibendes über die Person selbst
 bleibt im Gedächtnis, nicht auf einer Liste.
 
+**Gesundheitstagebuch:** "Mein Blutdruck ist 135 zu 85", "Zucker 112", "heute ist mir schwindlig". Biko schreibt es mit
+Datum und Uhrzeit ins Tagebuch (`gesundheit.json`, Werkzeug `gesundheit_notieren`, Arten Blutdruck, Blutzucker, Puls,
+Gewicht, Befinden, Schmerzen, Medikament, Notiz) und bestätigt kurz. Er stellt keine Diagnose; bei sehr hohen oder sehr
+niedrigen Werten rät er zu 1450 oder 144. Die letzten zwei Wochen stehen im Hinweis der App. "Zeig mir das für den Arzt"
+stellt das Tagebuch mit `tagebuch_zeigen` als Karte unter die Antwort, mit "Kopieren". Falsch notiert? `gesundheit_streichen`.
+
 **Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
 (`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
 nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für
@@ -205,7 +211,7 @@ wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst a
 ## Daten
 
 Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
-`erinnerungen.json`, `wissen.json`, `listen.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+`erinnerungen.json`, `wissen.json`, `listen.json`, `gesundheit.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
 Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
 Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen

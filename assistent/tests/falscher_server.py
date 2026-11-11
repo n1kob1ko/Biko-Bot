@@ -36,6 +36,10 @@ def antwort_fuer(frage, werkzeuge):
     if frage.startswith("Erinnere mich"):
         werkzeuge["erinnerung_merken"]["tun"]({"text": "Herztablette", "zeit": "08:00"})
         return "Mach ich. Ich erinnere dich jeden Tag um 8 Uhr an die Herztablette."
+    if frage.startswith("Mein Blutdruck ist 135 zu 85"):
+        werkzeuge["gesundheit_notieren"]["tun"]({"art": "blutdruck", "wert": "135/85", "notiz": "morgens"})
+        werkzeuge["tagebuch_zeigen"]["tun"]({})
+        return "Hab ich ins Tagebuch geschrieben: 135 zu 85. Das liegt etwas über dem üblichen Bereich."
     if frage.startswith("Schreib Milch und Brot"):
         server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch", "Brot"]})
         werkzeuge["liste_zeigen"]["tun"]({"liste": "Einkaufen"})

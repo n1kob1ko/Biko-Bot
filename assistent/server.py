@@ -19,7 +19,10 @@ Funktionen, alle über das Gespräch (POST /api/chat):
   8. Listen            "Schreib Milch auf die Einkaufsliste", "Was steht drauf?": Einkaufsliste, Notizen und andere
                         Listen. Biko zeigt eine Liste als Karte unter der Antwort; dort tippt man Erledigtes weg
                         (POST /api/liste/weg).
-Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde und die Listen sind Werkzeuge, die Claude selbst aufruft.
+  9. Gesundheit        "Mein Blutdruck ist 135 zu 85": Biko schreibt Messwerte und Befinden ins Gesundheitstagebuch
+                        und zeigt es auf Wunsch als Karte für den Arzt (zum Kopieren).
+Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen und das Tagebuch sind Werkzeuge, die Claude
+selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -53,7 +56,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
@@ -140,6 +143,18 @@ Gesundheit:
   und mit anruf_zeigen den Knopf für 144 zeigen.
 - Bei Unsicherheit zu Beschwerden: Gesundheitsnummer 1450 (rund um die Uhr, kostenlos).
 - Wenn jemand sehr traurig ist oder an Suizid denkt: einfühlsam bleiben und die Telefonseelsorge 142 nennen (kostenlos, rund um die Uhr).
+
+Gesundheitstagebuch:
+- Sagt die Person einen Messwert (Blutdruck, Blutzucker, Puls, Gewicht) oder wie es ihr geht ("heute schwindlig", "Knie tut
+  weh", "Tablette genommen"), schreibst du es mit gesundheit_notieren ins Tagebuch und bestätigst kurz mit dem Wert.
+  Fehlt beim Blutdruck eine Zahl, frag nach. Die Einheit beim Zucker übernimmst du, wie sie sie sagt (mg/dl oder mmol/l).
+- Du bewertest nicht und stellst keine Diagnose. Du darfst sagen, ob ein Wert im üblichen Bereich liegt oder deutlich darüber
+  oder darunter, und dass sie das beim nächsten Arztbesuch zeigen kann.
+- Sehr hoher Blutdruck (ab etwa 180/110) oder sehr niedriger Zucker (unter 70 mg/dl bzw. 3,9 mmol/l): ruhig bleiben und raten,
+  gleich 1450 anzurufen; mit Brustschmerzen, Atemnot, Verwirrtheit oder Lähmung sofort 144 (Knopf mit anruf_zeigen).
+- Was im Tagebuch steht, siehst du im Hinweis der App (die letzten zwei Wochen). Fragt sie danach ("wie war mein Blutdruck
+  diese Woche?", "für den Arzt"), fasse es kurz zusammen und zeig es mit tagebuch_zeigen als Karte zum Kopieren.
+- Falsch notiert? Mit gesundheit_streichen weg und neu notieren.
 
 Sicherheit:
 - Warne vor Betrug, wenn etwas danach klingt (Anrufe von "Polizei" oder "Bank", Gewinnspiele, "Enkeltrick", Links in SMS).
@@ -679,6 +694,11 @@ def hinweis(gesprochen=False, bild=False):
         "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
                                              or "- noch nichts"),
     ]
+    seit = t - timedelta(days=14)
+    eintraege = [e for e in tagebuch_lesen() if e["zeit"] >= seit.isoformat(timespec="seconds")][-40:]
+    teile.append("Gesundheitstagebuch, letzte zwei Wochen:\n" + ("\n".join(
+        f"- Nummer {e['id']}: {tagebuch_zeit(e)}: {TAGEBUCH_ARTEN[e['art']]} {e['wert']}"
+        + (f" ({e['notiz']})" if e.get("notiz") else "") for e in eintraege) or "- nichts"))
     listen = listen_lesen()
     teile.append("Deine Listen:\n" + ("\n".join(f"- {name}: " + ", ".join(e["text"] for e in eintraege)
                                                 for name, eintraege in listen.items()) or "- noch keine"))
@@ -798,7 +818,7 @@ MAX_ZEIGEN = 3   # so viele Nachrichten und so viele Links passen unter eine Ant
 
 def zeige_werkzeuge():
     """Die Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
-    entwuerfe, links, anrufe, karten = [], [], [], []
+    entwuerfe, links, anrufe, karten, tagebuch = [], [], [], [], []
 
     def nachricht_zeigen(eingabe):
         text = str(eingabe.get("text") or "").strip()[:1500]
@@ -840,7 +860,34 @@ def zeige_werkzeuge():
         karten.append({"name": name, "eintraege": listen[name]})
         return "Die Liste steht jetzt als Karte unter deiner Antwort; dort kann man Erledigtes wegtippen."
 
+    def tagebuch_zeigen(eingabe):
+        try:
+            tage = max(1, min(int(eingabe.get("tage") or 14), 92))
+        except (TypeError, ValueError):
+            tage = 14
+        arten = [a for a in (eingabe.get("arten") or []) if a in TAGEBUCH_ARTEN]
+        seit = (jetzt() - timedelta(days=tage)).isoformat(timespec="seconds")
+        zeilen = [e for e in tagebuch_lesen() if e["zeit"] >= seit and (not arten or e["art"] in arten)]
+        if not zeilen:
+            raise ValueError("Dafür steht nichts im Tagebuch. Sag das der Person.")
+        if tagebuch:
+            return "Das Tagebuch steht schon unter deiner Antwort."
+        tagebuch.append({"tage": tage, "zeilen": zeilen[-60:]})
+        return f"Das Tagebuch ({len(zeilen)} Einträge) steht jetzt als Karte unter deiner Antwort, zum Kopieren für den Arzt."
+
     werkzeuge = {
+        "tagebuch_zeigen": {"tun": tagebuch_zeigen, "schema": {
+            "name": "tagebuch_zeigen",
+            "description": "Stellt das Gesundheitstagebuch als Karte unter deine Antwort (mit Knopf zum Kopieren, z. B. für den Arzt).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "tage": {"type": "integer", "description": "Wie viele Tage zurück, Standard 14."},
+                    "arten": {"type": "array", "items": {"type": "string", "enum": list(TAGEBUCH_ARTEN)},
+                              "description": "Nur diese Arten, z. B. ['blutdruck']. Leer heißt alles."},
+                },
+            },
+        }},
         "liste_zeigen": {"tun": liste_zeigen, "schema": {
             "name": "liste_zeigen",
             "description": "Stellt eine Liste der Person (z. B. die Einkaufsliste) als Karte unter deine Antwort. "
@@ -895,7 +942,7 @@ def zeige_werkzeuge():
             },
         }},
     }
-    return werkzeuge, entwuerfe, links, anrufe, karten
+    return werkzeuge, entwuerfe, links, anrufe, karten, tagebuch
 
 
 def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
@@ -913,7 +960,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         frage.append(bild_block(bild[1]))
     frage.append({"type": "text", "text": text})
     messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
-    zeigen, entwuerfe, links, anrufe, karten = zeige_werkzeuge()
+    zeigen, entwuerfe, links, anrufe, karten, tagebuch = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
     antwort = frage_claude(system_prompt(), messages, websuche=True, werkzeuge={**WERKZEUGE, **zeigen},
                            modell=modell_fuer(text, bild),
@@ -925,7 +972,8 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
     getan = {"gemerkt": [e for e in nachher if e["id"] not in alt],
              "vergessen": [e for e in vorher if e["id"] not in neu],
              "gelernt": [w for w in weiss if w["id"] not in kannte],
-             "nachrichten": entwuerfe, "links": links, "anrufe": anrufe, "listen": karten}
+             "nachrichten": entwuerfe, "links": links, "anrufe": anrufe, "listen": karten,
+             "tagebuch": tagebuch}
     zeit = jetzt().isoformat(timespec="seconds")
     with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
         liste = gespraeche_lesen()
@@ -1117,6 +1165,55 @@ def liste_wegtippen(name, nr):
         return {"name": name, "eintraege": listen.get(name, []) if name else []}
 
 
+# ---------- Gesundheitstagebuch: Messwerte und Befinden, für sich und für den Arzt ----------
+
+TAGEBUCH_ARTEN = {"blutdruck": "Blutdruck", "zucker": "Blutzucker", "puls": "Puls", "gewicht": "Gewicht",
+                  "befinden": "Befinden", "schmerz": "Schmerzen", "medikament": "Medikament", "sonstiges": "Notiz"}
+BLUTDRUCK = re.compile(r"^(\d{2,3})\s*/\s*(\d{2,3})$")
+MAX_TAGEBUCH = 500
+
+
+def tagebuch_lesen():
+    """[{"id", "zeit", "art", "wert", "notiz"}], das älteste zuerst."""
+    daten = lesen("gesundheit", [])
+    return daten if isinstance(daten, list) else []
+
+
+def tagebuch_zeit(e):
+    t = datetime.fromisoformat(e["zeit"])
+    return f"{t.day}.{t.month}. {t.strftime('%H:%M')}"
+
+
+def gesundheit_notieren(eingabe):
+    art = str(eingabe.get("art") or "").strip().lower()
+    if art not in TAGEBUCH_ARTEN:
+        raise ValueError("Die Art muss eine von diesen sein: " + ", ".join(TAGEBUCH_ARTEN) + ".")
+    wert = " ".join(str(eingabe.get("wert") or "").split())[:120]
+    if not wert:
+        raise ValueError("Der Wert fehlt. Frag kurz nach.")
+    if art == "blutdruck":
+        m = BLUTDRUCK.match(wert.replace(" zu ", "/"))
+        if not m or not (60 <= int(m[1]) <= 260 and 30 <= int(m[2]) <= 160):
+            raise ValueError("Blutdruck bitte als zwei Zahlen wie 135/85. Frag nach, wenn eine fehlt.")
+        wert = f"{m[1]}/{m[2]}"
+    notiz = " ".join(str(eingabe.get("notiz") or "").split())[:200]
+    e = {"id": uuid.uuid4().hex[:6], "zeit": jetzt().isoformat(timespec="seconds"), "art": art, "wert": wert,
+         **({"notiz": notiz} if notiz else {})}
+    with _lock:
+        schreiben("gesundheit", (tagebuch_lesen() + [e])[-MAX_TAGEBUCH:])
+    return f"Ins Tagebuch geschrieben: {TAGEBUCH_ARTEN[art]} {wert}"
+
+
+def gesundheit_streichen(eingabe):
+    nr = str(eingabe.get("id") or "")
+    with _lock:
+        liste = tagebuch_lesen()
+        if not any(e["id"] == nr for e in liste):
+            raise ValueError("Unter dieser Nummer steht nichts im Tagebuch.")
+        schreiben("gesundheit", [e for e in liste if e["id"] != nr])
+    return "Gestrichen."
+
+
 # ---------- Morgenrunde: Biko meldet sich jeden Morgen von selbst ----------
 
 MORGEN_VORHER = 15 * 60   # so viele Sekunden vor der Uhrzeit bereitet Biko die Morgenrunde vor
@@ -1215,6 +1312,29 @@ def hausmeister():
 
 
 WERKZEUGE = {
+    "gesundheit_notieren": {"tun": gesundheit_notieren, "schema": {
+        "name": "gesundheit_notieren",
+        "description": "Schreibt einen Messwert oder wie es der Person geht ins Gesundheitstagebuch (mit Datum und Uhrzeit).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "art": {"type": "string", "enum": list(TAGEBUCH_ARTEN)},
+                "wert": {"type": "string", "description": "Der Wert, z. B. '135/85', '112 mg/dl', '72', '68 kg', "
+                                                         "'schwindlig', 'Knie tut weh', 'Herztablette genommen'."},
+                "notiz": {"type": "string", "description": "Kurz dazu, falls sie etwas sagt, z. B. 'nach dem Frühstück'."},
+            },
+            "required": ["art", "wert"],
+        },
+    }},
+    "gesundheit_streichen": {"tun": gesundheit_streichen, "schema": {
+        "name": "gesundheit_streichen",
+        "description": "Streicht einen falsch notierten Eintrag aus dem Gesundheitstagebuch. Die Nummer steht im Hinweis.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "Nummer des Eintrags."}},
+            "required": ["id"],
+        },
+    }},
     "liste_aendern": {"tun": liste_aendern, "schema": {
         "name": "liste_aendern",
         "description": "Schreibt Dinge auf eine Liste der Person (Einkaufen, Notizen, ...) oder nimmt sie weg. "

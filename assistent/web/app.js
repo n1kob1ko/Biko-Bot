@@ -72,8 +72,9 @@
     $$('.blase .vorlesen').forEach((k) => { k.lastElementChild.textContent = t(k.dataset.zustand === 'laeuft' ? 'stopp' : 'vorlesen'); });
     $$('.blase.denkt .nur-vorlesen').forEach((el) => { el.textContent = t('denkt'); });
     $$('.notiz').forEach(notizFuellen);
-    $$('.entwurf').forEach(entwurfTexte);
+    $$('.entwurf').filter((el) => el._n).forEach(entwurfTexte); // Listen und Tagebuch sind auch Blätter, aber keine Nachrichten
     $$('.liste-karte').forEach(listeTexte);
+    $$('.tagebuch-karte').forEach(tagebuchTexte);
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
     vorschlaegeZeigen();
@@ -586,6 +587,52 @@
     nachUnten();
   }
 
+  // Gesundheitstagebuch als Karte: zum Vorzeigen beim Arzt oder zum Kopieren
+  const tagebuchWann = (zeit) => {
+    const d = new Date(zeit);
+    return `${d.getDate()}.${d.getMonth() + 1}. ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  function tagebuchTexte(el) {
+    const arten = t('tagebuch_arten');
+    $('.entwurf-an span', el).textContent = t('tagebuch_titel');
+    $$('.tagebuch-zeilen li', el).forEach((li, i) => {
+      const z = el._k.zeilen[i];
+      $('.art', li).textContent = (arten[z.art] || z.art) + ': ';
+    });
+    const kop = $('.kopieren', el);
+    kop.lastElementChild.textContent = t(kop.dataset.zustand === 'ok' ? 'kopiert' : 'kopieren');
+  }
+  function tagebuchKarte(k) {
+    const el = neu('div', 'entwurf tagebuch-karte');
+    el._k = k;
+    const kopf = neu('p', 'entwurf-an');
+    kopf.innerHTML = icon('liste') + '<span></span>';
+    const ul = neu('ul', 'tagebuch-zeilen');
+    k.zeilen.forEach((z) => {
+      const li = neu('li');
+      const was = neu('span', 'was');
+      was.append(neu('span', 'art'), neu('strong', '', z.wert));
+      if (z.notiz) was.append(' (' + z.notiz + ')');
+      li.append(neu('span', 'wann', tagebuchWann(z.zeit)), was);
+      ul.appendChild(li);
+    });
+    const kop = neu('button', 'knopf druck kopieren');
+    kop.type = 'button';
+    kop.dataset.zustand = 'ruhe';
+    kop.innerHTML = `<span class="wechsel">${icon('kopieren', 'i-ruhe')}${icon('ok', 'i-ok')}</span><span></span>`;
+    kop.addEventListener('click', async () => {
+      const arten = t('tagebuch_arten');
+      const text = neu('span', '', [t('tagebuch_titel'), ...k.zeilen.map((z) =>
+        `${tagebuchWann(z.zeit)}  ${arten[z.art] || z.art}: ${z.wert}${z.notiz ? ' (' + z.notiz + ')' : ''}`)].join('\n'));
+      if (await kopiere(text)) bestaetigen(kop, 'kopiert', 'kopieren');
+    });
+    el.append(kopf, ul, kop);
+    tagebuchTexte(el);
+    verlauf.appendChild(el);
+    if (!still) B.aufdecken(el);
+    nachUnten();
+  }
+
   // Anrufen: ein großer Knopf, der das Telefon mit der Nummer öffnet. Anrufen muss die Person selbst.
   function anrufeZeigen(liste) {
     const gut = liste.filter((a) => L.telLink(a.nummer));
@@ -614,6 +661,7 @@
     linksZeigen(m.links || []);
     anrufeZeigen(m.anrufe || []);
     (m.listen || []).forEach(listeKarte);
+    (m.tagebuch || []).forEach(tagebuchKarte);
     return d;
   }
   function denkBlase() {
