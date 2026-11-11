@@ -22,11 +22,11 @@
 
   let werkGeladen = null;
 
-  // Mikrofon auf und live zuhören lassen. `zugang`: {token, modell} von /api/live-zugang.
+  // Mikrofon auf und live zuhören lassen. `zugang`: {token, modell} von /api/live-zugang, `sprache`: 'de' oder 'zh'.
   // beimTeil(text): was gerade gesprochen wird (kann sich noch ändern), beimSatz(text): ein fertiger Satz,
   // beimEnde(art): die Verbindung ist ohne Auflegen zu Ende.
   // Wirft {art: 'mikro'}, wenn das Mikrofon nicht erlaubt ist, sonst {art: 'live'}.
-  async function hoeren({ ac, zugang, beimTeil, beimSatz, beimEnde }) {
+  async function hoeren({ ac, zugang, sprache, beimTeil, beimSatz, beimEnde }) {
     if (!ac || !ac.audioWorklet || !window.AudioWorkletNode || !window.WebSocket) throw { art: 'live' };
     try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) { /* älteres iPhone */ }
     let strom;
@@ -47,6 +47,7 @@
       werkGeladen = werkGeladen || ac.audioWorklet.addModule('mikro-worklet.js');
       await werkGeladen;
       const q = new URLSearchParams({ model_id: zugang.modell, token: zugang.token, ...LIVE_EINSTELLUNG });
+      if (sprache) q.set('language_code', sprache); // die Sprache vorgeben: so versteht der Dienst deutlich besser
       ws = new WebSocket(`${LIVE}?${q}`);
       await new Promise((gut, schlecht) => {
         const uhr = setTimeout(() => schlecht(new Error('zu langsam')), 8000);

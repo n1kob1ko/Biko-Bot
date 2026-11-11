@@ -292,6 +292,27 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   assert.deepEqual(p.fehler, []);
 });
 
+test('In der Android-Blase (?mini): Biko redet ohne Fenster und meldet, was er gerade tut', async (t) => {
+  const NATIV = () => {
+    window.zustaende = [];
+    window.kopiert = [];
+    window.BikoNativ = { zustand: (z) => window.zustaende.push(z), hinweis: () => {}, kopieren: (x) => window.kopiert.push(x) };
+  };
+  const p = await angemeldet(t, { vorher: `(${FALSCHES_TELEFON})(); (${NATIV})();` });
+  await p.goto(URL + '?mini');
+  await p.waitForSelector('#app:not([hidden])');
+  await p.evaluate(() => window.bikoReden());
+  await p.waitForFunction(() => window.zustaende.includes('hoert'));
+  // die Sprache ist vorgegeben, so versteht der Sprachdienst besser
+  assert.match(await p.evaluate(() => window.live.adresse), /language_code=de/);
+  await p.evaluate(() => window.liveSagt('Gibt es Angebote für Kaffee?', true));
+  await p.waitForFunction(() => window.zustaende.includes('denkt') && window.zustaende.includes('spricht'));
+  await p.evaluate(() => window.bikoAuflegen());
+  assert.equal(await p.evaluate(() => window.zustaende[window.zustaende.length - 1]), 'aus');
+  assert.equal(await p.evaluate(() => window.live.zu), true);
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Reden wie am Telefon: wer kurz absetzt und weiterredet, wird nicht abgeschnitten', async (t) => {
   const p = await angemeldet(t, { vorher: FALSCHES_TELEFON });
   await p.click('#chat-knopf');

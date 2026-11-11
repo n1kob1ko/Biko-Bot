@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 public class AssistentSitzung extends VoiceInteractionSession {
     private FrameLayout karte;
     private WebView web;
+    private boolean still; // nur das Bildschirmfoto holen (für die Blase), kein Fenster
 
     AssistentSitzung(Context c) { super(c); }
 
@@ -44,8 +45,19 @@ public class AssistentSitzung extends VoiceInteractionSession {
     }
 
     @Override
+    public void onPrepareShow(Bundle args, int flags) {
+        still = args != null && args.getBoolean("still");
+        setUiEnabled(!still);
+        super.onPrepareShow(args, flags);
+    }
+
+    @Override
     public void onShow(Bundle args, int flags) {
         super.onShow(args, flags);
+        if (still) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this::hide, 3000); // falls kein Bild kommt
+            return;
+        }
         BlaseService.sichtbar(false);
         if (web == null) {
             web = Netz.bauen(getContext(), null);
@@ -58,10 +70,12 @@ public class AssistentSitzung extends VoiceInteractionSession {
     @Override
     public void onHandleScreenshot(Bitmap bild) {
         Netz.bildschirmSchicken(bild); // kommt kurz nach dem Öffnen; bis man fertig gefragt hat, ist es längst da
+        if (still) hide();
     }
 
     @Override
     public void onHide() {
+        if (still) { super.onHide(); return; }
         if (web != null) {
             web.onPause();
             web.loadUrl("about:blank"); // legt auf

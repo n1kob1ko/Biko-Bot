@@ -1,8 +1,15 @@
 # Biko Helfer für Android: Biko als Blase
 
 Kleine Android-App um den Biko Helfer (`assistent/`). Biko schwebt als runde Blase über allen Apps.
-Ein Tipp auf die Blase öffnet ihn als Karte über der App, die gerade offen ist, und er hört gleich zu.
-Ziehen verschiebt ihn, auf das ✕ unten ziehen blendet ihn aus (bis man die App wieder öffnet).
+
+- **Antippen:** Biko hört sofort zu, ganz ohne Fenster. Die Blase zeigt, was er tut: mint pulsierender Ring = er hört zu,
+  gelb und wackelnd = er überlegt, orange und hüpfend = er spricht. Nochmal antippen legt auf.
+  Schreibt Biko eine Nachricht für jemanden (z. B. eine WeChat-Antwort), liegt sie gleich zum Einfügen bereit.
+- **Lange drücken:** Biko groß als Karte, zum Lesen und Schreiben.
+- **Ziehen** verschiebt ihn, auf das ✕ unten ziehen blendet ihn aus (bis man die App wieder öffnet).
+
+Das kleine Gespräch führt die Biko-Seite selbst (`?mini`) in einem unsichtbaren 1-Pixel-Fenster in der Blase;
+sie meldet über `BikoNativ.zustand()` zurück, ob Biko zuhört, nachdenkt oder spricht.
 
 Die App zeigt die Seite `https://biko-helfer-production.up.railway.app/` (eingestellt in `app/build.gradle`,
 `BIKO_ADRESSE`). Alles, was Biko kann, kommt also wie bisher vom Server; die App bringt nur die Blase,
@@ -18,7 +25,11 @@ Die App kann der **Standard-Assistent** des Geräts sein (wie sonst Google Gemin
 - Android gibt ihm dabei ein **Bildschirmfoto** mit. Die App schickt es an den Server (`POST /api/bildschirm`),
   und Biko sieht es 5 Minuten lang bei jeder Frage (nur im Speicher, nicht im Verlauf). So geht „Was schreibt Mei?“,
   „Übersetz das“ oder „Was soll ich antworten?“.
-- Ein Tipp auf die Blase macht dann dasselbe.
+- Ein Tipp auf die Blase holt dann auch still ein Bildschirmfoto, ohne Fenster.
+
+Bei **Xiaomi** startet der Einschaltknopf erst einmal die Xiaomi-KI. Umstellen: Einstellungen › Zusätzliche Einstellungen ›
+Gesten-Shortcuts (oder „Tastenkürzel“) › „Ein/Aus-Taste gedrückt halten“ › „Digitaler Assistent“ statt Xiaomi HyperAI.
+Die Namen ändern sich je nach HyperOS-Version; wenn es das nicht gibt, bleibt die Blase der Weg.
 
 Einstellen: Einstellungen › Apps › Standard-Apps › Digitaler Assistent › „Biko Helfer“, dort „Screenshot verwenden“
 einschalten. Die App bietet das beim Start selbst an. Ein ständiges „Hey Biko“ gibt es nicht: Android erlaubt
