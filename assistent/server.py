@@ -49,7 +49,8 @@ Ohne Schlüssel sprechen und hören die Browser der Handys selbst, so gut sie k�
 
 Dazu ein Profil (GET/POST /api/profil): nur Name, Du/Sie und Sprache, also was Biko schon vor dem ersten Satz braucht.
 
-Anmelden: ein Passwort (APP_PASSWORT in der .env). Danach bleibt das Handy ein Jahr angemeldet (Cookie).
+Anmelden: das Passwort (APP_PASSWORT, Verwalter) oder ein Einladungscode für eine Person oder ihre Familie
+(Familienblick /familie.html, GET /api/familie). Danach bleibt das Handy ein Jahr angemeldet (Cookie).
 Daten liegen als JSON in DATA_DIR (Standard /data). Nach außen gehen nur die Texte an die Claude-API und, wenn
 der Sprachdienst eingerichtet ist, vorzulesende Texte und Aufnahmen an ElevenLabs.
 Nur Python-Standardbibliothek plus das offizielle anthropic-Paket.
@@ -111,7 +112,7 @@ COOKIE_TAGE = 365
 DATA.mkdir(parents=True, exist_ok=True)
 _lock = threading.RLock()   # RLock: wissen_lesen() darf auch innerhalb einer Sperre aufgerufen werden
 # Bildschirmfoto aus der Android-App (Biko als Assistent): gilt ein paar Minuten für alle Fragen, nur im Speicher
-_bildschirm = {"bild": None, "zeit": 0.0, "art": "bildschirm"}   # art: bildschirm (Android) oder foto (Kamera)
+_bildschirme = {}   # je Person {"bild", "zeit", "art"}; art: bildschirm (Android) oder foto (Kamera)
 MAX_BILDSCHIRM = 3_000_000    # Bytes
 BILDSCHIRM_GILT = 300         # Sekunden
 _client = None
@@ -321,8 +322,23 @@ Der Hinweis der App:
 
 # ---------- Daten ----------
 
+# Jede Person hat ihren eigenen Ordner DATA/personen/<id>/ mit ihren JSON-Dateien. Welche Person gerade dran ist,
+# merkt sich jeder Faden selbst (eine Anfrage, der Hausmeister): person_setzen(). Gemeinsam für alle liegen nur
+# geheimnis.txt, personen.json (wer es gibt) und zugaenge.json (Einladungscodes) direkt in DATA.
+
+_faden = threading.local()
+GEMEINSAM = {"personen", "zugaenge"}
+
+
+def _ordner():
+    pid = getattr(_faden, "person", None) or erste_person()
+    o = DATA / "personen" / pid
+    o.mkdir(parents=True, exist_ok=True)
+    return o
+
+
 def _pfad(name):
-    return DATA / f"{name}.json"
+    return DATA / f"{name}.json" if name in GEMEINSAM else _ordner() / f"{name}.json"
 
 
 def lesen(name, standard):
@@ -334,10 +350,136 @@ def lesen(name, standard):
 
 
 def schreiben(name, daten):
-    fd, tmp = tempfile.mkstemp(dir=DATA, suffix=".tmp")
+    ziel = _pfad(name)
+    fd, tmp = tempfile.mkstemp(dir=ziel.parent, suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(daten, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, _pfad(name))
+    os.replace(tmp, ziel)
+
+
+# ---------- Personen: wer Biko benutzt ----------
+
+PERSON_DATEIEN = ("profil", "wissen", "erinnerungen", "gespraeche", "verlauf", "listen", "gesundheit", "geburtstage",
+                  "checkin", "morgenrunde", "kosten", "freigabe", "medikamente")
+MAX_PERSONEN = 50
+
+
+def personen_lesen():
+    """[{"id", "name", "angelegt", "version"}]. Die erste ist die, die es schon vor den Konten gab."""
+    with _lock:
+        liste = lesen("personen", None)
+        if not isinstance(liste, list) or not liste:
+            # Erster Start mit Konten: die bisherigen Daten in DATA gehören der ersten Person und ziehen in ihren Ordner
+            pid = "p" + uuid.uuid4().hex[:8]
+            ordner = DATA / "personen" / pid
+            ordner.mkdir(parents=True, exist_ok=True)
+            for name in PERSON_DATEIEN:
+                alt = DATA / f"{name}.json"
+                if alt.exists():
+                    os.replace(alt, ordner / f"{name}.json")
+            try:
+                name = json.loads((ordner / "profil.json").read_text(encoding="utf-8")).get("name") or ""
+            except (OSError, ValueError):
+                name = ""
+            liste = [{"id": pid, "name": name or "Erste Person", "angelegt": jetzt().isoformat(timespec="seconds"),
+                      "version": 1}]
+            schreiben("personen", liste)
+        return liste
+
+
+def erste_person():
+    return personen_lesen()[0]["id"]
+
+
+def person_finden(pid):
+    return next((p for p in personen_lesen() if p["id"] == pid), None)
+
+
+def person_setzen(pid):
+    """Ab jetzt liest und schreibt dieser Faden die Daten dieser Person."""
+    _faden.person = pid
+
+
+def person_jetzt():
+    return getattr(_faden, "person", None) or erste_person()
+
+
+def person_anlegen(name, sprache="de-AT", anrede="du"):
+    name = " ".join(str(name or "").split())[:40]
+    if not name:
+        raise ValueError("Bitte einen Namen angeben.")
+    with _lock:
+        liste = personen_lesen()
+        if len(liste) >= MAX_PERSONEN:
+            raise ValueError("Es gibt schon zu viele Personen.")
+        p = {"id": "p" + uuid.uuid4().hex[:8], "name": name, "angelegt": jetzt().isoformat(timespec="seconds"),
+             "version": 1}
+        schreiben("personen", liste + [p])
+        vorher = getattr(_faden, "person", None)
+        person_setzen(p["id"])
+        try:
+            schreiben("profil", {"name": name, "anrede": "Sie" if anrede == "Sie" else "du",
+                                 "sprache": sprache if sprache in SPRACHEN else "de-AT"})
+            schreiben("wissen", [])
+        finally:
+            person_setzen(vorher)
+    return p
+
+
+def person_abmelden(pid):
+    """Alle Geräte dieser Person und ihrer Familie sind abgemeldet, alte Codes gelten nicht mehr."""
+    with _lock:
+        liste = personen_lesen()
+        for p in liste:
+            if p["id"] == pid:
+                p["version"] = p.get("version", 1) + 1
+        schreiben("personen", liste)
+        schreiben("zugaenge", {k: z for k, z in zugaenge_lesen().items() if z["person"] != pid})
+
+
+# ---------- Einladungscodes: so kommen die Person und ihre Familie hinein, ohne Passwort ----------
+
+CODE_ZEICHEN = "ACDEFHJKMNPRTUVWXY345679"   # nichts, was man verwechselt (0/O, 1/I/L, 2/Z, 8/B)
+CODE_TAGE = 14
+ROLLEN = ("person", "familie")
+
+
+def code_sauber(code):
+    return re.sub(r"[^A-Z0-9]", "", str(code or "").upper())
+
+
+def code_hash(code):
+    return hashlib.sha256(code_sauber(code).encode()).hexdigest()
+
+
+def zugaenge_lesen():
+    """{hash des Codes: {"person", "rolle", "bis"}}. Gespeichert wird nur der Hash, nie der Code selbst."""
+    d = lesen("zugaenge", {})
+    jetzt_s = time.time()
+    return {k: z for k, z in d.items() if isinstance(z, dict) and z.get("bis", 0) > jetzt_s} if isinstance(d, dict) else {}
+
+
+def code_erzeugen(pid, rolle):
+    """Ein neuer Code für die Person selbst oder ihre Familie, 14 Tage gültig, auf mehreren Geräten verwendbar.
+    Ein neuer Code ersetzt den alten derselben Art (bereits angemeldete Geräte bleiben angemeldet)."""
+    if rolle not in ROLLEN or not person_finden(pid):
+        raise ValueError("Gibt es nicht.")
+    roh = "".join(secrets.choice(CODE_ZEICHEN) for _ in range(8))
+    with _lock:
+        d = {k: z for k, z in zugaenge_lesen().items() if not (z["person"] == pid and z["rolle"] == rolle)}
+        d[code_hash(roh)] = {"person": pid, "rolle": rolle, "bis": time.time() + CODE_TAGE * 86400}
+        schreiben("zugaenge", d)
+    return {"code": f"{roh[:4]}-{roh[4:]}", "tage": CODE_TAGE}
+
+
+def code_pruefen(code):
+    """(Person, Rolle) zu einem gültigen Code, sonst None."""
+    if len(code_sauber(code)) != 8:
+        return None
+    z = zugaenge_lesen().get(code_hash(code))
+    if not z or not person_finden(z["person"]):
+        return None
+    return z["person"], z["rolle"]
 
 
 def geheimnis():
@@ -817,14 +959,15 @@ def modell_fuer(text, bild=None):
 
 def bildschirm_merken(bild, art="bildschirm"):
     with _lock:
-        _bildschirm.update(bild=bild, zeit=time.time(), art=art)
+        _bildschirme[person_jetzt()] = {"bild": bild, "zeit": time.time(), "art": art}
 
 
 def bildschirm_frisch():
     """Das Bildschirmfoto (oder Kamera-Foto) als (Zeit, Bytes, Art), solange es noch gilt, sonst None."""
     with _lock:
-        if _bildschirm["bild"] and time.time() - _bildschirm["zeit"] < BILDSCHIRM_GILT:
-            return _bildschirm["zeit"], _bildschirm["bild"], _bildschirm["art"]
+        b = _bildschirme.get(person_jetzt())
+        if b and time.time() - b["zeit"] < BILDSCHIRM_GILT:
+            return b["zeit"], b["bild"], b["art"]
         return None
 
 
@@ -885,6 +1028,7 @@ def hinweis(gesprochen=False, bild=False):
     zeit = morgenrunde_zeit()
     teile.append(f"Morgenrunde: jeden Tag um {zeit} Uhr." if zeit else "Morgenrunde: nicht eingestellt.")
     teile.append(checkin_text())
+    teile.append(freigabe_text())
     d = dolmetscher_jetzt()
     if d:
         teile.append(DOLMETSCHER.format(a=d["a"], b=d["b"]))
@@ -1488,30 +1632,34 @@ def gesundheit_streichen(eingabe):
 # ---------- Dolmetscher: Biko übersetzt ein Gespräch hin und her ----------
 
 DOLMETSCHER_GILT = 30 * 60   # so lange nach dem letzten Satz bleibt er an, dann ist er von selbst aus
-_dolmetscher = {"a": "", "b": "", "bis": 0.0}
+_dolmetscher_je = {}   # je Person {"a", "b", "bis"}, nur im Speicher
+
+
+def _dolm():
+    return _dolmetscher_je.setdefault(person_jetzt(), {"a": "", "b": "", "bis": 0.0})
 
 
 def dolmetscher_jetzt(verlaengern=False):
     """{"a", "b"} (die zwei Sprachen), solange Biko dolmetscht, sonst None. `verlaengern`: es wurde gerade gesprochen."""
     with _lock:
-        if not _dolmetscher["a"] or time.time() > _dolmetscher["bis"]:
+        if not _dolm()["a"] or time.time() > _dolm()["bis"]:
             return None
         if verlaengern:
-            _dolmetscher["bis"] = time.time() + DOLMETSCHER_GILT
-        return {"a": _dolmetscher["a"], "b": _dolmetscher["b"]}
+            _dolm()["bis"] = time.time() + DOLMETSCHER_GILT
+        return {"a": _dolm()["a"], "b": _dolm()["b"]}
 
 
 def dolmetscher(eingabe):
     if not eingabe.get("an"):
         with _lock:
-            _dolmetscher.update(a="", b="", bis=0.0)
+            _dolm().update(a="", b="", bis=0.0)
         return "Der Dolmetscher ist aus. Sag es der Person kurz in ihrer Sprache."
     a = " ".join(str(eingabe.get("sprache_a") or "Chinesisch").split())[:30]
     b = " ".join(str(eingabe.get("sprache_b") or "Deutsch").split())[:30]
     if a.casefold() == b.casefold():
         raise ValueError("Das sind zweimal dieselbe Sprache. Frag, in welche Sprache du übersetzen sollst.")
     with _lock:
-        _dolmetscher.update(a=a, b=b, bis=time.time() + DOLMETSCHER_GILT)
+        _dolm().update(a=a, b=b, bis=time.time() + DOLMETSCHER_GILT)
     return (f"Der Dolmetscher ist an ({a} und {b}). Sag jetzt in beiden Sprachen in einem kurzen Satz, dass du übersetzt. "
             "Ab der nächsten Frage übersetzt du nur noch.")
 
@@ -1644,6 +1792,8 @@ def familie_benachrichtigen(eingabe):
 
 def lebenszeichen():
     """Die Person hat etwas mit Biko gemacht. Kam heute schon eine Warnung hinaus, bekommt die Familie eine Entwarnung."""
+    if getattr(_faden, "besuch", False):
+        return
     t = jetzt()
     with _lock:
         d = checkin_lesen()
@@ -1850,6 +2000,95 @@ def medikamente_pruefen(t=None):
     return geschickt
 
 
+# ---------- Familienblick: die Familie sieht kurz, wie es der Person geht ----------
+# Nie den Inhalt der Gespräche. Was die Familie außer dem Lebenszeichen sieht, entscheidet die Person im Gespräch
+# (Werkzeug familie_freigabe). Das Gesundheitstagebuch ist erst sichtbar, wenn sie es ausdrücklich erlaubt.
+
+FREIGABE_STANDARD = {"erinnerungen": True, "listen": True, "geburtstage": True, "gesundheit": False}
+FREIGABE_NAMEN = {"erinnerungen": "Erinnerungen von heute", "listen": "Listen (z. B. Einkaufsliste)",
+                  "geburtstage": "die nächsten Geburtstage", "gesundheit": "das Gesundheitstagebuch"}
+
+
+def freigabe_lesen():
+    d = lesen("freigabe", {})
+    d = d if isinstance(d, dict) else {}
+    return {k: bool(d.get(k, v)) for k, v in FREIGABE_STANDARD.items()}
+
+
+def freigabe_text():
+    f = freigabe_lesen()
+    ja = [FREIGABE_NAMEN[k] for k, v in f.items() if v]
+    return ("Familienblick (falls die Familie ihn benutzt): sie sieht, wann die Person zuletzt mit dir geredet hat und ob "
+            "der Check-in heute erledigt ist, nie den Inhalt der Gespräche. Außerdem: "
+            + (", ".join(ja) if ja else "nichts weiter") + ".")
+
+
+def familie_freigabe(eingabe):
+    neu = freigabe_lesen()
+    for k in FREIGABE_STANDARD:
+        if isinstance(eingabe.get(k), bool):
+            neu[k] = eingabe[k]
+    with _lock:
+        schreiben("freigabe", neu)
+    return freigabe_text() + " Sag ihr kurz, was die Familie jetzt sieht."
+
+
+def erinnerungen_heute(t=None):
+    t = t or jetzt()
+    tag, datum = TAGE_REIHE[t.weekday()], t.strftime("%Y-%m-%d")
+    liste = []
+    for e in erinnerungen_lesen():
+        if not e.get("aktiv", True) or not (e["datum"] == datum if e.get("datum") else tag in e.get("tage", [])):
+            continue
+        eintrag = {"zeit": e["zeit"], "text": e["text"]}
+        if e.get("medikament"):   # bei Medikamenten: ob sie heute bestätigt sind
+            genommen = medikament_stand(e, t).get("genommen")
+            eintrag.update(medikament=True, genommen=genommen[11:16] if genommen else None,
+                           faellig=e["zeit"] <= t.strftime("%H:%M"))
+        liste.append(eintrag)
+    return sorted(liste, key=lambda e: e["zeit"])
+
+
+def familie_blick():
+    """Was die Familie über die gerade gesetzte Person sieht."""
+    t = jetzt()
+    p, d, f = profil(), checkin_lesen(), freigabe_lesen()
+    heute = t.strftime("%Y-%m-%d")
+    alarm = d.get("alarm") or {}
+    mal = sum(1 for g in gespraeche_lesen() for m in g.get("nachrichten", [])
+              if m.get("von") == "ich" and str(m.get("zeit", "")).startswith(heute))
+    blick = {
+        "person": person_jetzt(), "name": p["name"], "sprache": p["sprache"],
+        "zuletzt": d.get("zuletzt"), "heute_geredet": mal,
+        "checkin": {"zeit": d.get("zeit"), "gemeldet": gemeldet_heute(t),
+                    "alarm": alarm.get("datum") == heute, "entwarnt": bool(alarm.get("entwarnt"))
+                    if alarm.get("datum") == heute else False,
+                    "kontakte": [k["name"] for k in d.get("kontakte") or []]},
+        "freigabe": f,
+    }
+    if f["erinnerungen"]:
+        blick["erinnerungen"] = erinnerungen_heute(t)
+    if f["listen"]:
+        blick["listen"] = {name: [e["text"] for e in eintraege] for name, eintraege in listen_lesen().items() if eintraege}
+    if f["geburtstage"]:
+        geb = sorted((geburtstag_naechster(g, t.date()) + (g,) for g in geburtstage_lesen()), key=lambda x: x[0])[:3]
+        blick["geburtstage"] = [{"name": g["name"], "tag": g["tag"], "monat": g["monat"], "in_tagen": tage,
+                                 "alter": alter} for tage, alter, g in geb]
+    if f["gesundheit"]:
+        seit = (t - timedelta(days=14)).isoformat(timespec="seconds")
+        blick["gesundheit"] = [{"zeit": e["zeit"], "art": TAGEBUCH_ARTEN[e["art"]], "wert": e["wert"],
+                                "notiz": e.get("notiz") or ""} for e in tagebuch_lesen() if e["zeit"] >= seit][-30:]
+    return blick
+
+
+def kosten_monat():
+    """KI-Kosten der gerade gesetzten Person in diesem Monat (Dollar) und Zahl der Antworten."""
+    monat = jetzt().strftime("%Y-%m")
+    tage = [v for k, v in lesen("kosten", {}).items() if k.startswith(monat)]
+    return {"dollar": round(sum(v.get("ki", 0) for v in tage), 2), "antworten": sum(v.get("antworten", 0) for v in tage),
+            "zeichen": sum(v.get("zeichen", 0) for v in tage)}
+
+
 # ---------- Geburtstage: Biko denkt rechtzeitig daran ----------
 
 MAX_GEBURTSTAGE = 200
@@ -2002,6 +2241,19 @@ def morgenrunde_heute(erzeugen=False):
 def hausmeister():
     """Läuft im Hintergrund: bereitet die Morgenrunde vor, schaut nach dem Check-in und nach den Medikamenten."""
     while True:
+        hausmeister_runde()
+        time.sleep(60)
+
+
+def hausmeister_runde():
+    """Einmal bei jeder Person vorbeischauen."""
+    try:
+        personen = personen_lesen()
+    except Exception as e:
+        protokoll(f"Hausmeister-Fehler: {type(e).__name__}")
+        return
+    for p in personen:
+        person_setzen(p["id"])
         try:
             morgenrunde_heute(erzeugen=True)
         except Exception as e:   # der Hausmeister darf nie stehen bleiben
@@ -2014,7 +2266,7 @@ def hausmeister():
             medikamente_pruefen()
         except Exception as e:
             protokoll(f"Hausmeister-Fehler bei den Medikamenten: {type(e).__name__}")
-        time.sleep(60)
+    person_setzen(None)
 
 
 WERKZEUGE = {
@@ -2044,6 +2296,21 @@ WERKZEUGE = {
             "properties": {"text": {"type": "string", "description": "Kurz und klar, z. B. 'Ich bin in der Küche gestürzt "
                                                                      "und komme nicht auf. Die Rettung ist verständigt.'"}},
             "required": ["text"],
+        },
+    }},
+    "familie_freigabe": {"tun": familie_freigabe, "schema": {
+        "name": "familie_freigabe",
+        "description": "Stellt ein, was die Familie im Familienblick sieht (außer dem Lebenszeichen). Nur wenn die Person "
+                       "es selbst sagt, z. B. 'Meine Tochter darf meinen Blutdruck sehen' oder 'Die Familie soll meine "
+                       "Einkaufsliste nicht sehen'. Nur die Teile angeben, die sich ändern.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "erinnerungen": {"type": "boolean", "description": "Die Erinnerungen von heute (z. B. Tabletten)."},
+                "listen": {"type": "boolean", "description": "Die Listen, z. B. die Einkaufsliste."},
+                "geburtstage": {"type": "boolean", "description": "Die nächsten Geburtstage."},
+                "gesundheit": {"type": "boolean", "description": "Das Gesundheitstagebuch der letzten zwei Wochen."},
+            },
         },
     }},
     "dolmetscher": {"tun": dolmetscher, "schema": {
@@ -2203,19 +2470,50 @@ WERKZEUGE = {
 
 # ---------- HTTP ----------
 
-def cookie_wert():
-    zeit = str(int(time.time()))
-    sig = hmac.new(geheimnis().encode(), zeit.encode(), hashlib.sha256).hexdigest()
-    return f"{zeit}.{sig}"
+# Ein Cookie sagt, wer da ist: 2.<rolle>.<person>.<version>.<zeit>.<signatur>
+#   verwalter  mit dem Passwort angemeldet (Niko): sieht alle Personen, legt neue an, kann Biko als jede Person öffnen
+#   person     mit ihrem Code angemeldet: redet mit Biko, sieht nur die eigenen Daten
+#   familie    mit dem Familiencode angemeldet: sieht nur den Familienblick ihrer Person
+# Alte Cookies (<zeit>.<signatur>, von vor den Konten) gelten als Verwalter bei der ersten Person.
+
+def _signatur(text):
+    return hmac.new(geheimnis().encode(), text.encode(), hashlib.sha256).hexdigest()
+
+
+def cookie_wert(rolle="verwalter", pid=None, version=0):
+    pid = pid or erste_person()
+    text = f"2.{rolle}.{pid}.{version}.{int(time.time())}"
+    return f"{text}.{_signatur(text)}"
+
+
+def sitzung_aus(wert):
+    """{"rolle", "person"} zu einem gültigen Cookie, sonst None."""
+    try:
+        teile = str(wert).split(".")
+        if len(teile) == 2:   # altes Cookie
+            zeit, sig = teile
+            if hmac.compare_digest(sig, _signatur(zeit)) and time.time() - int(zeit) < COOKIE_TAGE * 86400:
+                return {"rolle": "verwalter", "person": erste_person()}
+            return None
+        if len(teile) != 6 or teile[0] != "2":
+            return None
+        _, rolle, pid, version, zeit, sig = teile
+        if not hmac.compare_digest(sig, _signatur(".".join(teile[:5]))):
+            return None
+        if time.time() - int(zeit) >= COOKIE_TAGE * 86400 or rolle not in ("verwalter",) + ROLLEN:
+            return None
+        p = person_finden(pid)
+        if not p:
+            return None
+        if rolle != "verwalter" and int(version) != p.get("version", 1):
+            return None   # die Geräte dieser Person wurden abgemeldet
+        return {"rolle": rolle, "person": pid}
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 
 def cookie_ok(wert):
-    try:
-        zeit, sig = wert.split(".", 1)
-        gut = hmac.new(geheimnis().encode(), zeit.encode(), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(sig, gut) and time.time() - int(zeit) < COOKIE_TAGE * 86400
-    except (ValueError, AttributeError):
-        return False
+    return sitzung_aus(wert) is not None
 
 
 # Fehlermeldungen auf Chinesisch (die App schickt X-Sprache: zh-CN)
@@ -2233,7 +2531,10 @@ ZH = {
     "Höchstens 30 Erinnerungen.": "最多 30 个提醒。",
     "Zu viele Versuche. Bitte in 15 Minuten nochmal.": "尝试次数太多。请 15 分钟后再试。",
     "Am Server ist noch kein Passwort eingestellt (APP_PASSWORT).": "服务器还没有设置密码（APP_PASSWORT）。",
-    "Das Passwort stimmt nicht.": "密码不对。",
+    "Das Passwort oder der Code stimmt nicht.": "密码或邀请码不对。",
+    "Das ist nur für die Person selbst.": "这个只有本人可以用。",
+    "Das ist nur für den Verwalter.": "这个只有管理员可以用。",
+    "Bitte einen Namen angeben.": "请填写名字。",
     "Der Sprachdienst ist nicht eingerichtet.": "语音服务还没有设置好。",
     "Der Schlüssel für die Stimme fehlt, stimmt nicht oder das Guthaben ist aufgebraucht. Bitte Niko Bescheid geben.":
         "语音服务的密钥缺失、不正确，或者余额用完了。请告诉 Niko。",
@@ -2327,11 +2628,42 @@ class Handler(BaseHTTPRequestHandler):
         return daten
 
     def angemeldet(self):
+        """Die Sitzung ({"rolle", "person"}) oder None. Setzt auch, wessen Daten diese Anfrage liest und schreibt."""
+        if hasattr(self, "_sitzung"):
+            return self._sitzung
+        self._sitzung = None
         for teil in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = teil.strip().partition("=")
-            if k == COOKIE and cookie_ok(v):
-                return True
-        return False
+            if k == COOKIE:
+                self._sitzung = sitzung_aus(v)
+                if self._sitzung:
+                    break
+        if self._sitzung:
+            person_setzen(self._sitzung["person"])
+            # Der Verwalter zu Besuch bei einer anderen Person zählt nicht als ihr Lebenszeichen
+            _faden.besuch = self._sitzung["rolle"] == "verwalter" and self._sitzung["person"] != erste_person()
+        return self._sitzung
+
+    def neu_anfangen(self):
+        """Am Anfang jeder Anfrage: noch niemand angemeldet (eine Verbindung kann mehrere Anfragen tragen)."""
+        self.__dict__.pop("_sitzung", None)
+        person_setzen(None)
+        _faden.besuch = False
+
+    def darf(self, pfad):
+        """None, wenn die Rolle diesen Weg benutzen darf, sonst die Antwort (401 oder 403)."""
+        s = self.angemeldet()
+        if not s:
+            return 401, {"fehler": "Bitte anmelden."}
+        if s["rolle"] == "familie" and pfad not in ("/api/familie", "/api/abmelden"):
+            return 403, {"fehler": "Das ist nur für die Person selbst."}
+        if s["rolle"] != "verwalter" and pfad.startswith("/api/verwaltung"):
+            return 403, {"fehler": "Das ist nur für den Verwalter."}
+        return None
+
+    def cookie_setzen(self, wert, tage=COOKIE_TAGE):
+        sicher = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+        return {"Set-Cookie": f"{COOKIE}={wert}; Max-Age={tage * 86400}; Path=/; HttpOnly; SameSite=Strict{sicher}"}
 
     def ip(self):
         # Letzter Eintrag: den setzt der eigene Proxy (Tailscale), frühere kann ein Angreifer fälschen
@@ -2339,13 +2671,19 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- Routen ---
     def do_GET(self):
+        self.neu_anfangen()
         pfad = self.path.split("?")[0]
         if pfad == "/api/status":
-            return self.senden(200, {"angemeldet": self.angemeldet(), "passwort_gesetzt": bool(PASSWORT),
+            s = self.angemeldet()
+            return self.senden(200, {"angemeldet": bool(s), "rolle": s["rolle"] if s else None,
+                                     "name": profil()["name"] if s else None, "passwort_gesetzt": bool(PASSWORT),
                                      "sprachdienst": bool(SPRACH_KEY)})
         if pfad.startswith("/api/"):
-            if not self.angemeldet():
-                return self.senden(401, {"fehler": "Bitte anmelden."})
+            nein = self.darf(pfad)
+            if nein:
+                return self.senden(*nein)
+            if pfad == "/api/familie":
+                return self.senden(200, self.familie_uebersicht())
             if pfad == "/api/profil":
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
@@ -2375,6 +2713,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.datei(pfad)
 
     def do_POST(self):
+        self.neu_anfangen()
         pfad = self.path.split("?")[0]
         try:
             if pfad == "/api/zuhoeren":
@@ -2384,8 +2723,13 @@ class Handler(BaseHTTPRequestHandler):
             daten = self.json_body()
             if pfad == "/api/login":
                 return self.login(daten)
-            if not self.angemeldet():
-                return self.senden(401, {"fehler": "Bitte anmelden."})
+            nein = self.darf(pfad)
+            if nein:
+                return self.senden(*nein)
+            if pfad == "/api/abmelden":
+                return self.senden(200, {"ok": True}, extra=self.cookie_setzen("", tage=0))
+            if pfad.startswith("/api/verwaltung/"):
+                return self.verwaltung(pfad, daten)
             if pfad == "/api/chat":
                 text = str(daten.get("text", "")).strip()
                 if not text or len(text) > MAX_TEXT:
@@ -2487,8 +2831,9 @@ class Handler(BaseHTTPRequestHandler):
         if n > MAX_AUFNAHME:
             raise ValueError("Die Aufnahme ist zu lang. Bitte kürzer sprechen.")
         ton = self.rfile.read(n)
-        if not self.angemeldet():
-            return self.senden(401, {"fehler": "Bitte anmelden."})
+        nein = self.darf("/api/aufnahme")
+        if nein:
+            return self.senden(*nein)
         if not SPRACH_KEY:
             raise RuntimeError("Der Sprachdienst ist nicht eingerichtet.")
         art = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -2503,8 +2848,9 @@ class Handler(BaseHTTPRequestHandler):
         if n > MAX_BILDSCHIRM:
             raise ValueError("Das Bild ist zu groß.")
         bild = self.rfile.read(n)
-        if not self.angemeldet():
-            return self.senden(401, {"fehler": "Bitte anmelden."})
+        nein = self.darf("/api/aufnahme")
+        if nein:
+            return self.senden(*nein)
         if not bild.startswith(b"\xff\xd8"):
             raise ValueError("Das hat nicht geklappt, bitte nochmal.")
         art = "foto" if "foto" in parse_qs(urlparse(self.path).query, keep_blank_values=True) else "bildschirm"
@@ -2513,24 +2859,68 @@ class Handler(BaseHTTPRequestHandler):
         return self.senden(200, {"ok": True})
 
     def login(self, daten):
+        """Mit dem Passwort (Verwalter) oder einem Einladungscode (die Person selbst oder ihre Familie)."""
         ip = self.ip()
         versuche = [t for t in _fehlversuche.get(ip, []) if time.time() - t < 900]
         if len(versuche) >= 5:
             return self.senden(429, {"fehler": "Zu viele Versuche. Bitte in 15 Minuten nochmal."})
-        if not PASSWORT:
-            return self.senden(503, {"fehler": "Am Server ist noch kein Passwort eingestellt (APP_PASSWORT)."})
-        if not hmac.compare_digest(str(daten.get("passwort", "")).encode(), PASSWORT.encode()):
+        eingabe = str(daten.get("code") or daten.get("passwort") or "")
+        rolle, pid, version = None, None, 0
+        if PASSWORT and hmac.compare_digest(eingabe.encode(), PASSWORT.encode()):
+            rolle = "verwalter"
+        else:
+            gefunden = code_pruefen(eingabe)
+            if gefunden:
+                pid, rolle = gefunden
+                version = person_finden(pid).get("version", 1)
+        if not rolle:
+            if not PASSWORT and not daten.get("code"):
+                return self.senden(503, {"fehler": "Am Server ist noch kein Passwort eingestellt (APP_PASSWORT)."})
             versuche.append(time.time())
             _fehlversuche[ip] = versuche
-            return self.senden(403, {"fehler": "Das Passwort stimmt nicht."})
+            return self.senden(403, {"fehler": "Das Passwort oder der Code stimmt nicht."})
         _fehlversuche.pop(ip, None)
-        sicher = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
-        cookie = f"{COOKIE}={cookie_wert()}; Max-Age={COOKIE_TAGE * 86400}; Path=/; HttpOnly; SameSite=Strict{sicher}"
-        return self.senden(200, {"ok": True}, extra={"Set-Cookie": cookie})
+        protokoll(f"Anmeldung: {rolle}")
+        return self.senden(200, {"ok": True, "rolle": rolle},
+                           extra=self.cookie_setzen(cookie_wert(rolle, pid, version)))
+
+    # --- Familie und Verwaltung ---
+    def familie_uebersicht(self):
+        s = self.angemeldet()
+        if s["rolle"] != "verwalter":
+            return {"rolle": s["rolle"], "personen": [familie_blick()]}
+        liste = []
+        for p in personen_lesen():
+            person_setzen(p["id"])
+            liste.append({**familie_blick(), "bezeichnung": p["name"], "kosten": kosten_monat(),
+                          "offen": p["id"] == s["person"]})
+        person_setzen(s["person"])
+        return {"rolle": "verwalter", "personen": liste}
+
+    def verwaltung(self, pfad, daten):
+        if pfad == "/api/verwaltung/person":
+            p = person_anlegen(daten.get("name"), str(daten.get("sprache") or "de-AT"), str(daten.get("anrede") or "du"))
+            protokoll("Verwaltung: neue Person angelegt")
+            return self.senden(200, {"person": p["id"], "person_code": code_erzeugen(p["id"], "person"),
+                                     "familie_code": code_erzeugen(p["id"], "familie")})
+        pid = str(daten.get("person") or "")
+        if not person_finden(pid):
+            return self.senden(404, {"fehler": "Gibt es nicht."})
+        if pfad == "/api/verwaltung/code":
+            return self.senden(200, code_erzeugen(pid, str(daten.get("rolle") or "")))
+        if pfad == "/api/verwaltung/oeffnen":   # Biko als diese Person öffnen, z. B. zum Einrichten
+            return self.senden(200, {"ok": True}, extra=self.cookie_setzen(cookie_wert("verwalter", pid)))
+        if pfad == "/api/verwaltung/abmelden":
+            person_abmelden(pid)
+            protokoll("Verwaltung: Geräte einer Person abgemeldet")
+            return self.senden(200, {"ok": True})
+        return self.senden(404, {"fehler": "Gibt es nicht."})
 
     def datei(self, pfad):
         if pfad in ("", "/"):
             pfad = "/index.html"
+        if pfad == "/familie":
+            pfad = "/familie.html"
         ziel = (WEB / pfad.lstrip("/")).resolve()
         if not str(ziel).startswith(str(WEB.resolve())) or not ziel.is_file():
             ziel = WEB / "index.html"

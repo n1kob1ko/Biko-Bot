@@ -10,6 +10,8 @@ const { chromium, devices } = require('playwright');
 const PORT = 8097;
 const URL = `http://127.0.0.1:${PORT}/`;
 let server, browser, daten;
+// Die Daten der ersten Person liegen in einem eigenen Ordner (jede Person hat ihren)
+const personDaten = () => path.join(daten, 'personen', JSON.parse(fs.readFileSync(path.join(daten, 'personen.json'), 'utf8'))[0].id);
 
 test.before(async () => {
   daten = fs.mkdtempSync(path.join(os.tmpdir(), 'biko-helfer-'));
@@ -429,7 +431,7 @@ test('Morgenrunde: im Gespräch eingestellt, die Android-App bekommt die Wecker 
     '6. 17:00 Biko: Erinnerung: Blumen gießen',
   ]);
   await erinnerungenSetzen(p, []);
-  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), '{}');
+  fs.writeFileSync(path.join(personDaten(), 'morgenrunde.json'), '{}');
   assert.deepEqual(p.fehler, []);
 });
 
@@ -441,7 +443,7 @@ test('Geburtstage: im Gespräch gemerkt, die Android-App meldet sich am Tag um 9
   const kurz = zuletzt.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.titel}: ${m.text}`);
   // Die Uhr der Seite steht auf Montag, 5.1., 15 Uhr
   assert.deepEqual(kurz, ['6. 09:00 Biko: Heute wird Peter 40! Soll ich dir einen Glückwunsch schreiben?']);
-  fs.writeFileSync(path.join(daten, 'geburtstage.json'), '[]');
+  fs.writeFileSync(path.join(personDaten(), 'geburtstage.json'), '[]');
   assert.deepEqual(p.fehler, []);
 });
 
@@ -456,9 +458,9 @@ test('Check-in: im Gespräch eingestellt, die Android-App fragt jeden Tag, die B
   const kurz = zuletzt.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.titel}: ${m.text}`);
   // Die Uhr der Seite steht auf Montag, 5.1., 15 Uhr
   assert.deepEqual(kurz, ['6. 10:00', '7. 10:00'].map((w) => `${w} Biko: Ist bei dir alles in Ordnung? Tipp hier und sag kurz Hallo.`));
-  const ci = JSON.parse(fs.readFileSync(path.join(daten, 'checkin.json'), 'utf8'));
+  const ci = JSON.parse(fs.readFileSync(path.join(personDaten(), 'checkin.json'), 'utf8'));
   assert.deepEqual(ci.kontakte, [{ name: 'Peter', nummer: '0664 1234567' }]);
-  fs.writeFileSync(path.join(daten, 'checkin.json'), '{}');
+  fs.writeFileSync(path.join(personDaten(), 'checkin.json'), '{}');
   assert.deepEqual(p.fehler, []);
 });
 
@@ -486,7 +488,7 @@ test('Morgenrunde: ein Tipp auf die Mitteilung öffnet sie, Biko liest sie vor, 
   // Am Server ist sie in 5 Minuten fällig (Wiener Zeit), eingestellt seit gestern
   const wien = new Intl.DateTimeFormat('de-AT', { timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const zeit = wien.format(new Date(Date.now() + 5 * 60 * 1000));
-  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), JSON.stringify({ zeit, seit: new Date(Date.now() - 86400000).toISOString() }));
+  fs.writeFileSync(path.join(personDaten(), 'morgenrunde.json'), JSON.stringify({ zeit, seit: new Date(Date.now() - 86400000).toISOString() }));
   const p = await angemeldet(t);
   const vorlesen = p.waitForRequest((r) => r.url().endsWith('/api/vorlesen'));
   await p.goto(URL + '?morgenrunde');
@@ -495,7 +497,7 @@ test('Morgenrunde: ein Tipp auf die Mitteilung öffnet sie, Biko liest sie vor, 
   assert.match((await vorlesen).postData(), /Guten Morgen/);
   await fragen(p, 'Gibt es Angebote für Kaffee?');
   assert.equal(await p.locator('.blase.biko-sagt').count(), 2, 'im selben Gespräch');
-  fs.writeFileSync(path.join(daten, 'morgenrunde.json'), '{}');
+  fs.writeFileSync(path.join(personDaten(), 'morgenrunde.json'), '{}');
   assert.deepEqual(p.fehler, []);
 });
 
@@ -1009,4 +1011,50 @@ test('Biko merkt sich, was man über sich erzählt, und in den Einstellungen kan
   await p.waitForFunction(() => !document.querySelector('#wissen').textContent.includes('Hat Diabetes'));
   assert.deepEqual(await p.evaluate(async () => (await fetch('/api/wissen')).json()), []);
   assert.deepEqual(p.fehler, []);
+});
+
+test('Mehrere Personen: der Verwalter legt Oma an, Oma meldet sich mit dem Link an, die Familie sieht, wie es ihr geht', async (t) => {
+  const niko = await angemeldet(t);
+  await zu(niko, 'einstellen');
+  await niko.click('#zur-familie');
+  await niko.waitForSelector('#neu:not([hidden])');
+  assert.equal(await niko.locator('.person').count(), 1, 'bisher nur die erste Person');
+  await niko.fill('#neu-name', 'Oma Mei');
+  await niko.selectOption('#neu-sprache', 'zh-CN');
+  await niko.click('#neu-knopf');
+  const karte = niko.locator('.person', { hasText: 'Oma Mei' });
+  await karte.locator('.code-karte').nth(1).waitFor();
+  const [omaLink, familieLink] = await karte.locator('.code-karte .link').allTextContents();
+  assert.match(omaLink, /\/\?code=[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+  assert.match(familieLink, /\/familie\.html\?code=/);
+  assert.match(await karte.textContent(), /KI diesen Monat: 0,00 US-Dollar/);
+
+  // Oma öffnet ihren Link auf ihrem Handy: Biko grüßt sie, nicht Niko
+  const oma = await seite(t);
+  await oma.goto(omaLink);
+  await oma.waitForSelector('#app:not([hidden])');
+  await oma.waitForFunction(() => document.querySelector('#gruss').textContent.includes('Oma Mei'));
+  assert.equal(await oma.isVisible('#zur-familie'), false, 'Oma sieht keine Verwaltung');
+  await fragen(oma, 'Erinnere mich um 8 an die Tablette');
+  await oma.waitForSelector('.notiz');
+
+  // Die Familie öffnet ihren Link: sieht, dass Oma heute da war, und die Erinnerung, aber nichts aus dem Gespräch
+  const familie = await seite(t, { uhr: new Date() });
+  await familie.goto(familieLink);
+  const blick = familie.locator('.person');
+  await blick.waitFor();
+  assert.equal(await blick.count(), 1);
+  assert.equal(await familie.getAttribute('.status', 'data-art'), 'gut');
+  assert.match(await blick.textContent(), /Heute schon bei Biko gewesen/);
+  assert.match(await blick.textContent(), /08:00\s*Herztablette/);
+  assert.doesNotMatch(await blick.textContent(), /Tablette um 8/, 'kein Gesprächsinhalt');
+  assert.equal(await familie.locator('.verwalten').count(), 0, 'die Familie verwaltet nichts');
+
+  // Niko sieht jetzt beide Personen und kann Biko als Oma öffnen
+  await niko.reload();
+  await niko.locator('.person', { hasText: 'Oma Mei' }).waitFor();
+  assert.equal(await niko.locator('.person').count(), 2);
+  assert.deepEqual([...niko.fehler, ...oma.fehler, ...familie.fehler], []);
+  // Die Familie kommt nicht in Omas Biko
+  assert.equal((await familie.evaluate(() => fetch('/api/gespraeche').then((r) => r.status))), 403);
 });

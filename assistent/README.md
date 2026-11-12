@@ -264,18 +264,30 @@ wird nach Dauer abgerechnet), deshalb legt Biko nach 90 Sekunden Stille selbst a
 
 ## Daten
 
-Alles liegt im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
-`erinnerungen.json`, `wissen.json`, `listen.json`, `gesundheit.json`, `geburtstage.json`, `checkin.json`, `morgenrunde.json`, `kosten.json`, `gespraeche.json` (die letzten 40 Gespräche). Der eine Verlauf der ersten Version
+Jede Person hat ihren eigenen Ordner `personen/<id>/` im Datenordner des Servers (`DATA_DIR`, mit Docker `assistent/daten/`): `profil.json`,
+`erinnerungen.json`, `wissen.json`, `listen.json`, `gesundheit.json`, `geburtstage.json`, `checkin.json`, `morgenrunde.json`, `kosten.json`, `freigabe.json`, `gespraeche.json` (die letzten 40 Gespräche). Direkt im Datenordner liegen nur `personen.json`, `zugaenge.json` (Einladungscodes, nur als Hash) und `geheimnis.txt`. Daten aus der Zeit vor den Konten ziehen beim ersten Start in den Ordner der ersten Person. Der eine Verlauf der ersten Version
 (`verlauf.json`) wird beim ersten Start als ein Gespräch übernommen. Die Texte gehen zum Beantworten an die
 Claude-API von Anthropic. Mit Sprachdienst gehen außerdem die vorgelesenen Texte und die Aufnahmen aus dem
 Mikrofon an ElevenLabs. Am eigenen Server wird kein Ton gespeichert. "Alle Gespräche vergessen" in den Einstellungen löscht den ganzen
 Verlauf, einzelne Gespräche löscht man im Bereich "Verlauf". Das Server-Log enthält keine Inhalte.
 
-## Eine Person pro Installation
+## Mehrere Personen und Familienblick
 
-Es gibt ein Profil und einen gemeinsamen Verlauf. Für eine zweite Person den Ordner kopieren und mit anderem Port
-starten (`HELFER_PORT=8093` in der `.env`, anderer `container_name`). Mehrere Personen in einer Installation
-sind ein möglicher nächster Schritt.
+Wer sich mit `APP_PASSWORT` anmeldet, ist **Verwalter**. In Einstellen führt "Personen und Familienblick" zu
+`/familie.html`: dort legt der Verwalter eine neue Person an (Name, Sprache, du/Sie) und bekommt zwei Codes,
+14 Tage gültig und auf mehreren Handys verwendbar:
+
+- **Code für die Person**: Link `/?code=XXXX-XXXX` am Handy öffnen oder den Code im Anmeldefeld eintippen. Danach
+  bleibt das Handy ein Jahr angemeldet und sieht nur die eigenen Daten (eigenes Gedächtnis, eigene Listen ...).
+- **Code für die Familie**: Link `/familie.html?code=...`. Die Familie sieht nur den Familienblick: wann die Person
+  zuletzt bei Biko war, wie oft sie heute geredet hat, ob der Check-in erledigt ist oder die Warn-SMS hinausging.
+  Dazu Erinnerungen von heute, Listen und Geburtstage, solange die Person das nicht im Gespräch abstellt
+  (Werkzeug `familie_freigabe`). Das Gesundheitstagebuch sieht die Familie erst, wenn die Person es erlaubt.
+  Den Inhalt der Gespräche sieht nie jemand.
+
+Der Verwalter sieht alle Personen mit ihren Kosten im Monat, kann Biko als eine Person öffnen (zählt nicht als ihr
+Lebenszeichen) und alle Geräte einer Person samt Familie abmelden. Ein neuer Code ersetzt den alten derselben Art.
+Morgenrunde und Check-in laufen für jede Person.
 
 ## Entwickeln und testen
 

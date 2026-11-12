@@ -161,8 +161,9 @@
     $('#login-fehler').textContent = '';
     knopf.disabled = true;
     try {
-      await api('/api/login', { passwort: $('#passwort').value });
+      const j = await api('/api/login', { passwort: $('#passwort').value });
       $('#passwort').value = '';
+      if (j.rolle === 'familie') { location.replace('/familie.html'); return; }
       await starten();
     } catch (err) { $('#login-fehler').textContent = err.message; }
     knopf.disabled = false;
@@ -177,7 +178,18 @@
       $('#login-fehler').textContent = err.message;
       return;
     }
+    // Mit einem Link aus der Einladung (/?code=...) meldet sich das Handy gleich selbst an
+    const code = new URLSearchParams(location.search).get('code');
+    if (code && !s.angemeldet) {
+      try {
+        const j = await api('/api/login', { code });
+        if (j.rolle === 'familie') { location.replace('/familie.html'); return; }
+        s = await api('/api/status');
+      } catch (err) { loginZeigen(); $('#passwort').value = code; $('#login-fehler').textContent = err.message; return; }
+    }
     if (!s.angemeldet) { loginZeigen(); return; }
+    if (s.rolle === 'familie') { location.replace('/familie.html'); return; }
+    $('#zur-familie').hidden = s.rolle !== 'verwalter';
     sprachdienst = !!s.sprachdienst;
     let mr;
     let ci;
