@@ -815,6 +815,32 @@ test('Fehler vom Server: Biko sagt es und der Text bleibt im Feld', async (t) =>
   assert.equal((await p.inputValue('#chat-text')).length, 2100);
 });
 
+test('Medikament: Biko fragt "Genommen?", nach einer halben Stunde noch einmal, und "Genommen" landet am Server', async (t) => {
+  const p = await angemeldet(t, { uhr: '2026-01-05T08:31:00' });
+  const vorher = await erinnerungenHolen(p);
+  try {
+    await erinnerungenSetzen(p, [{ id: 'med1', zeit: '08:00', text: 'Herztablette', medikament: true,
+      melden: [{ name: 'Peter', nummer: '0664 1234567' }] }]);
+    await p.evaluate(() => localStorage.setItem('gezeigt-med1-2026-01-05', '1')); // die erste Erinnerung kam schon
+    await p.reload();
+    await p.waitForSelector('#alarm:not([hidden])');
+    assert.equal(await p.textContent('#alarm-titel'), 'Schon genommen?');
+    assert.equal(await p.textContent('#alarm-ok span'), 'Genommen');
+    if (process.env.BILD) { await p.waitForTimeout(1500); await p.screenshot({ path: process.env.BILD }); }
+    await p.click('#alarm-ok');
+    await p.waitForSelector('#alarm', { state: 'hidden' });
+    const liste = await erinnerungenHolen(p);
+    assert.ok(liste[0].genommen);
+    assert.equal(liste[0].melden[0].name, 'Peter');
+    await p.reload();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.waitForTimeout(300);
+    assert.equal(await p.isVisible('#alarm'), false);
+  } finally {
+    await erinnerungenSetzen(p, vorher);
+  }
+});
+
 test('Fällige Erinnerung geht von selbst auf, "später" schließt sie und sie kommt nicht sofort wieder', async (t) => {
   const p = await angemeldet(t, { uhr: '2026-01-05T08:01:00' });
   const vorher = await erinnerungenHolen(p);

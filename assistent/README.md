@@ -90,6 +90,16 @@ Im Notfall ("Ich bin gestürzt") zeigt Biko zuerst den Knopf für 144 und schick
 
 Ohne diese drei Werte fragt Biko trotzdem nach, sagt aber ehrlich, dass er der Familie noch keine SMS schicken kann.
 
+**Medikamente mit Nachfrage:** "Erinnere mich jeden Tag um 8 an die Herztablette, und sag Peter Bescheid, wenn ich sie
+vergesse" (Werkzeug `erinnerung_merken` mit `medikament`, optional `familie` und `kontakte`; ohne Kontakte nimmt Biko die
+vom Check-in). Zur Uhrzeit kommt die Erinnerung mit "Genommen" statt "Erledigt", Biko fragt "Hast du es genommen?".
+Kommt keine Antwort, fragt er nach 30 Minuten noch einmal ("Schon genommen?"), in der App und über die Wecker der
+Android-App. Bestätigt wird mit dem Knopf (`POST /api/medikament/genommen`) oder einfach im Gespräch ("ja, hab ich",
+Werkzeug `medikament_genommen`); das steht dann auch im Gesundheitstagebuch. Wer es schon vor der Uhrzeit gesagt hat,
+bekommt keine Erinnerung mehr. Ist es eine Stunde nach der Uhrzeit (`melden_nach`, 30 bis 240 Minuten) nicht bestätigt,
+bekommen die Kontakte einmal eine SMS über Twilio, und bestätigt sie danach, eine Entwarnung. Der Stand von heute steht im
+Hinweis der App (`medikamente.json`, zwei Wochen). Biko ändert nie Dosierungen und rät nichts zum Nachholen.
+
 **Anrufen, WhatsApp und SMS:** "Ruf meinen Sohn an" stellt einen großen gelben Knopf "Peter anrufen" unter die Antwort
 (`tel:`-Link, Werkzeug `anruf_zeigen`). Die Nummer kennt Biko aus dem, was er sich über die Person gemerkt hat; kennt er sie
 nicht, fragt er und merkt sie sich. Er erfindet nie eine Nummer und ruft nie selbst an. Bei Notfällen zeigt er den Knopf für

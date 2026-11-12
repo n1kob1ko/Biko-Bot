@@ -1201,6 +1201,7 @@
       if (!angemeldet || telefon) return;
       if (art === 'morgenrunde') return morgenrundeHoeren();
       if (art === 'checkin') return checkinFragen();
+      if (art === 'nachfrage' || erinnerungen.some((er) => er.id === id && er.medikament)) return medikamentFragen(art, id, text);
       merken(L.gezeigtSchluessel({ id }, new Date()), '1');
       ton();
       const k = neu('button'); // unsichtbar: zeigt nur, wann Biko fertig vorgelesen hat
@@ -1208,6 +1209,20 @@
       vorlesen(art === 'geburtstag' ? text : `${t('erinnerung')}: ${text}`, k);
       sprichtMelden();
     };
+    // Medikament aus der Blase: ist es heute schon genommen, bleibt Biko still. Sonst fragt er, und man antwortet ihm
+    // einfach ("ja, hab ich"), das bestätigt er im Gespräch.
+    async function medikamentFragen(art, id, text) {
+      try { erinnerungen = await api('/api/erinnerungen'); } catch (e) { /* kein Netz: lieber fragen */ }
+      const er = erinnerungen.find((x) => x.id === id);
+      if (er && er.genommen) return;
+      const jetzt = new Date();
+      merken(art === 'nachfrage' ? L.nachfrageSchluessel({ id }, jetzt) : L.gezeigtSchluessel({ id }, jetzt), '1');
+      ton();
+      const k = neu('button');
+      k.appendChild(neu('span'));
+      vorlesen(t(art === 'nachfrage' ? 'nachfrage_sagen' : 'medikament_sagen').replace('{text}', (er && er.text) || text), k);
+      sprichtMelden();
+    }
   }
 
   $('#chat-form').addEventListener('submit', (e) => {
@@ -1289,7 +1304,12 @@
     ul.replaceChildren(...erinnerungen.map((er) => {
       const li = neu('li', 'erinnerung reihe');
       const mitte = neu('div');
-      mitte.append(neu('div', '', er.text), neu('div', 'tage-text', L.wannText(er, T[sprache], new Date())));
+      let wann = L.wannText(er, T[sprache], new Date());
+      if (er.medikament) {
+        wann += ', ' + (er.genommen ? t('genommen_um').replace('{zeit}', er.genommen.slice(11, 16)) : t('medikament_kurz'));
+        if (er.melden && er.melden.length) wann += ', ' + t('medikament_melden').replace('{wer}', er.melden.map((k) => k.name).join(', '));
+      }
+      mitte.append(neu('div', '', er.text), neu('div', 'tage-text', wann));
       const [weg, sicher] = loeschKnopf(er.text, 'loeschen_frage', async () => {
         const liste = await api('/api/erinnerungen', { erinnerungen: erinnerungen.filter((x) => x.id !== er.id) });
         await verschwinden(li);
@@ -1337,7 +1357,9 @@
       gezeigt: new Set(speicherSchluessel().filter((k) => k.startsWith('gezeigt-'))),
       spaeter: spaeterLesen(),
     });
-    if (er) alarmZeigen(er);
+    if (er) return alarmZeigen(er);
+    const nf = L.faelligeNachfrage({ erinnerungen, jetzt: new Date(), gezeigt: new Set(speicherSchluessel()) });
+    if (nf) alarmZeigen(nf, true);
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) erinnerungPruefen(); });
 
@@ -1348,7 +1370,8 @@
       ? { ...m, titel: t('morgen_titel'), text: t('morgen_text') }
       : m.art === 'geburtstag' ? { ...m, titel: 'Biko', text: geburtstagText(m) }
         : m.art === 'checkin' ? { ...m, titel: 'Biko', text: t('checkin_frage') }
-          : { ...m, titel: 'Biko: ' + t('erinnerung') }));
+          : m.art === 'nachfrage' ? { ...m, titel: 'Biko: ' + t('nachfrage_titel'), text: t('nachfrage_text').replace('{text}', m.text) }
+            : { ...m, titel: 'Biko: ' + t(m.medikament ? 'medikament' : 'erinnerung') }));
     try { wecker.planen(JSON.stringify(liste)); } catch (e) { /* ältere App */ }
   }
 
@@ -1440,16 +1463,22 @@
     } catch (e) { /* kein Ton möglich, die Anzeige reicht */ }
   }
 
-  function alarmZeigen(er) {
-    offen = er;
+  // Medikament: statt "Erledigt" steht "Genommen" da, und Biko fragt, ob es genommen ist. `nachfrage`: das zweite Mal.
+  function alarmZeigen(er, nachfrage = false) {
+    offen = { ...er, nachfrage };
     alarm.getAnimations().forEach((a) => a.cancel());
     $('#alarm-text').textContent = er.text;
+    const titel = $('#alarm-titel'), ok = $('#alarm-ok span');
+    titel.dataset.t = nachfrage ? 'nachfrage_titel' : er.medikament ? 'medikament' : 'erinnerung';
+    ok.dataset.t = er.medikament ? 'genommen' : 'erledigt';
+    titel.textContent = t(titel.dataset.t);
+    ok.textContent = t(ok.dataset.t);
     $('#alarm-ok').disabled = $('#alarm-spaeter').disabled = false;
     alarm.hidden = false;
     $('#alarm-ok').focus({ preventScroll: true });
     stimmung('winkt');
     ton();
-    vorlesen(`${t('erinnerung')}: ${er.text}`);
+    vorlesen(er.medikament ? t(nachfrage ? 'nachfrage_sagen' : 'medikament_sagen').replace('{text}', er.text) : `${t('erinnerung')}: ${er.text}`);
     if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
     if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
       try { new Notification('Biko: ' + t('erinnerung'), { body: er.text, icon: 'icon.svg' }); } catch (e) { /* manche Handys nur per Service Worker */ }
@@ -1458,7 +1487,12 @@
   async function alarmZu(spaeter) {
     if (!offen) return;
     const er = offen, merker = spaeterLesen();
-    if (er.id !== 'test') merken(L.gezeigtSchluessel(er, new Date()), '1');
+    if (er.id !== 'test') merken(er.nachfrage ? L.nachfrageSchluessel(er, new Date()) : L.gezeigtSchluessel(er, new Date()), '1');
+    if (!spaeter && er.medikament && er.id !== 'test') { // "Genommen": der Server schreibt es ins Tagebuch und entwarnt
+      api('/api/medikament/genommen', { id: er.id })
+        .then((liste) => { erinnerungen = liste; erinnerungenZeigen(); })
+        .catch((e) => hinweis(e.message));
+    }
     if (spaeter) merker[er.id] = Date.now() + 10 * 60 * 1000; else delete merker[er.id];
     merken('spaeter', JSON.stringify(merker));
     $('#alarm-ok').disabled = $('#alarm-spaeter').disabled = true;

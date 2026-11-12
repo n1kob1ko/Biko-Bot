@@ -7,6 +7,7 @@
 
   const JS_TAG = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa']; // Date.getDay()
   const NACHHOLEN_MIN = 120; // so lange wird eine verpasste Erinnerung noch gezeigt
+  const NACHFRAGE_MIN = 30; // Medikament: so lange nach der Uhrzeit fragt Biko noch einmal nach, wenn nichts bestätigt ist
 
   const zwei = (n) => String(n).padStart(2, '0');
   const datum = (d) => `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}`;
@@ -24,6 +25,7 @@
     for (const er of erinnerungen) {
       if (!er.aktiv || !er.tage.includes(tag)) continue;
       if (er.datum && er.datum !== datum(jetzt)) continue; // einmalige Erinnerung: nur an ihrem Tag
+      if (er.medikament && er.genommen) continue; // heute schon genommen (vielleicht schon vor der Uhrzeit gesagt)
       const [h, m] = er.zeit.split(':').map(Number);
       const seit = minuten - (h * 60 + m);
       if (seit < 0 || seit > NACHHOLEN_MIN) continue;
@@ -32,6 +34,23 @@
     }
     return null;
   }
+
+  // Medikament nicht bestätigt: 30 Minuten nach der Uhrzeit fragt Biko noch einmal ("Hast du sie schon genommen?").
+  // `genommen` kommt vom Server und gilt für heute. Einmal am Tag, solange es noch nicht zu spät ist.
+  function faelligeNachfrage({ erinnerungen, jetzt, gezeigt = new Set() }) {
+    const tag = JS_TAG[jetzt.getDay()];
+    const minuten = jetzt.getHours() * 60 + jetzt.getMinutes();
+    for (const er of erinnerungen) {
+      if (!er.medikament || er.genommen || !er.aktiv || !er.tage.includes(tag)) continue;
+      if (er.datum && er.datum !== datum(jetzt)) continue;
+      const [h, m] = er.zeit.split(':').map(Number);
+      const seit = minuten - (h * 60 + m);
+      if (seit < NACHFRAGE_MIN || seit > NACHHOLEN_MIN) continue;
+      if (!gezeigt.has(nachfrageSchluessel(er, jetzt))) return er;
+    }
+    return null;
+  }
+  const nachfrageSchluessel = (er, jetzt) => gezeigtSchluessel({ id: 'nachfrage-' + er.id }, jetzt);
 
   // Wann sich Biko in den nächsten Stunden von selbst meldet, für die Wecker der Android-App (die meldet sich auch,
   // wenn Biko gerade nicht offen ist): [{ wann (ms), art: 'erinnerung' | 'morgenrunde', id, text }], die nächste zuerst
@@ -51,7 +70,10 @@
       for (const er of erinnerungen || []) {
         if (!er.aktiv || !er.tage.includes(JS_TAG[tag.getDay()])) continue;
         if (er.datum && er.datum !== datum(tag)) continue;
-        dazu({ art: 'erinnerung', id: er.id, text: er.text }, um(er.zeit));
+        if (er.medikament && plus === 0 && er.genommen) continue; // heute schon genommen: kein Wecker mehr dafür
+        dazu({ art: 'erinnerung', id: er.id, text: er.text, ...(er.medikament ? { medikament: true } : {}) }, um(er.zeit));
+        // Medikament: eine halbe Stunde später fragt Biko noch einmal nach
+        if (er.medikament) dazu({ art: 'nachfrage', id: er.id, text: er.text }, um(er.zeit) + NACHFRAGE_MIN * 60000);
       }
       if (morgenrunde) dazu({ art: 'morgenrunde', id: 'morgenrunde', text: '' }, um(morgenrunde));
       if (checkin) dazu({ art: 'checkin', id: 'checkin', text: '' }, um(checkin));
@@ -284,5 +306,5 @@
     return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
   }
 
-  return { saetzeTeilen, fruehStueck, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  return { faelligeNachfrage, nachfrageSchluessel, NACHFRAGE_MIN, saetzeTeilen, fruehStueck, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

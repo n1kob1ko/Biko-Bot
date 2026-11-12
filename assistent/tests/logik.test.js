@@ -281,3 +281,29 @@ test('Ton aus dem Netz: 16-Bit-Stücke werden zu Zahlen, ein halbes Byte wartet 
   assert.ok(Math.abs(b.werte[0] - 1) < 0.001);
   assert.equal(b.rest, null);
 });
+
+test('Medikament: eine halbe Stunde später fragt Biko noch einmal, außer es ist schon genommen', () => {
+  const herz = { ...tablette, id: 'herz', text: 'Herztablette', medikament: true, genommen: null };
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [herz], jetzt: um('08:20') }), null);
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [herz], jetzt: um('08:30') }).id, 'herz');
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [herz], jetzt: um('10:30') }), null); // zu spät
+  const gezeigt = new Set([L.nachfrageSchluessel(herz, um('08:30'))]);
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [herz], jetzt: um('08:40'), gezeigt }), null);
+  const genommen = { ...herz, genommen: '2026-11-09T08:02:00' };
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [genommen], jetzt: um('08:30') }), null);
+  assert.equal(L.faelligeNachfrage({ erinnerungen: [tablette], jetzt: um('08:30') }), null); // keine Tablette mit Nachfrage
+  // schon vor der Uhrzeit gesagt, dass sie genommen ist: dann geht auch die Erinnerung nicht mehr auf
+  assert.equal(L.faelligeErinnerung({ erinnerungen: [genommen], jetzt: um('08:00') }), null);
+  assert.equal(L.faelligeErinnerung({ erinnerungen: [herz], jetzt: um('08:00') }).id, 'herz');
+});
+
+test('Medikament: die Wecker der Android-App fragen nach, heute nicht mehr, wenn es schon genommen ist', () => {
+  const herz = { ...tablette, id: 'herz', text: 'Herztablette', medikament: true, genommen: null };
+  const kurz = (liste) => liste.map((m) => `${new Date(m.wann).getDate()}. ${new Date(m.wann).toTimeString().slice(0, 5)} ${m.art}`);
+  assert.deepEqual(kurz(L.naechsteMeldungen({ erinnerungen: [herz], jetzt: um('07:00'), stunden: 30 })),
+    ['9. 08:00 erinnerung', '9. 08:30 nachfrage', '10. 08:00 erinnerung', '10. 08:30 nachfrage']);
+  const genommen = { ...herz, genommen: '2026-11-09T07:50:00' };
+  assert.deepEqual(kurz(L.naechsteMeldungen({ erinnerungen: [genommen], jetzt: um('07:55'), stunden: 30 })),
+    ['10. 08:00 erinnerung', '10. 08:30 nachfrage']);
+  assert.equal(L.naechsteMeldungen({ erinnerungen: [herz], jetzt: um('07:00'), stunden: 2 })[0].medikament, true);
+});

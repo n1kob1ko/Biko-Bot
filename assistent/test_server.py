@@ -448,6 +448,78 @@ class Test(unittest.TestCase):
         server.dolmetscher({"an": False})
         self.assertIsNone(self.rufe("/api/dolmetscher", cookie=c)[1]["dolmetscher"])
 
+    def test_medikament_biko_fragt_nach_und_ohne_bestaetigung_bekommt_die_familie_eine_sms(self):
+        c = self.anmelden()
+        self.leeren(c)
+        server.schreiben("checkin", {})
+        server.schreiben("medikamente", {})
+        # im Gespräch eingestellt: Familie soll Bescheid bekommen, aber wer?
+        self.assertRaises(ValueError, server.erinnerung_merken,
+                          {"text": "Herztablette", "zeit": "08:00", "medikament": True, "familie": True})
+        anfragen = self.drehbuch(
+            antwort("tool_use", werkzeug("erinnerung_merken", {
+                "text": "Herztablette", "zeit": "08:00", "medikament": True, "familie": True,
+                "kontakte": [{"name": "Peter", "nummer": "0664 1234567"}]})),
+            antwort("end_turn", text("Mach ich. Jeden Tag um 8 frag ich nach.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Erinnere mich jeden Tag um 8 an die Herztablette, sonst sag Peter Bescheid"},
+                      cookie=c)[1]
+        self.assertIn("medikament_genommen", {w["name"] for w in anfragen[0]["tools"]})
+        ergebnis = anfragen[1]["messages"][-1]["content"][0]["content"]
+        self.assertIn("nach 30 Minuten noch einmal", ergebnis)
+        self.assertIn("SMS-Dienst ist noch nicht eingerichtet", ergebnis)
+        er = j["erinnerungen"][0]
+        self.assertEqual((er["medikament"], er["melden"][0]["name"], er["melden_nach"], er["genommen"]),
+                         (True, "Peter", 60, None))
+        # seit gestern eingestellt
+        heute = server.jetzt()
+        um = lambda h, m=0: heute.replace(hour=h, minute=m, second=0, microsecond=0)
+        liste = server.erinnerungen_lesen()
+        liste[0]["seit"] = (heute - timedelta(days=1)).isoformat(timespec="seconds")
+        server.schreiben("erinnerungen", liste)
+        self.assertIn("Medikament; heute", server.medikament_text(liste[0], um(9)))
+        self.assertIn("noch nicht bestätigt", server.medikament_text(liste[0], um(9)))
+        sms = unittest.mock.Mock()
+        with unittest.mock.patch.multiple(server, TWILIO_SID="AC1", TWILIO_TOKEN="geheim", TWILIO_VON="+4312345",
+                                          sms_schicken=sms):
+            self.assertEqual(server.medikamente_pruefen(um(8, 30)), [])     # Frist ist erst um 9
+            self.assertEqual(server.medikamente_pruefen(um(9, 1)), ["Peter"])
+            self.assertEqual(sms.call_args[0][0], "0664 1234567")
+            self.assertIn("08:00", sms.call_args[0][1])
+            self.assertEqual(server.medikamente_pruefen(um(9, 30)), [])     # nur einmal am Tag
+            # der Knopf "Genommen": Entwarnung an die Familie, steht im Tagebuch, die App weiß es
+            status, liste, _ = self.rufe("/api/medikament/genommen", {"id": er["id"]}, cookie=c)
+            self.assertEqual(status, 200)
+            self.assertTrue(liste[0]["genommen"])
+            self.assertEqual(sms.call_count, 2)
+            self.assertIn("放心", sms.call_args[0][1])
+            self.assertEqual(server.tagebuch_lesen()[-1]["art"], "medikament")
+            self.assertEqual(server.tagebuch_lesen()[-1]["wert"], "Herztablette")
+            # noch einmal bestätigt: nichts doppelt, keine zweite Entwarnung
+            self.assertIn("schon notiert", server.medikament_genommen({"id": er["id"]}))
+            self.assertEqual(sms.call_count, 2)
+            self.assertIn("heute genommen um", server.hinweis())
+        # im Gespräch: "Ja, hab ich genommen"
+        server.schreiben("medikamente", {})
+        self.drehbuch(antwort("tool_use", werkzeug("medikament_genommen", {"id": er["id"]})),
+                      antwort("end_turn", text("Super, hab ich notiert.")))
+        j = self.rufe("/api/chat", {"text": "Ja, hab sie genommen"}, cookie=c)[1]
+        self.assertTrue(j["erinnerungen"][0]["genommen"])
+        self.assertRaises(ValueError, server.medikament_genommen, {"id": "gibtsnicht"})
+        # erst nach der Uhrzeit eingestellt: heute keine SMS
+        server.schreiben("medikamente", {})
+        liste = server.erinnerungen_lesen()
+        liste[0]["seit"] = um(10).isoformat()
+        server.schreiben("erinnerungen", liste)
+        self.assertEqual(server.medikamente_pruefen(um(10, 30)), [])
+        # Löschen in Einstellen behält die anderen Medikamente samt Familie
+        server.erinnerung_merken({"text": "Arzt", "zeit": "15:00", "datum": tag(1)})
+        rest = [e for e in self.rufe("/api/erinnerungen", cookie=c)[1] if e["text"] != "Arzt"]
+        nachher = self.rufe("/api/erinnerungen", {"erinnerungen": rest}, cookie=c)[1]
+        self.assertEqual([(e["text"], e["melden"][0]["name"]) for e in nachher], [("Herztablette", "Peter")])
+        self.leeren(c)
+        server.schreiben("medikamente", {})
+
     def test_checkin_ohne_lebenszeichen_bekommt_die_familie_eine_sms_und_spaeter_eine_entwarnung(self):
         c = self.anmelden()
         server.schreiben("checkin", {})

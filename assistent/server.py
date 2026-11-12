@@ -30,8 +30,12 @@ Funktionen, alle über das Gespräch (POST /api/chat):
                         Kommt bis zur Frist kein Lebenszeichen (ein Gespräch, die App geöffnet), bekommt die Familie eine
                         SMS (Twilio), meldet sie sich später doch, eine Entwarnung. Im Notfall schickt Biko auf Wunsch
                         sofort eine SMS (familie_benachrichtigen). GET /api/checkin, POST /api/lebenszeichen.
+ 13. Medikamente       "Erinnere mich jeden Tag um 8 an die Herztablette, und sag Peter Bescheid, wenn ich sie vergesse":
+                        eine Erinnerung mit medikament. Biko fragt nach ("Hast du sie genommen?"), nach 30 Minuten
+                        noch einmal. Bestätigt die Person (im Gespräch oder mit "Genommen"), steht es im Tagebuch.
+                        Kommt bis zur Frist keine Bestätigung, bekommt die Familie eine SMS (POST /api/medikament/genommen).
 Nachrichten, Links, Erinnerungen, das Gedächtnis, die Morgenrunde, die Listen, das Tagebuch, die Geburtstage, der
-Dolmetscher und der Check-in sind Werkzeuge, die Claude selbst aufruft.
+Dolmetscher, der Check-in und die Medikamente sind Werkzeuge, die Claude selbst aufruft.
 
 Stimme: Mit einem Schlüssel für den Sprachdienst (ELEVENLABS_API_KEY) redet man mit Biko wie am Telefon:
   - Die App hört durchgehend zu. Dafür holt sie sich einen Zugang für 15 Minuten (POST /api/live-zugang) und schickt
@@ -171,6 +175,21 @@ Täglicher Check-in und die Familie benachrichtigen:
   Notfall, in dem sie um Hilfe bittet, schick sie gleich und sag ihr, dass Peter (oder wer) Bescheid bekommt. Sonst frag kurz.
 - Steht im Hinweis, dass der SMS-Dienst nicht eingerichtet ist, sag ehrlich, dass du der Familie noch keine SMS schicken
   kannst, und biete an, anzurufen (anruf_zeigen).
+
+Medikamente:
+- Soll Biko an ein Medikament erinnern ("jeden Tag um 8 die Herztablette", "每天早上八点提醒我吃降压药"), merkst du es mit
+  erinnerung_merken und medikament: true. Dann fragt Biko zur Uhrzeit "Hast du sie genommen?" und nach 30 Minuten noch
+  einmal, wenn keine Antwort kam.
+- Biete bei Medikamenten einmal kurz an, der Familie Bescheid zu geben, wenn sie nicht bestätigt (familie: true, dazu die
+  kontakte mit Name und Nummer aus dem Gedächtnis oder vom Check-in; kennst du keine Nummer, frag danach, erfinde nie eine).
+  Standard: eine Stunde nach der Uhrzeit (melden_nach in Minuten). Dräng es niemandem auf.
+- Sagt die Person, dass sie es genommen hat ("ja", "hab ich", "Tablette genommen", "吃过了"), und passt das zu einer
+  Medikament-Erinnerung von heute im Hinweis, bestätigst du mit medikament_genommen (die Nummer der Erinnerung). Das
+  schreibt es auch ins Gesundheitstagebuch, also nicht noch einmal mit gesundheit_notieren.
+- Sagt sie, dass sie es heute nicht nimmt oder vergessen hat: nicht schimpfen. Ob man es nachholen darf, sagt die Packungsbeilage,
+  der Arzt oder die Apotheke; du rätst nichts zur Dosis.
+- Steht im Hinweis, dass ein Medikament heute noch nicht bestätigt ist und die Zeit vorbei ist, frag einmal im Gespräch
+  freundlich nach.
 
 Dolmetscher:
 - Bittet die Person dich, für sie zu dolmetschen (beim Arzt, im Geschäft, mit dem Nachbarn), schaltest du mit dolmetscher
@@ -812,7 +831,7 @@ def hinweis(gesprochen=False, bild=False):
     teile = [
         f"Heute ist {tage[t.weekday()]}, {t.day}.{t.month}.{t.year}, es ist {t.strftime('%H:%M')} Uhr.",
         "Deine Erinnerungen:\n" + ("\n".join(f"- Nummer {e['id']}: {erinnerung_wann(e)}: {e['text']}"
-                                             for e in erinnerungen_lesen()) or "- noch nichts"),
+                                             + medikament_text(e, t) for e in erinnerungen_lesen()) or "- noch nichts"),
         "Was du über die Person weißt:\n" + ("\n".join(f"- Nummer {w['id']}: {w['text']}" for w in wissen_lesen())
                                              or "- noch nichts"),
     ]
@@ -1126,7 +1145,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         g["titel"] = g["titel"] or titel_aus(text)
         g["zuletzt"] = zeit
         schreiben("gespraeche", ([g] + [x for x in liste if x["id"] != g["id"]])[:MAX_GESPRAECHE])
-    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": nachher, "wissen": weiss,
+    return {"antwort": antwort, "gespraech": uebersicht(g), "erinnerungen": erinnerungen_app(nachher), "wissen": weiss,
             "morgenrunde": morgenrunde_zeit(), "geburtstage": geburtstage_lesen(),
             "dolmetscher": dolmetscher_jetzt(), "checkin": checkin_lesen().get("zeit"), **getan}
 
@@ -1153,8 +1172,23 @@ def erinnerung_pruefen(e):
             datum = date.fromisoformat(str(datum)).isoformat()
         except ValueError:
             raise ValueError("Das Datum bitte als JJJJ-MM-TT angeben, z. B. 2026-11-24.")
-    return {"id": str(e.get("id") or uuid.uuid4().hex[:10]), "zeit": zeit, "text": text,
-            "tage": sorted(TAGE) if datum or not tage else tage, "aktiv": bool(e.get("aktiv", True)), "datum": datum}
+    neu = {"id": str(e.get("id") or uuid.uuid4().hex[:10]), "zeit": zeit, "text": text,
+           "tage": sorted(TAGE) if datum or not tage else tage, "aktiv": bool(e.get("aktiv", True)), "datum": datum}
+    if e.get("medikament") is True:
+        # Medikament: Biko fragt nach, ob es genommen wurde, und gibt der Familie Bescheid, wenn nicht (melden)
+        melden = []
+        for k in (e.get("melden") or [])[:3] if isinstance(e.get("melden"), list) else []:
+            name = " ".join(str((k or {}).get("name") or "").split())[:40]
+            if name:
+                melden.append({"name": name, "nummer": nummer_pruefen((k or {}).get("nummer"), muss=True)})
+        try:
+            nach = max(30, min(int(e.get("melden_nach") or MELDEN_NACH), 240))
+        except (TypeError, ValueError):
+            nach = MELDEN_NACH
+        neu.update({"medikament": True, "melden": melden, "melden_nach": nach})
+    if e.get("seit"):
+        neu["seit"] = str(e["seit"])[:25]
+    return neu
 
 
 def erinnerungen_lesen():
@@ -1177,8 +1211,18 @@ TAGE_REIHE = ["mo", "di", "mi", "do", "fr", "sa", "so"]
 # ---------- Werkzeuge: so schreibt sich Biko Erinnerungen selbst auf ----------
 
 def erinnerung_merken(eingabe):
-    neu = erinnerung_pruefen({k: eingabe.get(k) for k in ("text", "zeit", "datum", "tage")})
+    e = {k: eingabe.get(k) for k in ("text", "zeit", "datum", "tage")}
+    if eingabe.get("medikament") is True:
+        melden = []
+        if eingabe.get("familie") is True:
+            melden = eingabe.get("kontakte") or checkin_lesen().get("kontakte") or []
+            if not melden:
+                raise ValueError("Wer soll Bescheid bekommen, wenn sie das Medikament nicht bestätigt? Frag nach Name "
+                                 "und Nummer (oder nimm sie aus dem Gedächtnis) und gib sie als kontakte mit.")
+        e.update({"medikament": True, "melden": melden, "melden_nach": eingabe.get("melden_nach")})
     j = jetzt()
+    e["seit"] = j.isoformat(timespec="seconds")
+    neu = erinnerung_pruefen(e)
     if neu["datum"] and (neu["datum"], neu["zeit"]) < (j.strftime("%Y-%m-%d"), j.strftime("%H:%M")):
         raise ValueError(f"Dieser Zeitpunkt ist schon vorbei. Jetzt ist {j.strftime('%Y-%m-%d %H:%M')}.")
     with _lock:
@@ -1186,7 +1230,15 @@ def erinnerung_merken(eingabe):
         if len(liste) >= MAX_ERINNERUNGEN:
             raise ValueError(f"Es sind schon {MAX_ERINNERUNGEN} Erinnerungen gespeichert. Erst muss eine gelöscht werden.")
         schreiben("erinnerungen", sorted(liste + [neu], key=lambda e: e["zeit"]))
-    return f"Gespeichert: {erinnerung_wann(neu)}: {neu['text']}"
+    zusatz = ""
+    if neu.get("medikament"):
+        zusatz = (" Zur Uhrzeit fragt Biko, ob sie es genommen hat, und nach 30 Minuten noch einmal.")
+        if neu["melden"]:
+            wer = " und ".join(k["name"] for k in neu["melden"])
+            zusatz += (f" Ist es {neu['melden_nach']} Minuten nach der Uhrzeit nicht bestätigt, bekommt {wer} eine SMS."
+                       + ("" if sms_bereit() else " Achtung: Der SMS-Dienst ist noch nicht eingerichtet, bis dahin geht "
+                                                  "keine SMS hinaus. Sag ihr das ehrlich; das richtet die Familie ein."))
+    return f"Gespeichert: {erinnerung_wann(neu)}: {neu['text']}." + zusatz
 
 
 def erinnerung_loeschen(eingabe):
@@ -1586,6 +1638,141 @@ def checkin_pruefen(t=None):
         return None
 
 
+# ---------- Medikamente: Biko fragt nach, ob sie genommen sind ----------
+
+MELDEN_NACH = 60       # Minuten nach der Uhrzeit: so lange wartet Biko auf "genommen", dann bekommt die Familie eine SMS
+NACHFRAGE_NACH = 30    # Minuten: dann fragt die App noch einmal nach (logik.js)
+
+
+def medikamente_lesen():
+    """{"JJJJ-MM-TT": {Nummer der Erinnerung: {"genommen": Zeit, "gemeldet": [Namen], "entwarnt": Zeit}}}"""
+    d = lesen("medikamente", {})
+    return d if isinstance(d, dict) else {}
+
+
+def medikament_heute(e, t):
+    """Die Uhrzeit, zu der das Medikament heute dran ist, oder None, wenn heute keins dran ist."""
+    if not e.get("medikament") or not e.get("aktiv", True):
+        return None
+    if e.get("datum") and e["datum"] != t.strftime("%Y-%m-%d"):
+        return None
+    if TAGE_REIHE[t.weekday()] not in e["tage"]:
+        return None
+    h, m = map(int, e["zeit"].split(":"))
+    return t.replace(hour=h, minute=m, second=0, microsecond=0)
+
+
+def medikament_stand(e, t):
+    return medikamente_lesen().get(t.strftime("%Y-%m-%d"), {}).get(e["id"], {})
+
+
+def medikament_text(e, t):
+    """Für den Hinweis der App: was heute mit diesem Medikament ist."""
+    if not e.get("medikament"):
+        return ""
+    teile = ["Medikament"]
+    um = medikament_heute(e, t)
+    stand = medikament_stand(e, t)
+    if stand.get("genommen"):
+        teile.append(f"heute genommen um {stand['genommen'][11:16]}")
+    elif um and t >= um:
+        teile.append("heute noch nicht bestätigt")
+    elif um:
+        teile.append("heute noch nicht dran")
+    if e.get("melden"):
+        wer = ", ".join(f"{k['name']} ({k['nummer']})" for k in e["melden"])
+        teile.append(f"ohne Bestätigung nach {e.get('melden_nach', MELDEN_NACH)} Minuten SMS an {wer}"
+                     + (", SMS ging heute schon hinaus" if stand.get("gemeldet") else ""))
+    return " (" + "; ".join(teile) + ")"
+
+
+def erinnerungen_app(liste=None):
+    """Die Erinnerungen für die App: bei Medikamenten dazu, ob sie heute schon genommen sind (Uhrzeit oder None)."""
+    t = jetzt()
+    tag = medikamente_lesen().get(t.strftime("%Y-%m-%d"), {})
+    return [{**e, "genommen": (tag.get(e["id"]) or {}).get("genommen")} if e.get("medikament") else e
+            for e in (erinnerungen_lesen() if liste is None else liste)]
+
+
+def _medikament_schreiben(datum, nr, stand):
+    d = medikamente_lesen()
+    d.setdefault(datum, {})[nr] = stand
+    schreiben("medikamente", {k: d[k] for k in sorted(d)[-14:]})   # zwei Wochen reichen
+
+
+def medikament_genommen(eingabe):
+    """Die Person hat ihr Medikament genommen: im Gespräch (Werkzeug) oder mit dem Knopf "Genommen"."""
+    nr = str(eingabe.get("id") or "")
+    t = jetzt()
+    datum = t.strftime("%Y-%m-%d")
+    with _lock:
+        e = next((x for x in erinnerungen_lesen() if x["id"] == nr and x.get("medikament")), None)
+        if not e:
+            raise ValueError("Unter dieser Nummer ist kein Medikament gespeichert. Die Nummern stehen im Hinweis.")
+        stand = medikament_stand(e, t)
+        if stand.get("genommen"):
+            return f"Das war heute schon notiert, um {stand['genommen'][11:16]} Uhr. Nicht noch einmal nehmen lassen."
+        entwarnen = bool(stand.get("gemeldet")) and not stand.get("entwarnt")
+        stand = {**stand, "genommen": t.isoformat(timespec="seconds"),
+                 **({"entwarnt": t.isoformat(timespec="seconds")} if entwarnen else {})}
+        _medikament_schreiben(datum, nr, stand)
+        eintrag = {"id": uuid.uuid4().hex[:6], "zeit": t.isoformat(timespec="seconds"), "art": "medikament",
+                   "wert": f"{e['text']}"[:120], "notiz": f"genommen, Erinnerung um {e['zeit']}"}
+        schreiben("gesundheit", (tagebuch_lesen() + [eintrag])[-MAX_TAGEBUCH:])
+    if entwarnen:
+        name = profil().get("name") or ""
+        zh = str(profil().get("sprache")).startswith("zh")
+        try:
+            familie_sms(f"Biko：放心，{name or '她'}刚刚确认已经吃了药（{e['text']}）。" if zh
+                        else f"Biko: Entwarnung, {name or 'sie'} hat {e['text']} jetzt genommen.", e["melden"])
+        except ValueError:
+            pass
+    return f"Notiert: {e['text']} heute um {t.strftime('%H:%M')} genommen, steht auch im Gesundheitstagebuch."
+
+
+def medikament_knopf(nr):
+    """Der Knopf "Genommen" in der App. Liefert die Erinnerungen neu."""
+    medikament_genommen({"id": nr})
+    lebenszeichen()
+    return erinnerungen_app()
+
+
+def medikamente_pruefen(t=None):
+    """Vom Hausmeister jede Minute: ist ein Medikament bis zur Frist nicht bestätigt, bekommt die Familie (einmal) eine SMS."""
+    t = t or jetzt()
+    datum = t.strftime("%Y-%m-%d")
+    geschickt = []
+    for e in erinnerungen_lesen():
+        um = medikament_heute(e, t)
+        if not um or not e.get("melden") or t < um + timedelta(minutes=e.get("melden_nach", MELDEN_NACH)):
+            continue
+        try:
+            if datetime.fromisoformat(e.get("seit") or "") > um:   # erst nach der Uhrzeit eingestellt: ab morgen
+                continue
+        except ValueError:
+            pass
+        with _lock:
+            stand = medikament_stand(e, t)
+            if stand.get("genommen") or "gemeldet" in stand:
+                continue
+            _medikament_schreiben(datum, e["id"], {**stand, "gemeldet": []})   # nur ein Versuch am Tag
+        name = profil().get("name") or ""
+        text = (f"Biko：{name or '她'}今天{e['zeit']}的药（{e['text']}）还没有确认吃过。请打个电话问问。"
+                if str(profil().get("sprache")).startswith("zh")
+                else f"Biko: {name or 'Sie'} hat {e['text']} (um {e['zeit']} Uhr) heute noch nicht als genommen "
+                     "bestätigt. Bitte ruf kurz an.")
+        try:
+            bekommen = familie_sms(text, e["melden"])
+        except ValueError:
+            protokoll("Medikament: nicht bestätigt, aber keine SMS möglich")
+            continue
+        with _lock:
+            _medikament_schreiben(datum, e["id"], {**medikament_stand(e, t), "gemeldet": bekommen})
+        protokoll("Medikament: nicht bestätigt, Familie benachrichtigt")
+        geschickt += bekommen
+    return geschickt
+
+
 # ---------- Geburtstage: Biko denkt rechtzeitig daran ----------
 
 MAX_GEBURTSTAGE = 200
@@ -1736,7 +1923,7 @@ def morgenrunde_heute(erzeugen=False):
 
 
 def hausmeister():
-    """Läuft im Hintergrund: bereitet die Morgenrunde rechtzeitig vor und schaut nach dem täglichen Check-in."""
+    """Läuft im Hintergrund: bereitet die Morgenrunde vor, schaut nach dem Check-in und nach den Medikamenten."""
     while True:
         try:
             morgenrunde_heute(erzeugen=True)
@@ -1746,6 +1933,10 @@ def hausmeister():
             checkin_pruefen()
         except Exception as e:
             protokoll(f"Hausmeister-Fehler beim Check-in: {type(e).__name__}")
+        try:
+            medikamente_pruefen()
+        except Exception as e:
+            protokoll(f"Hausmeister-Fehler bei den Medikamenten: {type(e).__name__}")
         time.sleep(60)
 
 
@@ -1898,8 +2089,27 @@ WERKZEUGE = {
                 "datum": {"type": "string", "description": "Nur für einmalige Erinnerungen: der Tag als JJJJ-MM-TT."},
                 "tage": {"type": "array", "items": {"type": "string", "enum": TAGE_REIHE},
                          "description": "Nur für regelmäßige Erinnerungen an bestimmten Wochentagen."},
+                "medikament": {"type": "boolean", "description": "true bei Tabletten, Tropfen, Spritzen, Inhalieren: "
+                               "dann fragt Biko nach, ob es genommen wurde."},
+                "familie": {"type": "boolean", "description": "Nur bei Medikamenten: true, wenn die Familie eine SMS "
+                            "bekommen soll, falls es nicht bestätigt wird."},
+                "kontakte": {"type": "array", "description": "Wer die SMS bekommt, höchstens 3. Weggelassen: die vom Check-in.",
+                             "items": {"type": "object",
+                                       "properties": {"name": {"type": "string"}, "nummer": {"type": "string"}},
+                                       "required": ["name", "nummer"]}},
+                "melden_nach": {"type": "integer", "description": "Minuten nach der Uhrzeit bis zur SMS, Standard 60."},
             },
             "required": ["text", "zeit"],
+        },
+    }},
+    "medikament_genommen": {"tun": medikament_genommen, "schema": {
+        "name": "medikament_genommen",
+        "description": "Bestätigt, dass die Person ihr Medikament von heute genommen hat (schreibt es auch ins "
+                       "Gesundheitstagebuch). Die Nummer der Medikament-Erinnerung steht im Hinweis.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "Nummer der Erinnerung."}},
+            "required": ["id"],
         },
     }},
     "erinnerung_loeschen": {"tun": erinnerung_loeschen, "schema": {
@@ -2062,7 +2272,7 @@ class Handler(BaseHTTPRequestHandler):
             if pfad == "/api/profil":
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
-                return self.senden(200, erinnerungen_lesen())
+                return self.senden(200, erinnerungen_app())
             if pfad == "/api/wissen":
                 return self.senden(200, wissen_lesen())
             if pfad == "/api/listen":
@@ -2162,7 +2372,9 @@ class Handler(BaseHTTPRequestHandler):
                 liste = sorted((erinnerung_pruefen(e) for e in liste), key=lambda e: e["zeit"])
                 with _lock:
                     schreiben("erinnerungen", liste)
-                return self.senden(200, liste)
+                return self.senden(200, erinnerungen_app(liste))
+            if pfad == "/api/medikament/genommen":   # der Knopf "Genommen" an der Erinnerung
+                return self.senden(200, medikament_knopf(str(daten.get("id") or "")))
             return self.senden(404, {"fehler": "Gibt es nicht."})
         except ValueError as e:
             return self.senden(400, {"fehler": str(e)})
