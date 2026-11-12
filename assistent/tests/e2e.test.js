@@ -367,6 +367,24 @@ test('Einkaufsliste: Biko schreibt auf, zeigt die Liste, Gekauftes tippt man weg
   assert.deepEqual(p.fehler, []);
 });
 
+test('Betrug: Biko zeigt eine rote Warnkarte und den Knopf, um Peter anzurufen', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Ich hab eine SMS von der Post, ist das echt?');
+  await p.waitForSelector('.warnung-karte');
+  assert.equal(await p.getAttribute('.warnung-karte', 'data-stufe'), 'betrug');
+  assert.equal(await p.getAttribute('.warnung-karte', 'role'), 'alert');
+  assert.equal(await p.textContent('.warnung-kopf'), 'Achtung, Betrug!');
+  assert.equal(await p.textContent('.warnung-titel'), 'Diese SMS ist nicht von der Post.');
+  assert.deepEqual(await p.locator('.warnung-teil').allTextContents(), ['Woran man es erkennt', 'Was jetzt hilft']);
+  assert.deepEqual(await p.locator('ol.warnung-punkte li').allTextContents(), ['Nicht auf den Link tippen.', 'Die SMS löschen.']);
+  assert.equal(await p.getAttribute('.link-knopf.anruf', 'href'), 'tel:06641234567');
+  await p.screenshot({ path: path.join(os.tmpdir(), 'biko-warnung.png') });
+  await p.click('#sprache-knopf');
+  await p.click('[data-sprache="zh"]');
+  assert.equal(await p.textContent('.warnung-kopf'), '小心，这是诈骗！');
+  assert.deepEqual(p.fehler, []);
+});
+
 test('Anrufen und WhatsApp: Biko stellt Knöpfe mit Nummer und fertigem Text unter die Antwort', async (t) => {
   const p = await angemeldet(t);
   await fragen(p, 'Ruf Peter an');

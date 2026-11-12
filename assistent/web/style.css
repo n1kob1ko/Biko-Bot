@@ -350,6 +350,16 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 .entwurf .meldung { scroll-margin-bottom: 250px; }
 .zwei { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
 .zwei .knopf { padding: 0 12px; }
+/* Warnkarte bei Betrug: rot umrandet und nicht zu übersehen; orange, wenn man nur nachprüfen soll */
+.warnung-karte { --warn: var(--down); --warn-bg: var(--down-bg); border: 3px solid var(--warn); background: var(--warn-bg); }
+.warnung-karte[data-stufe="vorsicht"] { --warn: var(--accent-stark); --warn-bg: var(--card); }
+.warnung-kopf { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--warn); font-weight: 800; font-size: 1.2rem; }
+.warnung-kopf .icon { flex: none; width: 1.6em; height: 1.6em; }
+.warnung-titel { margin: 8px 0 4px; font-size: 1.15rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.warnung-teil { margin: 12px 0 4px; color: var(--muted); font-weight: 700; font-size: .875rem; }
+.warnung-punkte { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; font-size: 1.1rem; line-height: 1.4; overflow-wrap: anywhere; }
+.warnung-punkte li::marker { color: var(--warn); font-weight: 800; }
+
 /* Links, die Biko gefunden hat: große Knöpfe, darunter klein der Name der Seite */
 .links { align-self: stretch; display: grid; gap: 10px; margin-top: -2px; animation: kommt var(--t-ein) var(--ease-out) both; animation-delay: 120ms; }
 .link-knopf {
