@@ -50,6 +50,16 @@ nach Betrug aussieht. Steht nichts im Eingabefeld, fragt die App von selbst "Was
 auf 1600 Pixel und schickt es wie das Bildschirmfoto der Android-App an `POST /api/bildschirm?foto`; es gilt 5 Minuten für
 die nächsten Fragen ("Was muss ich tun?") und wird nicht gespeichert. Mit Foto antwortet immer das stärkere Modell.
 
+**Biko warnt vor Betrug:** Zeigt man ihm eine SMS, WhatsApp- oder WeChat-Nachricht, einen Brief (Foto) oder eine Webseite
+(Bildschirmfoto in der Android-App), oder erzählt man von einem Anruf ("Da war die Polizei am Telefon ..."), prüft Biko immer
+still mit, ob es Betrug sein könnte, auch wenn man nach etwas anderem fragt. Die Anleitung kennt die typischen Maschen in
+Österreich und auf Chinesisch ("Hallo Mama, neue Nummer", Enkeltrick, falsche Polizei, Paket-SMS mit Zollgebühr, Bank-Phishing,
+AnyDesk, Gutscheinkarten, 公检法, 客服退款, 刷单, 验证码). Sieht es danach aus, sagt er es gleich klar und stellt mit
+`warnung_zeigen` eine große Warnkarte unter die Antwort: rot "Achtung, Betrug!" oder orange "Vorsicht, bitte nachprüfen", mit
+Titel, woran man es erkennt und was jetzt hilft (je höchstens 4 Punkte). Dazu bietet er den Knopf an, gleich jemanden aus der
+Familie anzurufen. Ist schon Geld weg: Bank anrufen und Karte sperren, Polizei 133. Wörter wie "neue Nummer", "gewonnen",
+"Link", "验证码" schicken die Frage an das stärkere Modell.
+
 **Einkaufsliste und Notizen:** "Schreib Milch auf die Einkaufsliste", "Was steht drauf?", "Merk dir, der Schlüssel ist bei
 Frau Novak". Biko führt dafür Listen (`listen.json`, Werkzeug `liste_aendern`): "Einkaufen", "Notizen" und was die Person
 sonst braucht. Was draufsteht, steht im Hinweis der App. Mit `liste_zeigen` stellt er eine Liste als Karte unter die Antwort:

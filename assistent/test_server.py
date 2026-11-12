@@ -348,6 +348,39 @@ class Test(unittest.TestCase):
         g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
         self.assertEqual(g["nachrichten"][-1]["anrufe"], j["anrufe"])
 
+    def test_betrug_warnkarte_im_gespraech(self):
+        c = self.anmelden()
+        anfragen = self.drehbuch(
+            antwort("tool_use",
+                    werkzeug("warnung_zeigen", {"stufe": "betrug", "titel": "  Diese SMS ist   nicht von der Post. ",
+                                                "anzeichen": ["Die Post will kein Geld per SMS.", "", "Komischer Link."],
+                                                "tun": ["Nicht antippen.", "SMS löschen."] + ["mehr"] * 5}, "tu_1"),
+                    werkzeug("warnung_zeigen", {"stufe": "betrug", "titel": "Noch eine", "tun": ["x"]}, "tu_2"),
+                    werkzeug("warnung_zeigen", {"stufe": "egal", "titel": "Falsch", "tun": ["x"]}, "tu_3"),
+                    werkzeug("warnung_zeigen", {"stufe": "vorsicht", "titel": "Ohne Schritte"}, "tu_4")),
+            antwort("end_turn", text("Das ist sehr wahrscheinlich Betrug. Tipp nichts an.")),
+        )
+        j = self.rufe("/api/chat", {"text": "Ich hab eine SMS von der Post, ich soll 1,99 € Zoll zahlen. Ist das echt?"},
+                      cookie=c)[1]
+        self.assertEqual(j["warnungen"], [{"stufe": "betrug", "titel": "Diese SMS ist nicht von der Post.",
+                                           "anzeichen": ["Die Post will kein Geld per SMS.", "Komischer Link."],
+                                           "tun": ["Nicht antippen.", "SMS löschen.", "mehr", "mehr"]}])
+        ergebnisse = anfragen[1]["messages"][-1]["content"]
+        self.assertEqual([bool(e.get("is_error")) for e in ergebnisse], [False, True, True, True])
+        self.assertIn("warnung_zeigen", {w["name"] for w in anfragen[0]["tools"]})
+        self.assertEqual(anfragen[0]["model"], server.MODELL, "Betrug geht an das stärkere Modell")
+        self.assertIn("Sicherheit: vor Betrug warnen", alles(anfragen[0]))
+        g = self.rufe("/api/gespraech?id=" + j["gespraech"]["id"], cookie=c)[1]
+        self.assertEqual(g["nachrichten"][-1]["warnungen"], j["warnungen"])
+
+    def test_betrug_woerter_nehmen_das_staerkere_modell(self):
+        for satz in ("Hallo Mama, das ist meine neue Nummer", "Da hat ein Staatsanwalt angerufen", "我收到一个链接",
+                     "有人要我的验证码", "Soll ich AnyDesk installieren?", "Ich hab gewonnen!"):
+            self.assertEqual(server.modell_fuer(satz), server.MODELL, satz)
+        self.assertEqual(server.modell_fuer("Erzähl mir einen Witz"), server.EINFACH_MODELL)
+        self.assertIn("warnung_zeigen", server.BILDSCHIRM)
+        self.assertIn("warnung_zeigen", server.FOTO)
+
     def test_einkaufsliste_im_gespraech_fuehren_zeigen_und_wegtippen(self):
         c = self.anmelden()
         server.schreiben("listen", {})

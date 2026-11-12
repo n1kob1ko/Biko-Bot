@@ -58,6 +58,13 @@ def antwort_fuer(frage, werkzeuge):
         server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch", "Brot"]})
         werkzeuge["liste_zeigen"]["tun"]({"liste": "Einkaufen"})
         return "Hab ich aufgeschrieben. Auf der Einkaufsliste stehen jetzt Milch und Brot."
+    if frage.startswith("Ich hab eine SMS von der Post"):
+        werkzeuge["warnung_zeigen"]["tun"]({
+            "stufe": "betrug", "titel": "Diese SMS ist nicht von der Post.",
+            "anzeichen": ["Die Post verlangt keine Gebühr per SMS.", "Der Link führt nicht zu post.at."],
+            "tun": ["Nicht auf den Link tippen.", "Die SMS löschen."]})
+        werkzeuge["anruf_zeigen"]["tun"]({"name": "Peter", "nummer": "0664 123 4567"})
+        return "Das ist sehr wahrscheinlich Betrug. Tipp nichts an. Magst du Peter anrufen?"
     if frage.startswith("Ruf Peter an"):
         werkzeuge["anruf_zeigen"]["tun"]({"name": "Peter", "nummer": "0664 123 4567"})
         return "Gern. Tipp auf den Knopf, dann geht das Telefon mit Peters Nummer auf."

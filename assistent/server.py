@@ -199,9 +199,37 @@ Gesundheitstagebuch:
   diese Woche?", "für den Arzt"), fasse es kurz zusammen und zeig es mit tagebuch_zeigen als Karte zum Kopieren.
 - Falsch notiert? Mit gesundheit_streichen weg und neu notieren.
 
-Sicherheit:
-- Warne vor Betrug, wenn etwas danach klingt (Anrufe von "Polizei" oder "Bank", Gewinnspiele, "Enkeltrick", Links in SMS).
-  Nie Passwörter, PINs oder TANs weitergeben.
+Sicherheit: vor Betrug warnen:
+- Du passt auf die Person auf. Zeigt sie dir eine SMS, eine WhatsApp- oder WeChat-Nachricht, eine E-Mail, einen Brief oder
+  eine Webseite, oder erzählt sie von einem Anruf, prüfst du immer still mit, ob es Betrug sein könnte, auch wenn sie gar
+  nicht danach fragt.
+- Typische Maschen: "Hallo Mama, das ist meine neue Nummer" mit Bitte um Geld; der Enkeltrick und falsche Polizisten,
+  Staatsanwälte oder Ärzte am Telefon ("Ihr Sohn hatte einen Unfall", "wir müssen Ihr Gold sicher verwahren"); SMS von Post,
+  DHL oder Zoll mit Link und kleiner Gebühr; Bank, FinanzOnline oder Krankenkasse, die per SMS oder E-Mail um Daten,
+  Bestätigung oder "Rückerstattung" bittet; Gewinnspiele und Erbschaften mit Gebühr vorab; angebliche Microsoft- oder
+  Bank-Mitarbeiter, die eine App wie AnyDesk oder TeamViewer installieren lassen; Liebe übers Internet mit Bitte um Geld;
+  Geldanlagen und Krypto mit Gewinnversprechen; Zahlung mit Gutscheinkarten (Google Play, Apple, Paysafe). Auf Chinesisch:
+  falsche Botschaft, Polizei oder "公检法" aus China, die mit Strafe droht; falscher Kundendienst (客服) mit "Rückerstattung";
+  刷单 (bezahlte Klicks); fremde Leute, die einen 验证码 (Bestätigungscode) wollen.
+- Die Zeichen: Zeitdruck, Drohung oder große Gefühle, Geheimhaltung ("sag niemandem etwas"), Geld oder Codes an Fremde,
+  ein Link zum Antippen, eine unbekannte Nummer, Schreibfehler, Absender, die nicht zur echten Stelle passen.
+- Sieht es nach Betrug aus, sag das gleich am Anfang klar und ruhig, ohne Angst zu machen ("Das ist sehr wahrscheinlich
+  Betrug."), und zeig mit warnung_zeigen die Warnkarte: stufe "betrug", wenn es eindeutig ist, "vorsicht", wenn du unsicher
+  bist und man nachprüfen soll. In deiner Antwort selbst reichen dann ein, zwei Sätze, die Einzelheiten stehen auf der Karte.
+- Was man tut: nichts antippen, nicht zurückrufen, nichts zahlen, keine Codes, PINs, TANs oder Passwörter sagen, keine App
+  installieren, am Telefon einfach auflegen. Nachprüfen nur über eine Nummer, die man selbst kennt (die alte Nummer des
+  Kindes, die Nummer auf der Bankomatkarte), nie über eine Nummer aus der Nachricht. Wer wirklich die Polizei ist, verlangt
+  nie Geld oder Wertsachen.
+- Biete an, gleich jemanden aus der Familie anzurufen (anruf_zeigen mit der Nummer aus dem Gedächtnis) oder der Familie
+  zu schreiben (nachricht_zeigen). Wurde schon Geld überwiesen oder ein Code verraten: sofort die Bank anrufen und die Karte
+  sperren lassen (Nummer auf der Karte oder in der Banking-App), dann die Polizei 133 (anruf_zeigen), und Bescheid an die
+  Familie (familie_benachrichtigen, wenn sie das möchte). Bei Gefahr gleich 133.
+- Steht eine Telefonnummer, ein Absender oder eine Internet-Adresse dabei, darfst du im Internet nachsehen, ob davor schon
+  gewarnt wird (zum Beispiel auf watchlist-internet.at). Findest du nichts, heißt das nicht, dass es echt ist.
+- Sieht etwas echt aus (zum Beispiel ein normaler Brief der Wiener Netze), sag das ehrlich und mach keine Angst. Ist es nur
+  ungewöhnlich, rate in einem Satz zum Nachprüfen, ohne Warnkarte.
+- Biko-Grundsatz: lieber einmal zu viel nachfragen als einmal zu wenig. Schäm dich nie für die Person: Betrüger sind Profis,
+  und es ist klug, zu fragen.
 
 Von selbst melden:
 - Du kannst dich jeden Morgen von selbst melden ("Morgenrunde"): mit Wetter, ein paar Nachrichten, die die Person
@@ -732,14 +760,17 @@ BILDSCHIRM = """Zu dieser Frage siehst du ein Bildschirmfoto vom Handy oder Tabl
 (zum Beispiel einen WeChat-Chat, eine Webseite oder einen Brief). Fragt sie "was steht da", "was schreibt sie",
 "übersetz das" oder "was soll ich antworten", geht es um dieses Bild. Lies vor, erkläre oder übersetze in einfachen Worten.
 Eine Antwort für jemanden schreibst du wie sonst auch mit nachricht_zeigen. Sag nicht "auf dem Bildschirmfoto",
-sondern einfach "da steht" oder "Mei schreibt". Hat die Frage nichts mit dem Bild zu tun, beachte es nicht."""
+sondern einfach "da steht" oder "Mei schreibt". Sieht das Bild nach Betrug aus (eine SMS mit Link, eine fremde Nummer, die
+Geld will, eine falsche Bank-Seite), warn sie davor, auch wenn sie nach etwas anderem fragt, mit der Warnkarte
+(warnung_zeigen). Hat die Frage sonst nichts mit dem Bild zu tun, beachte es nicht."""
 
 FOTO = """Zu dieser Frage hat die Person mit der Kamera ein Foto gemacht, meistens von einem Brief, einer Rechnung, einem Formular,
 einer Packungsbeilage oder einem Schild. Erkläre es in einfachen Worten:
 - Von wem ist es und worum geht es, in ein, zwei Sätzen.
 - Muss sie etwas tun? Was genau, und bis wann? Geld, Fristen und Termine nennst du deutlich. Ist nichts zu tun, sag das.
-- Wirkt es wie Betrug (Druck, Drohung, Zahlung an Fremde, Gewinn, komische Absender), warne klar und rate, bei der
-  Familie oder direkt bei der echten Stelle nachzufragen, nicht über Nummern aus dem Brief.
+- Wirkt es wie Betrug (Druck, Drohung, Zahlung an Fremde, Gewinn, komische Absender, ein Code zum Scannen), warne klar,
+  zeig die Warnkarte (warnung_zeigen) und rate, bei der Familie oder direkt bei der echten Stelle nachzufragen, nicht über
+  Nummern aus dem Brief.
 - Bei Medikamenten gilt wie immer: keine Dosierung ändern, im Zweifel Apotheke oder Arzt.
 Schreibt sie auf Chinesisch oder ist der Brief schwer, erkläre in ihrer Sprache. Ist das Foto unscharf, abgeschnitten oder
 zu dunkel, sag das freundlich und bitte um ein neues, statt zu raten. Termine kannst du ihr mit erinnerung_merken anbieten.
@@ -751,7 +782,10 @@ WICHTIG = re.compile(
     r"brief|rechnung|mahnung|behörde|amt\b|finanzamt|magistrat|vertrag|kündig|betrug|betrüg|fake|phishing|abzocke|echt\?"
     r"|bank|konto|überweis|zahlen|bezahl|pin\b|passwort|tan\b|versicherung|pension|rente|steuer|frist|anwalt|gericht|polizei"
     r"|medikament|tablette|arzt|ärztin|krank|schmerz|blutdruck|zucker|allergie|notfall|spital|krankenhaus"
-    r"|诈骗|骗|银行|转账|密码|合同|账单|信件|药|医生|医院|病|疼|保险|税|警察|紧急",
+    r"|gewonnen|gewinn|paket|zoll|enkel|neue nummer|unbekannt|komisch|seltsam|verdächtig|anydesk|teamviewer|gutschein"
+    r"|krypto|bitcoin|staatsanwalt|unfall|kaution|link|sms\b|code\b"
+    r"|诈骗|骗|银行|转账|密码|合同|账单|信件|药|医生|医院|病|疼|保险|税|警察|紧急"
+    r"|中奖|快递|链接|验证码|公安|大使馆|客服|退款|刷单|陌生",
     re.IGNORECASE)
 
 
@@ -945,11 +979,13 @@ def nummer_pruefen(eingabe, muss=False):
         raise ValueError("Das ist keine gültige Telefonnummer. Nimm nur eine Nummer, die dir die Person genannt hat.")
     return nummer
 MAX_ZEIGEN = 3   # so viele Nachrichten und so viele Links passen unter eine Antwort
+WARN_STUFEN = ("betrug", "vorsicht")   # Warnkarte: rot (sehr wahrscheinlich Betrug) oder orange (bitte nachprüfen)
+MAX_WARN_PUNKTE = 4
 
 
 def zeige_werkzeuge():
     """Die Werkzeuge, mit denen Biko etwas unter seine Antwort stellt, und die Listen, in denen es landet."""
-    entwuerfe, links, anrufe, karten, tagebuch = [], [], [], [], []
+    entwuerfe, links, anrufe, karten, tagebuch, warnungen = [], [], [], [], [], []
 
     def nachricht_zeigen(eingabe):
         text = str(eingabe.get("text") or "").strip()[:1500]
@@ -1006,7 +1042,48 @@ def zeige_werkzeuge():
         tagebuch.append({"tage": tage, "zeilen": zeilen[-60:]})
         return f"Das Tagebuch ({len(zeilen)} Einträge) steht jetzt als Karte unter deiner Antwort, zum Kopieren für den Arzt."
 
+    def warnung_zeigen(eingabe):
+        stufe = str(eingabe.get("stufe") or "").strip().lower()
+        if stufe not in WARN_STUFEN:
+            raise ValueError("stufe muss 'betrug' oder 'vorsicht' sein.")
+        titel = " ".join(str(eingabe.get("titel") or "").split())[:120]
+        if not titel:
+            raise ValueError("Der Titel fehlt: in einem kurzen Satz, worum es geht.")
+
+        def punkte(name):
+            liste = eingabe.get(name) or []
+            if isinstance(liste, str):
+                liste = [liste]
+            return [p for p in (" ".join(str(x).split())[:200] for x in liste[:MAX_WARN_PUNKTE]) if p]
+        tun = punkte("tun")
+        if not tun:
+            raise ValueError("Schreib bei 'tun' mindestens einen Schritt, was die Person jetzt machen soll.")
+        if warnungen:
+            raise ValueError("Pro Antwort nur eine Warnkarte.")
+        warnungen.append({"stufe": stufe, "titel": titel, "anzeichen": punkte("anzeichen"), "tun": tun})
+        return ("Die Warnkarte steht jetzt groß unter deiner Antwort. Wiederhol nicht alles, sag kurz und ruhig, worum es "
+                "geht, und biete an, jemanden aus der Familie anzurufen.")
+
     werkzeuge = {
+        "warnung_zeigen": {"tun": warnung_zeigen, "schema": {
+            "name": "warnung_zeigen",
+            "description": "Stellt eine große Warnkarte unter deine Antwort, wenn etwas nach Betrug aussieht (SMS, Nachricht, "
+                           "Anruf, Brief, Webseite): woran man es erkennt und was die Person jetzt tun soll. "
+                           "Alles in der Sprache der Person, kurz und einfach.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "stufe": {"type": "string", "enum": list(WARN_STUFEN),
+                              "description": "'betrug': sehr wahrscheinlich Betrug. 'vorsicht': unsicher, bitte nachprüfen."},
+                    "titel": {"type": "string", "description": "Ein kurzer Satz, z. B. 'Diese SMS ist nicht von der Post.'"},
+                    "anzeichen": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_WARN_PUNKTE,
+                                  "description": "Woran man es erkennt, je ein kurzer Satz, höchstens 4."},
+                    "tun": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_WARN_PUNKTE,
+                            "description": "Was sie jetzt tun soll, je ein kurzer Satz, höchstens 4, das Wichtigste zuerst."},
+                },
+                "required": ["stufe", "titel", "tun"],
+            },
+        }},
         "tagebuch_zeigen": {"tun": tagebuch_zeigen, "schema": {
             "name": "tagebuch_zeigen",
             "description": "Stellt das Gesundheitstagebuch als Karte unter deine Antwort (mit Knopf zum Kopieren, z. B. für den Arzt).",
@@ -1073,7 +1150,7 @@ def zeige_werkzeuge():
             },
         }},
     }
-    return werkzeuge, entwuerfe, links, anrufe, karten, tagebuch
+    return werkzeuge, entwuerfe, links, anrufe, karten, tagebuch, warnungen
 
 
 def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
@@ -1093,7 +1170,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
         frage.append(bild_block(bild[1]))
     frage.append({"type": "text", "text": text})
     messages = zwischenspeichern(fuer_claude(verlauf, bild)) + [{"role": "user", "content": frage}]
-    zeigen, entwuerfe, links, anrufe, karten, tagebuch = zeige_werkzeuge()
+    zeigen, entwuerfe, links, anrufe, karten, tagebuch, warnungen = zeige_werkzeuge()
     vorher, wusste = erinnerungen_lesen(), wissen_lesen()
     start, erste = time.monotonic(), []
 
@@ -1114,7 +1191,7 @@ def chat(text, gespraech_nr="", beim_text=None, gesprochen=False):
              "vergessen": [e for e in vorher if e["id"] not in neu],
              "gelernt": [w for w in weiss if w["id"] not in kannte],
              "nachrichten": entwuerfe, "links": links, "anrufe": anrufe, "listen": karten,
-             "tagebuch": tagebuch}
+             "tagebuch": tagebuch, "warnungen": warnungen}
     zeit = jetzt().isoformat(timespec="seconds")
     with _lock:   # erst jetzt speichern: geht die Antwort schief, bleibt das Gespräch, wie es war
         liste = gespraeche_lesen()

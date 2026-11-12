@@ -77,6 +77,7 @@
     $$('.entwurf').filter((el) => el._n).forEach(entwurfTexte); // Listen und Tagebuch sind auch Blätter, aber keine Nachrichten
     $$('.liste-karte').forEach(listeTexte);
     $$('.tagebuch-karte').forEach(tagebuchTexte);
+    $$('.warnung-karte').forEach(warnungTexte);
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
     vorschlaegeZeigen();
@@ -641,6 +642,33 @@
     nachUnten();
   }
 
+  // Warnkarte bei Betrug: groß und rot (oder orange, wenn man nur nachprüfen soll), woran man es erkennt, was jetzt hilft.
+  // Die Sätze schreibt Biko in der Sprache der Person, nur die Überschriften kommen von der App.
+  function warnungTexte(el) {
+    $('.warnung-kopf span', el).textContent = t(el.dataset.stufe === 'betrug' ? 'warnung_betrug' : 'warnung_vorsicht');
+    $$('.warnung-teil', el).forEach((h) => { h.textContent = t(h.dataset.k); });
+  }
+  function warnungKarte(w) {
+    const el = neu('div', 'entwurf warnung-karte');
+    el.dataset.stufe = w.stufe === 'betrug' ? 'betrug' : 'vorsicht';
+    if (!still) el.setAttribute('role', 'alert');
+    const kopf = neu('p', 'warnung-kopf');
+    kopf.innerHTML = icon('warnung') + '<span></span>';
+    el.append(kopf, neu('p', 'warnung-titel', w.titel));
+    [['warnung_anzeichen', w.anzeichen], ['warnung_tun', w.tun]].forEach(([k, punkte]) => {
+      if (!punkte || !punkte.length) return;
+      const h = neu('p', 'warnung-teil');
+      h.dataset.k = k;
+      const ul = neu(k === 'warnung_tun' ? 'ol' : 'ul', 'warnung-punkte');
+      punkte.forEach((p) => ul.appendChild(neu('li', '', p)));
+      el.append(h, ul);
+    });
+    warnungTexte(el);
+    verlauf.appendChild(el);
+    if (!still) B.aufdecken(el);
+    nachUnten();
+  }
+
   // Anrufen: ein großer Knopf, der das Telefon mit der Nummer öffnet. Anrufen muss die Person selbst.
   function anrufeZeigen(liste) {
     const gut = liste.filter((a) => L.telLink(a.nummer));
@@ -665,6 +693,7 @@
     (m.vergessen || []).forEach((er) => notiz(er, 'gestrichen'));
     (m.gemerkt || []).forEach((er) => notiz(er, 'gemerkt'));
     (m.gelernt || []).forEach((w) => notiz(w, 'gelernt'));
+    (m.warnungen || []).forEach(warnungKarte);
     (m.nachrichten || []).forEach(entwurf);
     linksZeigen(m.links || []);
     anrufeZeigen(m.anrufe || []);
