@@ -7,8 +7,8 @@
   return {
     de: {
       login_titel: 'Hallo, ich bin Biko!',
-      login_text: 'Bitte einmal das Passwort eingeben. Danach merkt sich das Handy dich.',
-      passwort: 'Passwort', anmelden: 'Anmelden',
+      login_text: 'Bitte einmal den Code eingeben, den du von deiner Familie bekommen hast. Danach merkt sich das Handy dich.',
+      passwort: 'Code oder Passwort', anmelden: 'Anmelden', zur_familie: 'Personen und Familienblick',
       sprache: 'Sprache', sprache_de: 'Deutsch', sprache_zh: '中文',
       erinnerung: 'Erinnerung', erledigt: 'Erledigt', spaeter: 'In 10 Minuten nochmal',
       medikament: 'Medikament', genommen: 'Genommen', nachfrage_titel: 'Schon genommen?',
@@ -72,8 +72,8 @@
     },
     zh: {
       login_titel: '你好，我是 Biko！',
-      login_text: '请输入一次密码。之后手机会记住你。',
-      passwort: '密码', anmelden: '登录',
+      login_text: '请输入一次家人给你的邀请码。之后手机会记住你。',
+      passwort: '邀请码或密码', anmelden: '登录', zur_familie: '所有人和家人看板',
       sprache: '语言', sprache_de: 'Deutsch', sprache_zh: '中文',
       erinnerung: '提醒', erledigt: '已完成', spaeter: '10 分钟后再提醒',
       medikament: '吃药', genommen: '已经吃了', nachfrage_titel: '吃过了吗？',

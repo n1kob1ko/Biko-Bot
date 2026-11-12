@@ -57,7 +57,7 @@
     <p class="leise" data-t="login_text"></p>
     <form id="login-form">
       <label for="passwort" data-t="passwort"></label>
-      <input id="passwort" type="password" autocomplete="current-password" required aria-describedby="login-fehler">
+      <input id="passwort" type="text" autocomplete="one-time-code" autocapitalize="off" autocorrect="off" spellcheck="false" required aria-describedby="login-fehler">
       <p id="login-fehler" class="meldung fehler" role="alert"></p>
       <button type="submit" class="knopf haupt druck" data-t="anmelden"></button>
     </form>
@@ -164,6 +164,8 @@
           </div>
         </div>
       </div>
+      <!-- Nur für den Verwalter: zu den Personen, ihren Codes und dem Familienblick -->
+      <a id="zur-familie" class="knopf druck reihe" href="/familie.html" hidden><svg class="icon " aria-hidden="true"><use href="#i-reden"/></svg><span data-t="zur_familie"></span></a>
       <button type="button" id="verlauf-loeschen" class="knopf druck reihe" data-t="vergessen" aria-expanded="false" aria-controls="alle-sicher"></button>
       <div id="alle-sicher" class="sicher karte" hidden>
         <p data-t="alle_loeschen_frage"></p>

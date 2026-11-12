@@ -100,7 +100,7 @@ class Test(unittest.TestCase):
     def test_falsches_passwort_und_chinesischer_fehler(self):
         status, j, _ = self.rufe("/api/login", {"passwort": "falsch"}, sprache="zh-CN")
         self.assertEqual(status, 403)
-        self.assertEqual(j["fehler"], "密码不对。")
+        self.assertEqual(j["fehler"], "密码或邀请码不对。")
 
     def test_gefaelschtes_cookie(self):
         self.assertEqual(self.rufe("/api/profil", cookie="biko_assistent=123.abc")[0], 401)
@@ -165,7 +165,7 @@ class Test(unittest.TestCase):
 
     def test_bildschirm_geht_mit_der_naechsten_frage_mit(self):
         c = self.anmelden()
-        server._bildschirm.update(bild=None, zeit=0)
+        server._bildschirme.clear()
         bild = b"\xff\xd8\xff\xe0" + b"x" * 100
         req = urllib.request.Request(self.url + "/api/bildschirm", data=bild, method="POST")
         req.add_header("Content-Type", "image/jpeg")
@@ -192,7 +192,7 @@ class Test(unittest.TestCase):
         self.assertEqual([b["type"] for b in m[0]["content"]], ["image", "text"])
         self.assertIn("Bildschirmfoto", m[-1]["content"][0]["text"])
         # nach ein paar Minuten gilt das Bild nicht mehr
-        server._bildschirm["zeit"] -= server.BILDSCHIRM_GILT + 1
+        server._bildschirme[server.erste_person()]["zeit"] -= server.BILDSCHIRM_GILT + 1
         self.rufe("/api/chat", {"text": "Und jetzt?", "gespraech": gid}, cookie=c)
         m = GEFRAGT[-1]["messages"]
         self.assertEqual(frage_text(m[-1]["content"]), "Und jetzt?")
@@ -201,7 +201,7 @@ class Test(unittest.TestCase):
 
     def test_foto_von_einem_brief_erklaert_biko_mit_dem_starken_modell(self):
         c = self.anmelden()
-        server._bildschirm.update(bild=None, zeit=0)
+        server._bildschirme.clear()
         req = urllib.request.Request(self.url + "/api/bildschirm?foto", data=b"\xff\xd8\xff\xe0" + b"x" * 100, method="POST")
         req.add_header("Content-Type", "image/jpeg")
         req.add_header("Cookie", c)
@@ -215,11 +215,11 @@ class Test(unittest.TestCase):
         self.assertIn("bis wann", frage[0]["text"])
         self.assertNotIn("Bildschirmfoto vom Handy", frage[0]["text"])
         self.assertEqual(anfrage["modell"], server.MODELL)
-        server._bildschirm.update(bild=None, zeit=0, art="bildschirm")
+        server._bildschirme.clear()
 
     def test_einfaches_geht_ans_guenstige_modell_wichtiges_ans_starke(self):
         c = self.anmelden()
-        server._bildschirm.update(bild=None, zeit=0)
+        server._bildschirme.clear()
         for text, modell in [("Wie geht es dir heute?", server.EINFACH_MODELL),
                              ("Erzähl mir einen Witz", server.EINFACH_MODELL),
                              ("Ist diese SMS von der Bank echt?", server.MODELL),
@@ -232,7 +232,7 @@ class Test(unittest.TestCase):
         server.bildschirm_merken(b"\xff\xd8bild")
         self.rufe("/api/chat", {"text": "Was steht da?"}, cookie=c)
         self.assertEqual(GEFRAGT[-1]["modell"], server.MODELL)
-        server._bildschirm.update(bild=None, zeit=0)
+        server._bildschirme.clear()
 
     def test_bildschirm_nur_jpeg(self):
         c = self.anmelden()
@@ -1189,6 +1189,156 @@ class Test(unittest.TestCase):
         status, roh_, _ = self.roh("/api/zuhoeren", b"ton", "audio/webm", c)
         self.assertEqual(status, 503)
         self.assertIn("nicht erreichbar", json.loads(roh_)["fehler"])
+
+    # ---------- Mehrere Personen und Familienblick ----------
+
+    def neue_person(self, name="Oma Mei", sprache="zh-CN"):
+        server._fehlversuche.clear()
+        c = self.anmelden()
+        status, j, _ = self.rufe("/api/verwaltung/person", {"name": name, "sprache": sprache}, cookie=c)
+        self.assertEqual(status, 200)
+        return c, j
+
+    def mit_code(self, code):
+        status, j, h = self.rufe("/api/login", {"code": code})
+        self.assertEqual(status, 200, j)
+        return j["rolle"], h["Set-Cookie"].split(";")[0]
+
+    def test_jede_person_hat_ihre_eigenen_daten(self):
+        c, neu = self.neue_person()
+        self.assertRegex(neu["person_code"]["code"], r"^[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        rolle, oma = self.mit_code(neu["person_code"]["code"].lower().replace("-", " "))   # klein und mit Leerzeichen geht auch
+        self.assertEqual(rolle, "person")
+        self.assertEqual(self.rufe("/api/profil", cookie=oma)[1]["name"], "Oma Mei")
+        self.assertEqual(self.rufe("/api/status", cookie=oma)[1]["rolle"], "person")
+        GEFRAGT.clear()
+        self.rufe("/api/chat", {"text": "Mein Enkel heißt Bo"}, cookie=oma)
+        # Oma Mei schreibt sich etwas auf, die erste Person sieht davon nichts
+        server.person_setzen(neu["person"])
+        server.wissen_merken({"text": "Enkel heißt Bo"})
+        server.liste_aendern({"liste": "Einkaufen", "dazu": ["Reis"]})
+        server.person_setzen(None)
+        self.assertEqual([w["text"] for w in self.rufe("/api/wissen", cookie=oma)[1]], ["Enkel heißt Bo"])
+        self.assertNotIn("Enkel heißt Bo", [w["text"] for w in self.rufe("/api/wissen", cookie=c)[1]])
+        self.assertNotIn(neu["person"], [g["id"] for g in self.rufe("/api/gespraeche", cookie=c)[1]])
+        self.assertEqual(len(self.rufe("/api/gespraeche", cookie=oma)[1]), 1)
+        # Biko spricht mit Oma Mei, nicht mit der ersten Person
+        self.assertIn("Oma Mei", "".join(texte(GEFRAGT[-1]["system"])))
+        # Die Person darf nicht in die Verwaltung
+        self.assertEqual(self.rufe("/api/verwaltung/code", {"person": neu["person"], "rolle": "familie"}, cookie=oma)[0], 403)
+        # Den Familienblick sieht sie auch (was sieht meine Familie?), aber nur den eigenen
+        self.assertEqual([p["name"] for p in self.rufe("/api/familie", cookie=oma)[1]["personen"]], ["Oma Mei"])
+
+    def test_familie_sieht_nur_den_familienblick(self):
+        c, neu = self.neue_person("Opa Franz", "de-AT")
+        _, opa = self.mit_code(neu["person_code"]["code"])
+        rolle, fam = self.mit_code(neu["familie_code"]["code"])
+        self.assertEqual(rolle, "familie")
+        for pfad in ("/api/profil", "/api/wissen", "/api/gespraeche", "/api/erinnerungen"):
+            self.assertEqual(self.rufe(pfad, cookie=fam)[0], 403, pfad)
+        self.assertEqual(self.rufe("/api/chat", {"text": "Hallo"}, cookie=fam)[0], 403)
+        server.person_setzen(neu["person"])
+        server.erinnerung_merken({"text": "Herztablette", "zeit": "08:00"})
+        server.liste_aendern({"liste": "Einkaufen", "dazu": ["Milch"]})
+        server.gesundheit_notieren({"art": "blutdruck", "wert": "135/85"})
+        server.person_setzen(None)
+        blick = self.rufe("/api/familie", cookie=fam)[1]
+        self.assertEqual(blick["rolle"], "familie")
+        self.assertEqual(len(blick["personen"]), 1)
+        b = blick["personen"][0]
+        self.assertEqual(b["name"], "Opa Franz")
+        self.assertIsNone(b["zuletzt"])
+        self.assertEqual(b["erinnerungen"], [{"zeit": "08:00", "text": "Herztablette"}])
+        self.assertEqual(b["listen"], {"Einkaufen": ["Milch"]})
+        self.assertNotIn("gesundheit", b)   # das Tagebuch erst, wenn er es erlaubt
+        self.assertNotIn("kosten", b)
+        # Opa redet mit Biko: das ist sein Lebenszeichen, die Familie sieht es (aber nicht, was er gesagt hat)
+        self.rufe("/api/chat", {"text": "Mein Geheimnis ist der Gugelhupf"}, cookie=opa)
+        b = self.rufe("/api/familie", cookie=fam)[1]["personen"][0]
+        self.assertIsNotNone(b["zuletzt"])
+        self.assertEqual(b["heute_geredet"], 1)
+        self.assertNotIn("Gugelhupf", json.dumps(b, ensure_ascii=False))
+        # Er erlaubt im Gespräch das Tagebuch und verbietet die Einkaufsliste
+        server.person_setzen(neu["person"])
+        server.familie_freigabe({"gesundheit": True, "listen": False})
+        self.assertIn("Gesundheitstagebuch", server.hinweis())
+        server.person_setzen(None)
+        b = self.rufe("/api/familie", cookie=fam)[1]["personen"][0]
+        self.assertEqual([e["wert"] for e in b["gesundheit"]], ["135/85"])
+        self.assertNotIn("listen", b)
+
+    def test_familie_sieht_ob_das_medikament_genommen_ist(self):
+        _, neu = self.neue_person("Opa Karl", "de-AT")
+        _, fam = self.mit_code(neu["familie_code"]["code"])
+        server.person_setzen(neu["person"])
+        server.erinnerung_merken({"text": "Blutdrucktablette", "zeit": "00:00", "medikament": True})
+        nr = server.erinnerungen_lesen()[0]["id"]
+        server.person_setzen(None)
+        e = self.rufe("/api/familie", cookie=fam)[1]["personen"][0]["erinnerungen"][0]
+        self.assertEqual((e["medikament"], e["genommen"], e["faellig"]), (True, None, True))
+        server.person_setzen(neu["person"])
+        server.medikament_genommen({"id": nr})
+        server.person_setzen(None)
+        e = self.rufe("/api/familie", cookie=fam)[1]["personen"][0]["erinnerungen"][0]
+        self.assertRegex(e["genommen"], r"^\d\d:\d\d$")
+
+    def test_verwalter_sieht_alle_und_kann_abmelden(self):
+        c, neu = self.neue_person("Tante Rosi", "de-AT")
+        _, rosi = self.mit_code(neu["person_code"]["code"])
+        _, fam = self.mit_code(neu["familie_code"]["code"])
+        alle = self.rufe("/api/familie", cookie=c)[1]
+        self.assertEqual(alle["rolle"], "verwalter")
+        rosi_blick = next(p for p in alle["personen"] if p["person"] == neu["person"])
+        self.assertEqual(rosi_blick["kosten"], {"dollar": 0, "antworten": 0, "zeichen": 0})
+        self.assertTrue(alle["personen"][0]["offen"])   # der Verwalter redet gerade als die erste Person
+        # Biko als Rosi öffnen: zählt nicht als ihr Lebenszeichen
+        status, _, h = self.rufe("/api/verwaltung/oeffnen", {"person": neu["person"]}, cookie=c)
+        besuch = h["Set-Cookie"].split(";")[0]
+        self.assertEqual(self.rufe("/api/profil", cookie=besuch)[1]["name"], "Tante Rosi")
+        self.rufe("/api/chat", {"text": "Hallo"}, cookie=besuch)
+        self.assertIsNone(self.rufe("/api/familie", cookie=fam)[1]["personen"][0]["zuletzt"])
+        # Neuer Code: der alte gilt nicht mehr, angemeldete Geräte bleiben angemeldet
+        alt = neu["person_code"]["code"]
+        neuer = self.rufe("/api/verwaltung/code", {"person": neu["person"], "rolle": "person"}, cookie=c)[1]["code"]
+        self.assertNotEqual(alt, neuer)
+        self.assertEqual(self.rufe("/api/login", {"code": alt})[0], 403)
+        self.assertEqual(self.rufe("/api/profil", cookie=rosi)[0], 200)
+        # Alle Geräte abmelden
+        self.assertEqual(self.rufe("/api/verwaltung/abmelden", {"person": neu["person"]}, cookie=c)[0], 200)
+        self.assertEqual(self.rufe("/api/profil", cookie=rosi)[0], 401)
+        self.assertEqual(self.rufe("/api/familie", cookie=fam)[0], 401)
+        server._fehlversuche.clear()
+        self.assertEqual(self.rufe("/api/login", {"code": neuer})[0], 403)
+        server._fehlversuche.clear()
+
+    def test_altes_cookie_gilt_als_verwalter_der_ersten_person(self):
+        zeit = str(int(server.time.time()))
+        alt = f"{server.COOKIE}={zeit}.{server._signatur(zeit)}"
+        self.assertEqual(self.rufe("/api/status", cookie=alt)[1]["rolle"], "verwalter")
+        self.assertEqual(self.rufe("/api/profil", cookie=alt)[0], 200)
+        self.assertEqual(self.rufe("/api/profil", cookie=alt[:-3] + "abc")[0], 401)
+
+    def test_bisherige_daten_ziehen_zur_ersten_person(self):
+        ordner = server.Path(tempfile.mkdtemp())
+        (ordner / "profil.json").write_text(json.dumps({"name": "Oma Li", "anrede": "du", "sprache": "zh-CN"}))
+        (ordner / "wissen.json").write_text(json.dumps([{"id": "a1", "text": "Enkel Niko", "zeit": "2026-11-11T10:00:00"}]))
+        with unittest.mock.patch.object(server, "DATA", ordner):
+            personen = server.personen_lesen()
+            self.assertEqual(len(personen), 1)
+            self.assertEqual(personen[0]["name"], "Oma Li")
+            self.assertFalse((ordner / "profil.json").exists())
+            self.assertEqual(server.profil()["name"], "Oma Li")
+            self.assertEqual(server.wissen_lesen()[0]["text"], "Enkel Niko")
+            self.assertEqual(server.personen_lesen(), personen)   # nur einmal
+
+    def test_hausmeister_schaut_bei_jeder_person_nach(self):
+        _, neu = self.neue_person("Onkel Wu")
+        gesehen = []
+        with unittest.mock.patch.object(server, "checkin_pruefen", lambda: gesehen.append(server.person_jetzt())), \
+                unittest.mock.patch.object(server, "morgenrunde_heute", lambda erzeugen=False: None):
+            server.hausmeister_runde()
+        self.assertIn(neu["person"], gesehen)
+        self.assertIn(server.erste_person(), gesehen)
 
     def test_seite_und_kein_pfad_ausbruch(self):
         with urllib.request.urlopen(self.url + "/../server.py") as r:

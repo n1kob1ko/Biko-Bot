@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FFF6E8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1C1830" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Biko Familienblick</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/atkinson-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="biko.css">
+  <link rel="stylesheet" href="familie.css">
+</head>
+<body>
+  <!-- Für die Familie (und den Verwalter): wie geht es der Person heute? Nie der Inhalt der Gespräche.
+       Texte stehen in familie.js (Deutsch und Chinesisch). -->
+  <main class="familie">
+    <header class="kopf">
+      <div class="biko-platz" data-biko></div>
+      <div>
+        <h1 id="titel"></h1>
+        <p class="leise" id="untertitel"></p>
+      </div>
+    </header>
+
+    <section id="login" hidden>
+      <form id="login-form" class="karte">
+        <label for="code" id="code-label"></label>
+        <input id="code" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required aria-describedby="login-fehler">
+        <p id="login-fehler" class="meldung fehler" role="alert"></p>
+        <button type="submit" class="knopf haupt druck" id="anmelden"></button>
+      </form>
+    </section>
+
+    <div id="personen" aria-live="polite"></div>
+
+    <!-- Nur für den Verwalter: eine neue Person anlegen -->
+    <section id="neu" hidden>
+      <div class="abschnitt">
+        <h2 id="neu-titel"></h2>
+        <p class="leise klein" id="neu-hilfe"></p>
+      </div>
+      <form id="neu-form" class="karte">
+        <label for="neu-name" id="neu-name-label"></label>
+        <input id="neu-name" type="text" maxlength="40" autocomplete="off" required>
+        <label for="neu-sprache" id="neu-sprache-label"></label>
+        <select id="neu-sprache">
+          <option value="de-AT">Deutsch</option>
+          <option value="zh-CN">中文</option>
+        </select>
+        <label for="neu-anrede" id="neu-anrede-label"></label>
+        <select id="neu-anrede">
+          <option value="du">du</option>
+          <option value="Sie">Sie</option>
+        </select>
+        <p id="neu-fehler" class="meldung fehler" role="alert"></p>
+        <button type="submit" class="knopf haupt druck" id="neu-knopf"></button>
+      </form>
+    </section>
+
+    <button type="button" id="zur-app" class="knopf druck" hidden></button>
+    <button type="button" id="abmelden" class="knopf druck" hidden></button>
+    <p class="leise klein hinweis" id="hinweis"></p>
+  </main>
+
+  <script src="biko.js"></script>
+  <script src="familie.js"></script>
+</body>
+</html>
