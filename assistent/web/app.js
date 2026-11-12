@@ -1590,7 +1590,7 @@
   B.schalterZiehen(schalter, vorlesenSetzen); // der Schalter lässt sich auch mit dem Finger schieben
 
   // Schriftgröße: die gelbe Ebene wird auf die gewählte Stelle zugeschnitten
-  const AUSSCHNITT = ['inset(0 66.667% 0 0 round 12px)', 'inset(0 33.333% 0 33.333% round 12px)', 'inset(0 0 0 66.667% round 12px)'];
+  const AUSSCHNITT = ['inset(0 66.667% 0 0 round 999px)', 'inset(0 33.333% 0 33.333% round 999px)', 'inset(0 0 0 66.667% round 999px)'];
   function schriftSetzen(wert) {
     const knoepfe = $$('#schrift button');
     const i = Math.max(0, knoepfe.findIndex((b) => b.dataset.wert === String(wert)));
