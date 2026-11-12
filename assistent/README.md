@@ -315,7 +315,7 @@ Die Browser-Tests starten den echten Server mit einer falschen KI und einem fals
 | `app.js` | Verhalten: Sprache, Reden (mit "Gemerkt", Nachricht zum Kopieren und Links unter der Antwort), Vorlesen und Aufnehmen, Verlauf, fällige Erinnerung, Einstellungen |
 | `biko.js`, `biko.css` | das Maskottchen aus der Trading-App, dazu die Stimmungen "hört zu" und "ist da" |
 | `stille.mp3` | eine Viertelsekunde Stille: damit "weckt" die App beim ersten Antippen den Ton am iPhone |
-| `fonts/` | Atkinson Hyperlegible Next (für schwache Augen gezeichnet, OFL). Chinesisch nutzt die Schrift des Handys. |
+| `fonts/` | Figtree (klar und freundlich, gut lesbar, OFL). Chinesisch nutzt die Schrift des Handys. |
 
 Zielgruppe, Ton und Gestaltungsregeln stehen in [PRODUCT.md](PRODUCT.md).
 

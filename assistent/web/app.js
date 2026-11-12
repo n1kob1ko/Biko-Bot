@@ -730,6 +730,7 @@
     t('vorschlaege').forEach((v, i) => {
       const b = neu('button', 'vorschlag druck reihe', v);
       b.type = 'button';
+      b.insertAdjacentHTML('afterbegin', `<svg class="icon" aria-hidden="true"><use href="#${['i-angebot', 'i-erinnern', 'i-nachricht', 'i-herz'][i] || 'i-reden'}"/></svg>`);
       b.style.setProperty('--i', i + 1);
       b.addEventListener('click', () => senden(v, b.getBoundingClientRect()));
       box.appendChild(b);

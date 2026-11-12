@@ -9,7 +9,7 @@
   <title>Biko Helfer</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="preload" href="fonts/atkinson-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="biko.css">
 </head>
@@ -33,6 +33,8 @@
 <symbol id="i-liste" viewBox="0 0 256 256"><path d="M96,64a12,12,0,0,1,12-12H216a12,12,0,0,1,0,24H108A12,12,0,0,1,96,64Zm120,52H108a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24Zm0,64H108a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24ZM40,64a16,16,0,1,0,32,0a16,16,0,1,0-32,0ZM40,128a16,16,0,1,0,32,0a16,16,0,1,0-32,0ZM40,192a16,16,0,1,0,32,0a16,16,0,1,0-32,0Z"/></symbol>
 <symbol id="i-kamera" viewBox="0 0 256 256"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm8,136a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8H80a8,8,0,0,0,6.66-3.56L100.28,48h55.43l13.63,20.44A8,8,0,0,0,176,72h32a8,8,0,0,1,8,8ZM128,88a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,88Zm0,72a28,28,0,1,1,28-28A28,28,0,0,1,128,160Z"/></symbol>
 <symbol id="i-link" viewBox="0 0 256 256"><path d="M228,104a12,12,0,0,1-24,0V69l-59.51,59.51a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"/></symbol>
+<symbol id="i-angebot" viewBox="0 0 256 256"><g fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round"><path d="M196 60 60 196"/><circle cx="76" cy="76" r="26"/><circle cx="180" cy="180" r="26"/></g></symbol>
+<symbol id="i-herz" viewBox="0 0 256 256"><path fill="none" stroke="currentColor" stroke-width="22" stroke-linejoin="round" d="M128 216S28 160 28 92a52 52 0 0 1 100-20 52 52 0 0 1 100 20c0 68-100 124-100 124Z"/></symbol>
 <symbol id="i-plus" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"/></symbol>
 <symbol id="i-verlauf" viewBox="0 0 256 256"><path d="M140,80v41.21l34.17,20.5a12,12,0,1,1-12.34,20.58l-40-24A12,12,0,0,1,116,128V80a12,12,0,0,1,24,0ZM128,28A99.38,99.38,0,0,0,57.24,57.34c-4.69,4.74-9,9.37-13.24,14V64a12,12,0,0,0-24,0v40a12,12,0,0,0,12,12H72a12,12,0,0,0,0-24H57.77C63,86,68.37,80.22,74.26,74.26a76,76,0,1,1,1.58,109,12,12,0,0,0-16.48,17.46A100,100,0,1,0,128,28Z"/></symbol>
 <symbol id="i-warnung" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM215.46,200H40.55a.42.42,0,0,1-.35-.17.23.23,0,0,1,0-.2L127.62,48.22a.42.42,0,0,1,.76,0l87.45,151.41a.23.23,0,0,1,0,.2A.42.42,0,0,1,215.46,200ZM116,144V104a12,12,0,0,1,24,0v40a12,12,0,0,1-24,0Zm28,36a16,16,0,1,1-16-16A16,16,0,0,1,144,180Z"/></symbol>
@@ -71,7 +73,6 @@
         <div class="biko-platz" data-biko="haupt" id="biko-reden"></div>
         <div>
           <h1 id="gruss"></h1>
-          <p class="leise" data-t="reden_text"></p>
         </div>
         <button type="button" id="neu-im-kopf" class="pille druck"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neues_gespraech"></span></button>
       </header>
@@ -101,7 +102,6 @@
         <div class="biko-platz" data-biko></div>
         <div>
           <h1 data-t="gespraeche_titel"></h1>
-          <p class="leise" data-t="gespraeche_text"></p>
         </div>
       </header>
       <button type="button" id="neues-gespraech" class="knopf haupt druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neues_gespraech"></span></button>
@@ -114,23 +114,19 @@
         <div class="biko-platz" data-biko></div>
         <div>
           <h1 data-t="einstellen_titel"></h1>
-          <p class="leise" data-t="einstellen_text"></p>
         </div>
       </header>
       <div class="abschnitt reihe">
         <h2 data-t="gemerkt_titel"></h2>
-        <p class="leise klein" data-t="gemerkt_hilfe"></p>
       </div>
       <ul id="erinnerungen" class="liste" aria-live="polite"></ul>
       <button type="button" id="ton-test" class="knopf druck reihe"><svg class="icon " aria-hidden="true"><use href="#i-erinnern"/></svg><span data-t="ton_test"></span></button>
       <div class="abschnitt reihe">
         <h2 data-t="wissen_titel"></h2>
-        <p class="leise klein" data-t="wissen_hilfe"></p>
       </div>
       <form id="profil-form" class="karte reihe">
         <label for="profil-name" data-t="name"></label>
-        <input id="profil-name" type="text" maxlength="80" aria-describedby="profil-name-hilfe" autocomplete="off">
-        <p class="hilfe detail" id="profil-name-hilfe" data-t="name_hilfe"></p>
+        <input id="profil-name" type="text" maxlength="80" data-t-ph="name_hilfe" autocomplete="off">
         <label for="profil-anrede" data-t="anrede"></label>
         <select id="profil-anrede">
           <option value="du" data-t="anrede_du"></option>
@@ -144,7 +140,6 @@
       <!-- Alles andere über die Person merkt sich Biko im Gespräch selbst. Hier kann die Familie nur nachsehen und löschen. -->
       <div class="abschnitt reihe">
         <h2 data-t="weiss_titel"></h2>
-        <p class="leise klein" data-t="weiss_hilfe"></p>
       </div>
       <ul id="wissen" class="liste" aria-live="polite"></ul>
       <div class="karte reihe">
