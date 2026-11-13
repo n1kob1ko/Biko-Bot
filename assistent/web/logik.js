@@ -157,6 +157,11 @@
   }
 
   // Der große Knopf neben dem Textfeld
+  // Was Biko gerade tut, für das Wort über dem Eingabefeld. Am Telefon hört er immer zu: Sprechen und Nachdenken gehen vor.
+  function zustandArt({ startet, spricht, denkt, hoert }) {
+    return startet ? 'startet' : spricht ? 'spricht' : denkt ? 'denkt' : hoert ? 'hoert' : '';
+  }
+
   function knopfArt(text, hoert) {
     if (hoert) return 'stopp';
     return text.trim() ? 'senden' : 'mikro';
@@ -306,5 +311,5 @@
     return { werte, rest: b.length % 2 ? b.slice(b.length - 1) : null };
   }
 
-  return { faelligeNachfrage, nachfrageSchluessel, NACHFRAGE_MIN, saetzeTeilen, fruehStueck, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
+  return { faelligeNachfrage, nachfrageSchluessel, NACHFRAGE_MIN, saetzeTeilen, fruehStueck, istEcho, naechsteMeldungen, telLink, waNummer, sendeLink, istUnterbrechung, sseLesen, pcmLesen, faelligeErinnerung, gezeigtSchluessel, wannText, weiterreden, wannWar, linkSeite, vorleseText, spracheVonText, knopfArt, zustandArt, istLaut, aufnahmeEnde, gummiband, bogen, dehnung, ausgang };
 });

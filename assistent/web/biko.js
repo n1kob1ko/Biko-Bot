@@ -1,7 +1,7 @@
 // Biko, das Maskottchen. Übernommen aus der Trading-App (ui/web/biko.js), dazu die Stimmungen "hoert" und "da".
 // Eigene SVGs, alle Animationen in biko.css.
 // Maskottchen.mount(el) hängt ein Exemplar ein, setMood(m) stellt die Stimmung für alle ein.
-// Stimmungen: schlaeft, tippt, jubelt, traurig, pause, offline, winkt, laedt, hoert, da (einfach da und freundlich)
+// Stimmungen: schlaeft, tippt, jubelt, traurig, pause, offline, winkt, laedt, hoert, spricht, da (einfach da und freundlich)
 //
 // Alle Maskottchen teilen Gesicht, Laptop, Schild und Effekte, damit jede Stimmung gleich funktioniert.
 // Sie unterscheiden sich in Farben (CSS-Variablen, [data-maskottchen="..."] in style.css) und Form
@@ -149,7 +149,7 @@
     },
   };
 
-  const MOODS = ['schlaeft', 'tippt', 'jubelt', 'traurig', 'pause', 'offline', 'winkt', 'laedt', 'hoert', 'da'];
+  const MOODS = ['schlaeft', 'tippt', 'jubelt', 'traurig', 'pause', 'offline', 'winkt', 'laedt', 'hoert', 'spricht', 'da'];
 
   const inst = window.BIKO_INSTANZ || {};
   const id = Object.prototype.hasOwnProperty.call(MASKOTTCHEN, inst.maskottchen) ? inst.maskottchen : 'biko';
@@ -170,6 +170,7 @@
     winkt: ['hop', 'tilt', 'wiggle', ...own],
     laedt: ['tilt', ...own],
     hoert: ['tuft'],
+    spricht: ['flap', 'tuft'],
     da: ['tilt', 'hop', ...own],
   };
   const FIDGET_MS = { hop: 650, tilt: 1400, wiggle: 700, boop: 520, tuft: 900, flap: 600, ear: 450, tail: 750 };
@@ -199,6 +200,8 @@
       if (mood === this.mood) return;
       this.mood = mood;
       this.svgs.forEach((s) => { s.dataset.mood = mood; });
+      // Jeder Wechsel beginnt mit einem kurzen Stauchen und Strecken: man sieht sofort, dass sich etwas getan hat
+      if (mood !== 'jubelt' && mood !== 'schlaeft') this.fidget('boop');
     },
     // Eine Zwischendurch-Bewegung abspielen (z. B. 'boop' beim Antippen)
     fidget(kind) {

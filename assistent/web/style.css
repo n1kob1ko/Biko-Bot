@@ -1,44 +1,51 @@
 /* Biko Helfer. Für ältere Augen und Finger: große Schrift, große Tippflächen, starker Kontrast.
-   Ecken: Knöpfe und Felder 16 px, Karten 22 px, runde Aktionen und Chips ganz rund.
+   Modern und ruhig: neutrales Hell, fast schwarze Schrift, Biko-Gelb als einzige Farbe, wenig Text.
+   Weich und ohne Umrandung: Flächen heben sich durch sanfte Schatten und getönte Füllung ab.
+   Ecken: Knöpfe ganz rund, Felder 20 px, Karten 28 px, wo der Browser es kann als weiche "Superellipse".
+   Tippflächen: mindestens 52 px, kleine Knöpfe fangen Tipps auch 8 px neben sich auf (.slop).
+   Ränder: nichts liegt unter Notch, Kamera-Insel oder Home-Balken (safe-area-inset, auch links und rechts).
    Bewegung: Eingänge bremsen ab (ease-out), Wege auf dem Bildschirm ease-in-out, Ausgänge 20 % kürzer,
    nichts federt. Nur transform, opacity, clip-path und filter werden bewegt. */
 
 @font-face {
-  font-family: "Atkinson Hyperlegible Next";
-  font-style: normal; font-weight: 200 800; font-display: swap;
-  src: url(fonts/atkinson-latin-ext.woff2) format("woff2");
+  font-family: "Figtree";
+  font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url(fonts/figtree-latin-ext.woff2) format("woff2");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
-  font-family: "Atkinson Hyperlegible Next";
-  font-style: normal; font-weight: 200 800; font-display: swap;
-  src: url(fonts/atkinson-latin.woff2) format("woff2");
+  font-family: "Figtree";
+  font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url(fonts/figtree-latin.woff2) format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
-  --bg: #FFF6E8;
+  --bg: #F6F6F4;
+  --schein: #FFE08A;          /* weiches gelbes Licht oben am Bildschirm */
+  --feld: #F0F0ED;            /* getönte Füllung für Felder und Knöpfe auf einer Karte */
   --card: #FFFFFF;
-  --ink: #2B2140;
-  --muted: #5E5672;
-  --line: #E6D5B8;
+  --ink: #17161C;
+  --muted: #5C5B64;
+  --line: #E3E3DF;
   --accent: #FFC94D;          /* Biko-Gelb: die eine Akzentfarbe */
   --accent-stark: #E0902A;
-  --accent-ink: #2B2140;      /* Schrift auf Gelb */
-  --blase: #FFEFC2;           /* Bikos Sprechblase */
+  --accent-ink: #17161C;      /* Schrift auf Gelb */
+  --blase: #FFF0C2;           /* Bikos Sprechblase */
   --up: #0F7A52;
   --up-bg: #DDF5E9;
   --down: #B32B40;
   --down-bg: #FDE3E6;
   --down-ink: #FFFFFF;        /* Symbol auf Rot */
-  --schatten: 0 6px 20px rgba(43, 33, 64, .10);
-  --schatten-hoch: 0 14px 40px rgba(43, 33, 64, .18);
+  --schatten: 0 1px 2px rgba(23, 22, 28, .04), 0 6px 20px rgba(23, 22, 28, .06);
+  --schatten-hoch: 0 2px 6px rgba(23, 22, 28, .05), 0 16px 44px rgba(23, 22, 28, .12);
+  --schatten-gelb: 0 8px 22px rgba(224, 144, 42, .28);
 
-  --r-feld: 16px;
-  --r-karte: 22px;
+  --r-feld: 20px;
+  --r-karte: 28px;
   --schrift: 1;
-  /* Lateinisch: Atkinson Hyperlegible (für schwache Augen gezeichnet). Chinesisch: die Schrift des Handys. */
-  --font: "Atkinson Hyperlegible Next", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  /* Lateinisch: Figtree. Chinesisch: die Schrift des Handys. */
+  --font: "Figtree", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -49,20 +56,23 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1C1830;
-    --card: #28233F;
-    --ink: #F6F0FF;
-    --muted: #BDB5D6;
-    --line: #453E63;
+    --bg: #121116;
+    --schein: #4A3A10;
+    --feld: #2B2A32;
+    --card: #1F1E25;
+    --ink: #F5F5F7;
+    --muted: #B5B4BD;
+    --line: #36353E;
     --accent-stark: #FFC94D;
-    --blase: #3B3257;
+    --blase: #3A3222;
     --up: #5BDCA4;
     --up-bg: #1E3A33;
     --down: #FF8E9C;
     --down-bg: #43243A;
-    --down-ink: #2B2140;
-    --schatten: 0 6px 20px rgba(0, 0, 0, .35);
-    --schatten-hoch: 0 14px 40px rgba(0, 0, 0, .5);
+    --down-ink: #17161C;
+    --schatten: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 24px rgba(0, 0, 0, .3);
+    --schatten-hoch: 0 2px 6px rgba(0, 0, 0, .3), 0 18px 48px rgba(0, 0, 0, .5);
+    --schatten-gelb: 0 8px 22px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
 }
@@ -75,12 +85,16 @@ body {
   -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
   caret-color: var(--accent-stark);
 }
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto 0; height: 62vh; z-index: -1; pointer-events: none;
+  background: radial-gradient(110% 100% at 50% 0%, var(--schein) 0%, transparent 72%); opacity: .6;
+}
 ::selection { background: var(--accent); color: var(--accent-ink); }
 [hidden] { display: none !important; }
 button, input, textarea, select { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
-h1 { font-size: 1.55rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
-h2 { font-size: 1.2rem; font-weight: 800; line-height: 1.2; margin: 0 0 .25rem; }
+h1 { font-size: 1.7rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.25rem; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 .25rem; }
 p { margin: 0; }
 .leise { color: var(--muted); }
 .klein { font-size: .875rem; }
@@ -88,9 +102,9 @@ p { margin: 0; }
 .icon { width: 1.5em; height: 1.5em; flex: none; fill: currentColor; }
 
 /* ---------- Gerüst ---------- */
-#app, .login { max-width: 560px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 16px 0; }
+#app, .login { max-width: 560px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) var(--rand-r) 0 var(--rand-l); }
 #app { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
-body { --oben: max(14px, env(safe-area-inset-top)); --leiste-hoehe: calc(98px + env(safe-area-inset-bottom)); }
+body { --oben: max(14px, env(safe-area-inset-top)); --rand-l: max(16px, env(safe-area-inset-left)); --rand-r: max(16px, env(safe-area-inset-right)); --leiste-hoehe: calc(92px + env(safe-area-inset-bottom)); }
 .ansichten { display: grid; }
 .ansicht { grid-area: 1 / 1; min-width: 0; }
 /* Wechsel: alte und neue Ansicht liegen kurz übereinander */
@@ -105,13 +119,13 @@ body { --oben: max(14px, env(safe-area-inset-top)); --leiste-hoehe: calc(98px + 
 .kopf { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; align-items: center; min-height: 56px; margin: 0 0 16px; padding-right: 64px; }
 .kopf > div { display: contents; }
 .kopf .biko-platz { width: 64px; aspect-ratio: 240 / 210; }
-.kopf h1 { font-size: 1.35rem; overflow-wrap: anywhere; hyphens: auto; }
+.kopf h1 { font-size: 1.6rem; overflow-wrap: anywhere; hyphens: auto; }
 .kopf p { grid-column: 1 / -1; margin: 10px -64px 0 0; }
 /* Start: großer Biko in der Mitte, solange noch nichts gesagt wurde */
-.kopf.gross { display: flex; flex-direction: column; text-align: center; padding: 40px 0 0; gap: 6px; }
+.kopf.gross { display: flex; flex-direction: column; text-align: center; padding: 44px 0 0; gap: 10px; margin-bottom: 22px; }
 .kopf.gross > div { display: block; }
-.kopf.gross .biko-platz { width: min(200px, 50vw, 22dvh); }
-.kopf.gross h1 { font-size: 1.55rem; }
+.kopf.gross .biko-platz { width: min(230px, 56vw, 25dvh); }
+.kopf.gross h1 { font-size: 2.5rem; }
 .kopf.gross p { max-width: 30ch; margin: .2rem auto 0; }
 .ansicht > .knopf { margin-bottom: 14px; }
 
@@ -124,15 +138,20 @@ body { --oben: max(14px, env(safe-area-inset-top)); --leiste-hoehe: calc(98px + 
 .knopf {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; min-height: 60px; padding: 0 22px;
-  border-radius: var(--r-feld); border: 2px solid var(--line);
+  border-radius: 999px; border: 2px solid transparent;
   background: var(--card); color: var(--ink); font-weight: 700; cursor: pointer;
-  position: relative;
+  position: relative; box-shadow: var(--schatten);
 }
-.knopf.haupt { background: var(--accent); border-color: var(--accent-stark); color: var(--accent-ink); }
+.knopf.haupt { background: var(--accent); color: var(--accent-ink); box-shadow: var(--schatten-gelb); }
+/* Auf einer Karte: getönt statt schwebend */
+.karte .knopf:not(.haupt), .entwurf .knopf:not(.haupt), .erinnerung .knopf:not(.haupt), .gespraech .knopf:not(.haupt) { background: var(--feld); box-shadow: none; }
 .knopf:disabled { opacity: .6; cursor: default; }
 /* Drücken: sofort kleiner (solange gehalten ohne Übergang), Loslassen weich */
 .druck { transition: transform var(--t-druck) var(--ease-out); }
-.druck:active:not(:disabled) { transform: scale(0.97); transition-duration: 40ms; }
+.druck:active:not(:disabled) { transform: scale(0.96); filter: brightness(.94); transition-duration: 40ms; }
+/* Kleine Knöpfe fangen Tipps auch knapp daneben auf: zittrige Finger treffen trotzdem */
+.slop { position: relative; }
+.slop::before { content: ""; position: absolute; inset: -8px; border-radius: inherit; }
 
 /* Erfolg: ein Ring pulsiert einmal nach außen */
 .puls::after {
@@ -153,13 +172,14 @@ body { --oben: max(14px, env(safe-area-inset-top)); --leiste-hoehe: calc(98px + 
 }
 
 /* ---------- Formulare ---------- */
-.karte { background: var(--card); border-radius: var(--r-karte); padding: 18px; margin: 0 0 16px; box-shadow: var(--schatten); }
+.karte { background: var(--card); border-radius: var(--r-karte); padding: 20px; margin: 0 0 16px; box-shadow: var(--schatten); }
 label, .label { display: block; font-weight: 700; margin: 1rem 0 .35rem; padding: 0; }
 .karte > label:first-child, .karte > h2 + label { margin-top: .2rem; }
 input[type="text"], input[type="password"], textarea, select {
   width: 100%; min-height: 58px; padding: 14px;
-  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld);
+  background: var(--feld); border: 2px solid transparent; border-radius: var(--r-feld);
 }
+.login input[type="text"] { background: var(--card); box-shadow: var(--schatten); }
 textarea { resize: none; display: block; }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--accent-stark); outline-offset: 1px; border-color: var(--accent-stark); }
@@ -187,23 +207,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 
 /* Auswahl in Segmenten: die gelbe Ebene liegt darüber und wird auf die gewählte Stelle zugeschnitten.
    So wechselt die Schriftfarbe genau an der Kante, während der Ausschnitt wandert. */
-.segment { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 4px; border-radius: var(--r-feld); background: var(--bg); border: 2px solid var(--line); }
-.segment button { min-height: 52px; padding: 0 2px; border: 0; background: none; font-weight: 700; font-size: .92rem; color: var(--muted); border-radius: 12px; cursor: pointer; transition: transform var(--t-druck) var(--ease-out); }
+.segment { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 5px; border-radius: 999px; background: var(--feld); }
+.segment button { min-height: 56px; padding: 0 2px; border: 0; background: none; font-weight: 700; font-size: .92rem; color: var(--muted); border-radius: 999px; cursor: pointer; transition: transform var(--t-druck) var(--ease-out); }
 .segment button:active, #sprache-menue button:active { transform: scale(0.97); transition-duration: 40ms; }
 .segment .oben {
-  position: absolute; inset: 4px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  background: var(--accent); color: var(--accent-ink); border-radius: 12px; pointer-events: none;
-  clip-path: inset(0 66.667% 0 0 round 12px);
+  position: absolute; inset: 5px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: var(--accent); color: var(--accent-ink); border-radius: 999px; pointer-events: none;
+  clip-path: inset(0 66.667% 0 0 round 999px);
   transition: clip-path 260ms var(--ease-in-out);
 }
 .segment .oben span { display: grid; place-items: center; text-align: center; padding: 0 2px; font-weight: 700; font-size: .92rem; }
 
 /* ---------- Sprache ---------- */
-.sprache { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; z-index: 5; }
+.sprache { position: absolute; top: max(14px, env(safe-area-inset-top)); right: var(--rand-r); z-index: 5; }
 @media (min-width: 592px) { .sprache { right: calc(50% - 280px + 16px); } }
 #sprache-knopf {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px;
-  border-radius: 999px; border: 2px solid var(--line); background: var(--card); font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 16px;
+  border-radius: 999px; border: 2px solid transparent; background: var(--card); box-shadow: var(--schatten); font-weight: 700; cursor: pointer;
 }
 #sprache-knopf .pfeil { width: 1em; height: 1em; transition: transform 200ms var(--ease-out); }
 /* Neben einem Titel ist der Knopf nur das Sprachsymbol */
@@ -212,12 +232,12 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 #sprache-knopf[aria-expanded="true"] .pfeil { transform: rotate(180deg); }
 #sprache-menue {
   position: absolute; right: 0; top: calc(100% + 8px); min-width: 190px; padding: 6px;
-  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld); box-shadow: var(--schatten-hoch);
+  background: var(--card); border-radius: 24px; box-shadow: var(--schatten-hoch);
   transform-origin: calc(100% - 28px) -8px;   /* geht am Knopf auf */
 }
 #sprache-menue button {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 56px; padding: 0 14px;
-  border: 0; border-radius: 12px; background: none; font-weight: 700; cursor: pointer; text-align: left;
+  border: 0; border-radius: 18px; background: none; font-weight: 700; cursor: pointer; text-align: left;
   transition: transform var(--t-druck) var(--ease-out);
 }
 #sprache-menue button[aria-checked="true"] { background: var(--blase); }
@@ -225,20 +245,24 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 #sprache-menue button[aria-checked="true"] .icon { opacity: 1; }
 
 /* ---------- Reden ---------- */
-.vorschlaege, .vorschlaege-geist { display: grid; gap: 10px; margin: 6px 0 16px; }
+.vorschlaege, .vorschlaege-geist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 16px; }
 .vorschlag, .vorschlag-geist {
-  min-height: 58px; padding: 12px 18px; text-align: left; cursor: pointer;
-  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld); box-shadow: var(--schatten);
+  display: grid; align-content: start; gap: 10px; min-height: 60px; padding: 14px 16px 16px; text-align: left; cursor: pointer;
+  font-weight: 600; font-size: .95rem; line-height: 1.25;
+  background: var(--card); border: 2px solid transparent; border-radius: 24px; box-shadow: var(--schatten);
+}
+.vorschlag .icon {
+  width: 40px; height: 40px; padding: 9px; border-radius: 14px; background: var(--accent); color: var(--accent-ink);
 }
 .verlauf { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
-.blase { max-width: 88%; padding: 12px 16px; border-radius: 22px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.blase.ich { align-self: flex-end; background: var(--card); border: 2px solid var(--line); border-bottom-right-radius: 8px; }
-.blase.biko-sagt { align-self: flex-start; background: var(--blase); border-bottom-left-radius: 8px; animation: kommt var(--t-ein) var(--ease-out) both; }
-.blase.biko-sagt-live { align-self: flex-start; background: var(--blase); border-bottom-left-radius: 8px; animation: kommt var(--t-ein) var(--ease-out) both; }
+.blase { max-width: 88%; padding: 13px 18px; border-radius: 26px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.blase.ich { align-self: flex-end; background: var(--ink); color: var(--bg); border-bottom-right-radius: 10px; }
+.blase.biko-sagt { align-self: flex-start; background: var(--card); box-shadow: var(--schatten); border-bottom-left-radius: 10px; animation: kommt var(--t-ein) var(--ease-out) both; }
+.blase.biko-sagt-live { align-self: flex-start; background: var(--card); box-shadow: var(--schatten); border-bottom-left-radius: 10px; animation: kommt var(--t-ein) var(--ease-out) both; }
 .blase.biko-sagt.gleich-da { animation: none; } /* ersetzt die mitlaufende Antwort, ohne nochmal hereinzukommen */
 .blase.fehler-blase { align-self: flex-start; background: var(--down-bg); color: var(--down); font-weight: 700; }
 .blase .vorlesen {
-  display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 8px 0 -4px -8px; padding: 0 12px 0 8px;
+  position: relative; display: flex; align-items: center; gap: 8px; min-height: 52px; margin: 8px 0 -6px -8px; padding: 0 14px 0 8px;
   border: 0; border-radius: 999px; background: none; color: var(--muted); font-weight: 700; font-size: .9rem; cursor: pointer;
 }
 /* Was Biko sich gerade aufgeschrieben oder gestrichen hat: steht klein unter seiner Antwort */
@@ -250,9 +274,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 .notiz .icon { color: var(--up); grid-row: span 2; }
 .notiz strong { color: var(--up); }
 .notiz .wann { grid-column: 2; font-weight: 700; font-variant-numeric: tabular-nums; }
-.notiz.gestrichen { background: var(--card); border: 2px solid var(--line); padding: 8px 14px 8px 10px; }
+.notiz.gestrichen { background: var(--feld); }
 .notiz.gestrichen .icon, .notiz.gestrichen strong { color: var(--muted); }
-.blase.denkt { align-self: flex-start; background: var(--blase); display: inline-flex; gap: 7px; align-items: center; min-height: 52px; }
+.blase.denkt { align-self: flex-start; background: var(--card); box-shadow: var(--schatten); display: inline-flex; gap: 7px; align-items: center; min-height: 52px; }
 .blase.denkt i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); animation: punkt 1.1s ease-in-out infinite; }
 .blase.denkt i:nth-child(2) { animation-delay: .15s; }
 .blase.denkt i:nth-child(3) { animation-delay: .3s; }
@@ -262,7 +286,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 /* Das Eingabefeld steht immer unten über der Leiste. Was dahinter durchläuft, blendet davor aus. */
 .ansicht[data-ansicht="reden"] { display: flex; flex-direction: column; min-height: calc(100dvh - var(--oben) - var(--leiste-hoehe)); margin-bottom: -26px; }
 .eingabe-platz {
-  position: sticky; bottom: var(--leiste-hoehe); z-index: 2; margin: auto -16px 0; padding: 20px 16px 12px;
+  position: sticky; bottom: var(--leiste-hoehe); z-index: 2; margin: auto calc(-1 * var(--rand-r)) 0 calc(-1 * var(--rand-l)); padding: 20px var(--rand-r) 12px var(--rand-l);
   background: linear-gradient(to bottom, transparent, var(--bg) 20px);
   box-shadow: 0 100px 0 var(--bg);   /* deckt auch den Streifen neben und unter der Leiste ab */
 }
@@ -276,19 +300,21 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px
 .dolmetscher-leiste .icon { flex: none; font-size: 1.25rem; }
 .dolmetscher-leiste span { flex: 1; }
 .dolmetscher-leiste button {
-  flex: none; min-height: 48px; padding: 0 20px; border: 0; border-radius: 999px; cursor: pointer;
+  flex: none; min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; cursor: pointer;
   background: var(--card); color: var(--ink); font: inherit; font-weight: 700;
 }
 body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 .eingabe {
   display: flex; align-items: flex-end; gap: 10px; padding: 8px;
-  background: var(--card); border: 2px solid var(--line); border-radius: 30px; box-shadow: var(--schatten);
+  background: var(--card); border: 2px solid transparent; border-radius: 38px; box-shadow: var(--schatten-hoch);
+  transition: border-color 200ms ease;
 }
-.eingabe textarea { border: 0; background: none; font-size: min(1rem, 21px); min-height: 60px; max-height: 9.5rem; padding: 16px 6px 14px 14px; flex: 1; outline: none; }
+.eingabe textarea { border: 0; background: none; font-size: min(1rem, 21px); min-height: 60px; max-height: 9.5rem; padding: 16px 0 14px 14px; flex: 1; min-width: 0; outline: none; }
+.eingabe textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .eingabe:focus-within { border-color: var(--accent-stark); }
 /* Kamera: ein Foto von einem Brief, Biko erklärt ihn */
 #foto-knopf {
-  flex: none; width: 48px; height: 52px; margin: 6px -8px 6px 0; border-radius: 50%; border: 0; cursor: pointer;
+  flex: none; width: 56px; height: 56px; margin: 4px -10px 4px 0; border-radius: 50%; border: 0; cursor: pointer;
   display: grid; place-items: center; background: none; color: var(--muted);
 }
 #foto-knopf .icon { font-size: 1.25rem; }
@@ -296,11 +322,11 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 .eingabe textarea { padding-left: 2px; }
 #chat-knopf {
   position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer;
-  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); box-shadow: var(--schatten-gelb);
   transition: transform var(--t-druck) var(--ease-out), background-color 200ms ease, color 200ms ease;
 }
 #chat-knopf .wechsel { font-size: 1.25rem; }
-#chat-knopf[data-art="stopp"] { background: var(--down); color: var(--down-ink); }
+#chat-knopf[data-art="stopp"] { background: var(--down); color: var(--down-ink); box-shadow: none; }
 #chat-knopf[data-art="stopp"]::before {
   content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
   border: 3px solid var(--down); animation: welle 1.4s ease-out infinite;
@@ -308,7 +334,13 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 @keyframes welle { from { transform: scale(1); opacity: .7; } to { transform: scale(1.5); opacity: 0; } }
 
 /* Im Gespräch bleibt der kleine Biko oben stehen: an ihm sieht man, ob er zuhört oder nachdenkt */
-#reden-kopf:not(.gross) { position: sticky; top: 0; z-index: 3; margin: 0 -16px 12px; padding: 8px 80px 8px 16px; background: var(--bg); }
+#reden-kopf:not(.gross) { position: sticky; top: 0; z-index: 3; margin: 0 calc(-1 * var(--rand-r)) 12px calc(-1 * var(--rand-l)); padding: 8px calc(64px + var(--rand-r)) 8px var(--rand-l); }
+/* Milchiges Glas hinter dem Kopf, das nach unten weich ausläuft */
+#reden-kopf:not(.gross)::before {
+  content: ""; position: absolute; inset: 0 0 -16px 0; z-index: -1; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 68%, transparent); mask-image: linear-gradient(to bottom, #000 68%, transparent);
+}
 #reden-kopf:not(.gross) p { display: none; }
 #chat-knopf:disabled { opacity: .5; cursor: default; }
 /* Kopie, die kurz stehen bleibt und ausblendet (bewegung.js) */
@@ -318,7 +350,7 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 #profil-speichern .wechsel { position: absolute; left: 20px; }
 /* Die Nachricht, die Biko für jemanden geschrieben hat: ein Blatt unter seiner Antwort, zum Kopieren */
 .entwurf {
-  align-self: stretch; margin: -2px 0 2px; padding: 14px 16px 16px; border-radius: var(--r-karte);
+  align-self: stretch; margin: -2px 0 2px; padding: 18px 18px 18px; border-radius: var(--r-karte);
   background: var(--card); box-shadow: var(--schatten);   /* wird von oben nach unten aufgedeckt (bewegung.js) */
 }
 .entwurf-an { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 700; font-size: .875rem; }
@@ -326,8 +358,8 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 /* Eine Liste (Einkaufen, Notizen): große Zeilen zum Wegtippen */
 .liste-eintraege { list-style: none; display: grid; gap: 8px; margin: 10px 0 8px; padding: 0; }
 .eintrag {
-  width: 100%; min-height: 56px; display: flex; align-items: center; gap: 14px; padding: 8px 14px;
-  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld);
+  width: 100%; min-height: 60px; display: flex; align-items: center; gap: 14px; padding: 8px 14px;
+  background: var(--feld); border: 2px solid transparent; border-radius: var(--r-feld);
   font: inherit; font-size: 1.15rem; line-height: 1.3; color: var(--ink); text-align: left; cursor: pointer;
 }
 .eintrag .haken {
@@ -364,22 +396,22 @@ body.dolmetscht .blase.biko-sagt { font-size: 1.4em; line-height: 1.35; }
 .links { align-self: stretch; display: grid; gap: 10px; margin-top: -2px; animation: kommt var(--t-ein) var(--ease-out) both; animation-delay: 120ms; }
 .link-knopf {
   display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 18px;
-  background: var(--card); border: 2px solid var(--line); border-radius: var(--r-feld); box-shadow: var(--schatten);
+  background: var(--card); border: 2px solid transparent; border-radius: var(--r-karte); box-shadow: var(--schatten);
   color: var(--ink); text-decoration: none;
 }
 .link-knopf > span { display: grid; min-width: 0; }
 .link-knopf strong { overflow-wrap: anywhere; line-height: 1.25; }
 .link-knopf .seite { color: var(--muted); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Anrufen: der wichtigste Knopf unter der Antwort, in Biko-Gelb */
-.link-knopf.anruf { background: var(--accent); border-color: var(--accent-stark); color: var(--accent-ink); }
+.link-knopf.anruf { background: var(--accent); color: var(--accent-ink); box-shadow: var(--schatten-gelb); }
 .link-knopf.anruf .seite { color: inherit; opacity: .8; }
 a.knopf { text-decoration: none; }
 
 /* ---------- Gespräche: frühere Sitzungen ---------- */
 /* Im Gespräch steht neben dem kleinen Biko statt der Begrüßung der Knopf für ein neues Gespräch */
 .pille {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 4px 16px 4px 12px; justify-self: start;
-  border-radius: 999px; border: 2px solid var(--line); background: var(--card); font-weight: 700; font-size: .92rem; line-height: 1.15;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 4px 18px 4px 14px; justify-self: start;
+  border-radius: 999px; border: 2px solid transparent; background: var(--card); box-shadow: var(--schatten); font-weight: 700; font-size: .92rem; line-height: 1.15;
   text-align: left; cursor: pointer;
 }
 .pille .icon { width: 1.25em; height: 1.25em; }
@@ -397,7 +429,7 @@ a.knopf { text-decoration: none; }
 .gespraech .oeffnen[aria-current="true"] { background: var(--blase); }
 
 /* ---------- Einstellungen: Abschnitte und die Liste der Erinnerungen ---------- */
-.abschnitt { margin: 26px 0 12px; }
+.abschnitt { margin: 30px 0 12px; }
 .kopf + .abschnitt { margin-top: 6px; }
 .abschnitt h2 { margin-bottom: .2rem; }
 .liste { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
@@ -409,24 +441,24 @@ a.knopf { text-decoration: none; }
 .erinnerung .tage-text { color: var(--muted); font-size: .875rem; }
 .wissen-zeile { grid-template-columns: 1fr auto; }
 .weg {
-  width: 56px; height: 56px; display: grid; place-items: center; border-radius: var(--r-feld);
-  border: 2px solid var(--line); background: var(--card); color: var(--down); cursor: pointer;
+  width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%;
+  border: 2px solid transparent; background: var(--down-bg); color: var(--down); cursor: pointer;
 }
 .erinnerung.neu { animation: reihe 320ms var(--ease-out) both; }
 /* Nachfrage vor dem Löschen */
 .sicher { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .sicher p { grid-column: 1 / -1; font-weight: 700; }
-.sicher .ja { border-color: var(--down); color: var(--down); }
+.sicher .ja, .karte .sicher .ja, .erinnerung .sicher .ja, .gespraech .sicher .ja { background: var(--down-bg); color: var(--down); }
 .sicher .knopf { margin-top: 0; padding: 0 12px; }
 .erinnerung .sicher { grid-column: 1 / -1; padding: 4px 6px 6px 0; }
 .gespraech .sicher { grid-column: 1 / -1; padding: 4px 0 6px 10px; }
-.leer-zeile { color: var(--muted); padding: 22px 18px; border: 2px dashed var(--line); border-radius: var(--r-karte); }
+.leer-zeile { color: var(--muted); padding: 22px 20px; border-radius: var(--r-karte); background: color-mix(in srgb, var(--card) 65%, transparent); }
 
 /* ---------- Erinnerung, die gerade fällig ist ---------- */
 .alarm {
   position: fixed; inset: 0; z-index: 20; background: var(--bg);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  padding: 24px; text-align: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); text-align: center;
 }
 .alarm .biko-platz { width: min(230px, 60vw); aspect-ratio: 240 / 210; }
 .alarm-titel { font-weight: 700; color: var(--muted); margin-top: 10px; }
@@ -439,31 +471,32 @@ a.knopf { text-decoration: none; }
 .login .biko-platz { width: min(220px, 58vw); aspect-ratio: 240 / 210; margin: 0 auto 8px; }
 .login form { text-align: left; margin-top: 22px; }
 .login p { max-width: 32ch; margin: .4rem auto 0; }
+.login form .knopf { margin-top: 16px; }
 
 /* ---------- Leiste unten: ein Kissen wandert zum gewählten Bereich ---------- */
 .leiste {
   position: fixed; z-index: 10; left: 50%; translate: -50% 0; bottom: max(12px, env(safe-area-inset-bottom));
-  width: min(528px, calc(100% - 24px)); display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px;
-  background: var(--card); border: 2px solid var(--line); border-radius: 26px; box-shadow: var(--schatten-hoch);
+  width: min(528px, calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right))); display: grid; grid-template-columns: repeat(3, 1fr); padding: 6px;
+  background: color-mix(in srgb, var(--card) 86%, transparent); border-radius: 999px; box-shadow: var(--schatten-hoch);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
 }
 .leiste-kissen {
-  position: absolute; left: 0; top: 6px; bottom: 6px; width: 10px; border-radius: 20px; background: var(--accent);
+  position: absolute; left: 0; top: 6px; bottom: 6px; width: 10px; border-radius: 999px; background: var(--ink);
   pointer-events: none; opacity: 0; transform: translateX(0px);
 }
 .leiste-kissen.bereit { opacity: 1; }
 .leiste button {
-  position: relative; min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  border: 0; background: none; border-radius: 20px; cursor: pointer;
+  position: relative; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; background: none; border-radius: 999px; cursor: pointer;
   font-size: calc(15px + (var(--schrift) - 1) * 6px); font-weight: 700; color: var(--muted);
   transition: color 200ms ease, transform var(--t-druck) var(--ease-out);
 }
 .leiste button .icon { width: 28px; height: 28px; }
-.leiste button[aria-current="page"] { color: var(--accent-ink); }
+.leiste button[aria-current="page"] { color: var(--bg); }
 .leiste button:active { transform: scale(0.97); transition-duration: 40ms; }
 
 /* Niedriger Bildschirm (Handy im Browser): weniger Vorschläge, damit nichts hinter dem Eingabefeld liegt */
-@media (max-height: 800px) { .vorschlag:nth-child(n+4) { display: none; } }
-@media (max-height: 720px) { .vorschlag:nth-child(n+3) { display: none; } }
+@media (max-height: 700px) { .vorschlag:nth-child(n+3) { display: none; } }
 
 @media (hover: hover) and (pointer: fine) {
   .knopf:hover:not(:disabled), .vorschlag:hover, #sprache-knopf:hover, .weg:hover, .pille:hover, .link-knopf:hover { border-color: var(--accent-stark); }
@@ -473,8 +506,69 @@ a.knopf { text-decoration: none; }
 }
 
 /* "Bewegung reduzieren": nichts wandert oder wächst, es wird nur ein- und ausgeblendet */
+/* ---------- Was Biko gerade tut: ein Wort mit Zeichen über dem Eingabefeld ---------- */
+.zustand {
+  display: flex; align-items: center; gap: 10px; width: fit-content; min-height: 44px; margin: 0 auto 10px; padding: 0 18px 0 14px;
+  border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 700; box-shadow: var(--schatten);
+  animation: kommt 160ms var(--ease-out) both;
+}
+.zustand .zeichen { display: flex; align-items: center; gap: 3px; height: 22px; }
+.zustand .zeichen i { width: 4px; height: 100%; border-radius: 2px; background: var(--accent); transform-origin: 50% 50%; }
+/* hört zu: ruhige Wellen in Rot (Aufnahme läuft) */
+.zustand[data-art="hoert"] .zeichen i { background: #FF7385; animation: balken 1.1s ease-in-out infinite; }
+/* spricht: lebhafte Wellen in Gelb */
+.zustand[data-art="spricht"] .zeichen i { animation: balken .55s ease-in-out infinite; }
+.zustand .zeichen i:nth-child(2) { animation-delay: -.35s; }
+.zustand .zeichen i:nth-child(3) { animation-delay: -.7s; }
+.zustand .zeichen i:nth-child(4) { animation-delay: -.2s; }
+/* denkt nach und "einen Moment": Punkte, die der Reihe nach aufleuchten */
+.zustand[data-art="denkt"] .zeichen, .zustand[data-art="startet"] .zeichen { gap: 5px; }
+.zustand[data-art="denkt"] .zeichen i, .zustand[data-art="startet"] .zeichen i { width: 7px; height: 7px; border-radius: 50%; animation: punkt 1.1s ease-in-out infinite; }
+.zustand[data-art="denkt"] .zeichen i:nth-child(2), .zustand[data-art="startet"] .zeichen i:nth-child(2) { animation-delay: .15s; }
+.zustand[data-art="denkt"] .zeichen i:nth-child(3), .zustand[data-art="startet"] .zeichen i:nth-child(3) { animation-delay: .3s; }
+.zustand[data-art="denkt"] .zeichen i:nth-child(4), .zustand[data-art="startet"] .zeichen i:nth-child(4) { display: none; }
+@keyframes balken { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+/* Angetippt, das Mikrofon geht gleich auf: der Knopf pulsiert schon */
+#chat-knopf.startet { animation: wartet .8s ease-in-out infinite alternate; }
+@keyframes wartet { from { transform: scale(1); } to { transform: scale(.92); } }
+
+/* ---------- Rückgängig: steht kurz über der Leiste ---------- */
+.rueck {
+  position: fixed; z-index: 12; left: 50%; translate: -50% 0; bottom: calc(var(--leiste-hoehe) + 6px);
+  width: min(528px, calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; padding: 8px 8px 8px 22px;
+  border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 700; box-shadow: var(--schatten-hoch);
+  overflow: hidden; transform-origin: 50% 100%;
+}
+#rueck-text { overflow-wrap: anywhere; line-height: 1.25; }
+#rueck-knopf {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 56px; padding: 0 22px 0 18px;
+  border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 800; cursor: pointer;
+}
+#rueck-knopf .icon { width: 1.25em; height: 1.25em; }
+/* Ein Strich läuft ab: so lange lässt es sich noch zurückholen */
+.rueck-zeit { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--accent); transform-origin: 0 50%; animation: laeuft-ab var(--dauer, 7s) linear both; }
+#rueck-knopf[hidden] ~ .rueck-zeit { display: none; }
+@keyframes laeuft-ab { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ---------- Weiche Ecken: Superellipse statt Kreisbogen, wo der Browser es kann ---------- */
+@supports (corner-shape: squircle) {
+  .karte, .entwurf, .vorschlag, .vorschlag-geist, .gespraech, .erinnerung, .link-knopf, .leer-zeile, .notiz, .eintrag, .blase,
+  .gespraech .oeffnen, #sprache-menue, #sprache-menue button, .vorschlag .icon,
+  input[type="text"], input[type="password"], select { corner-shape: squircle; }
+  :root { --r-feld: 26px; --r-karte: 38px; }
+  .vorschlag, .vorschlag-geist, #sprache-menue { border-radius: 32px; }
+  .blase { border-radius: 34px; }
+  .blase.ich { border-bottom-right-radius: 12px; }
+  .blase.biko-sagt, .blase.biko-sagt-live { border-bottom-left-radius: 12px; }
+  .vorschlag .icon { border-radius: 18px; }
+  #sprache-menue button { border-radius: 24px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .zustand, #chat-knopf.startet, .zustand .zeichen i { animation: none; }
   .ansicht.kommt, .kommt .reihe, .alarm > *, .blase.biko-sagt, .blase.biko-sagt-live, .notiz, .links { animation-name: blende-ein; animation-duration: 160ms; animation-delay: 0s; }
+  .druck:active:not(:disabled) { filter: brightness(.9); }
   .druck:active:not(:disabled), .leiste button:active, .segment button:active, #sprache-menue button:active { transform: none; }
   .erinnerung.neu { animation-name: blende-ein; animation-duration: 160ms; }
   .wechsel .icon { transform: none; filter: none; }

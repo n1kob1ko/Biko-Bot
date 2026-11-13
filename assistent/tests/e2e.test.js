@@ -253,6 +253,7 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   assert.equal(await p.getAttribute('#chat-knopf', 'aria-label'), 'Gespräch beenden');
   assert.match(await p.textContent('#chat-hinweis'), /Wir reden/);
   await hoertGeradeZu(p);
+  assert.equal((await p.textContent('#zustand')).trim(), 'Ich höre zu');
   // das Mikrofon geht laufend zum Live-Zuhören, mit Zugang vom Server, nie mit dem Schlüssel
   const adresse = await p.evaluate(() => window.live.adresse);
   assert.match(adresse, /^wss:\/\/api\.elevenlabs\.io\/v1\/speech-to-text\/realtime\?/);
@@ -269,7 +270,8 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   await p.waitForSelector('.blase.biko-sagt');
   assert.match(await p.textContent('.blase.biko-sagt'), /Billa/);
   // Biko spricht Satz für Satz, kein Abspielen einer ganzen Datei
-  await p.waitForFunction(() => document.querySelector('#app .biko').dataset.mood === 'da');
+  await p.waitForFunction(() => document.querySelector('#app .biko').dataset.mood === 'spricht');
+  assert.equal((await p.textContent('#zustand')).trim(), 'Ich spreche');
   assert.deepEqual(stimmen.slice(0, 1), ['Diese Woche gibt es bei Billa Kaffee um 30 % günstiger.']);
   // wie lange es bis zu Bikos Stimme gedauert hat, geht als Zahlen ins Protokoll (die Uhr der Seite steht hier still)
   const zahlen = JSON.parse((await messung).postData());
@@ -282,7 +284,7 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   // hört das Mikrofon nur Bikos eigene Stimme, redet er einfach weiter
   await p.evaluate(() => window.liveSagt('bei Billa Kaffee günstiger', false));
   await p.waitForTimeout(150);
-  assert.equal(await stimmung(p), 'da');
+  assert.equal(await stimmung(p), 'spricht');
   // fällt man ihm ins Wort, hört er sofort auf und hört zu
   await p.evaluate(() => window.liveSagt('Moment mal', false));
   await hoertGeradeZu(p);
@@ -296,6 +298,7 @@ test('Reden wie am Telefon: einmal tippen, Biko hört durchgehend zu und antwort
   assert.equal(await p.getAttribute('#chat-knopf', 'data-art'), 'mikro');
   assert.equal(await p.evaluate(() => window.live.zu), true);
   assert.equal(await p.textContent('#chat-hinweis'), '');
+  assert.equal(await p.isVisible('#zustand'), false);
   assert.deepEqual(p.fehler, []);
 });
 
@@ -358,10 +361,18 @@ test('Einkaufsliste: Biko schreibt auf, zeigt die Liste, Gekauftes tippt man weg
   await p.waitForSelector('.liste-karte');
   assert.equal(await p.textContent('.liste-karte .entwurf-an'), 'Einkaufen');
   assert.deepEqual(await p.locator('.liste-karte .eintrag').allTextContents(), ['Milch', 'Brot']);
-  const weg = p.waitForResponse((r) => r.url().endsWith('/api/liste/weg'));
+  const holeListen = () => p.evaluate(async () => (await fetch('/api/listen')).json());
+  // falsch getippt: der Haken sitzt sofort, ein zweiter Tipp holt den Eintrag zurück, am Server ist nichts passiert
+  await p.click('.liste-karte .eintrag >> text=Brot');
+  assert.equal(await p.getAttribute('.liste-karte .eintrag >> nth=1', 'aria-pressed'), 'true');
+  await p.click('.liste-karte .eintrag >> text=Brot');
+  assert.equal(await p.getAttribute('.liste-karte .eintrag >> nth=1', 'aria-pressed'), 'false');
+  await p.waitForTimeout(4500);
+  assert.deepEqual((await holeListen()).Einkaufen.map((e) => e.text), ['Milch', 'Brot']);
+  const weg = p.waitForResponse((r) => r.url().endsWith('/api/liste/weg'), { timeout: 8000 });
   await p.click('.liste-karte .eintrag >> text=Milch');
-  await weg;
   assert.equal(await p.getAttribute('.liste-karte .eintrag >> nth=0', 'aria-pressed'), 'true');
+  await weg;
   const listen = await p.evaluate(async () => (await fetch('/api/listen')).json());
   assert.deepEqual(listen.Einkaufen.map((e) => e.text), ['Brot']);
   await p.click('.liste-karte .eintrag >> text=Brot');
@@ -713,19 +724,24 @@ test('Beim Öffnen am selben Tag steht das letzte Gespräch wieder da, an einem 
   assert.equal(await p.locator('#reden-kopf.gross').count(), 1);
 });
 
-test('Gespräch löschen fragt zuerst nach, "Alle Gespräche vergessen" auch', async (t) => {
+test('Gespräch löschen lässt sich zurückholen, "Alle Gespräche vergessen" fragt zuerst nach', async (t) => {
   const p = await angemeldet(t);
   await fragen(p, 'Frage vom Lösch-Test');
   await zu(p, 'gespraeche');
   const zeile = p.locator('li.gespraech', { hasText: 'Frage vom Lösch-Test' });
+  // ein Tipp, und die Zeile ist weg. "Rückgängig" holt sie zurück, am Server ist noch nichts gelöscht.
   await zeile.locator('.weg').click();
-  assert.equal(await zeile.locator('.sicher').isVisible(), true);
-  await zeile.locator('.sicher .nein').click();
-  assert.equal(await zeile.count(), 1);
-  await zeile.locator('.weg').click();
-  await zeile.locator('.sicher .ja').click();
   await zeile.waitFor({ state: 'detached' });
-  assert.ok(!(await gespraecheHolen(p)).some((g) => g.titel === 'Frage vom Lösch-Test'));
+  assert.match(await p.textContent('#rueck'), /Gelöscht/);
+  assert.ok((await gespraecheHolen(p)).some((g) => g.titel === 'Frage vom Lösch-Test'));
+  await p.click('#rueck-knopf');
+  await zeile.waitFor();
+  await p.waitForSelector('#rueck', { state: 'hidden' });
+  // nochmal, ohne Rückgängig: nach ein paar Sekunden ist es auch am Server gelöscht
+  await zeile.locator('.weg').click();
+  await zeile.waitFor({ state: 'detached' });
+  await p.waitForSelector('#rueck', { state: 'hidden', timeout: 10000 });
+  await p.waitForFunction(async () => !(await (await fetch('/api/gespraeche')).json()).some((g) => g.titel === 'Frage vom Lösch-Test'));
   // das gelöschte Gespräch war das offene: beim Reden steht wieder das Startbild
   await zu(p, 'reden');
   await p.waitForSelector('#reden-kopf.gross');
@@ -880,7 +896,7 @@ test('Fällige Erinnerung geht von selbst auf, "später" schließt sie und sie k
   }
 });
 
-test('Löschen fragt zuerst nach', async (t) => {
+test('Erinnerung löschen: sofort weg, "Rückgängig" holt sie zurück', async (t) => {
   const p = await angemeldet(t);
   const vorher = await erinnerungenHolen(p);
   try {
@@ -889,14 +905,20 @@ test('Löschen fragt zuerst nach', async (t) => {
     await p.waitForSelector('#app:not([hidden])');
     await zu(p, 'einstellen');
     await p.click('li.erinnerung .weg');
-    assert.equal(await p.isVisible('li.erinnerung .sicher'), true);
-    await p.click('li.erinnerung .sicher .nein');
-    assert.equal(await p.isVisible('li.erinnerung .sicher'), false);
-    assert.equal(await p.locator('li.erinnerung').count(), 1);
+    await p.waitForSelector('li.erinnerung', { state: 'detached' });
+    assert.equal(await p.locator('.sicher:visible').count(), 0, 'keine Nachfrage mehr');
+    assert.equal(await p.isVisible('#rueck-knopf'), true);
+    assert.equal((await erinnerungenHolen(p)).length, 1, 'am Server noch nicht gelöscht');
+    await p.click('#rueck-knopf');
+    await p.waitForSelector('li.erinnerung');
+    assert.match(await p.textContent('li.erinnerung'), /Augentropfen/);
     await p.click('li.erinnerung .weg');
-    await p.click('li.erinnerung .sicher .ja');
     await p.waitForSelector('li.erinnerung', { state: 'detached' });
     assert.match(await p.textContent('#erinnerungen'), /Noch nichts gemerkt/);
+    // wer die App weglegt, bevor die Zeit um ist: dann gilt das Löschen
+    await p.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    await p.waitForFunction(async () => (await (await fetch('/api/erinnerungen')).json()).length === 0);
+    await p.waitForSelector('#rueck', { state: 'hidden' });
   } finally {
     await erinnerungenSetzen(p, vorher);
   }
@@ -1007,9 +1029,10 @@ test('Biko merkt sich, was man über sich erzählt, und in den Einstellungen kan
   const zeile = p.locator('#wissen li.wissen-zeile', { hasText: 'Hat Diabetes' });
   await zeile.waitFor();
   await zeile.locator('.weg').click();
-  await zeile.locator('.sicher .ja').click();
   await p.waitForFunction(() => !document.querySelector('#wissen').textContent.includes('Hat Diabetes'));
-  assert.deepEqual(await p.evaluate(async () => (await fetch('/api/wissen')).json()), []);
+  assert.match(await p.textContent('#rueck'), /Vergessen/);
+  await p.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await p.waitForFunction(async () => (await (await fetch('/api/wissen')).json()).length === 0);
   assert.deepEqual(p.fehler, []);
 });
 
@@ -1057,4 +1080,47 @@ test('Mehrere Personen: der Verwalter legt Oma an, Oma meldet sich mit dem Link 
   assert.deepEqual([...niko.fehler, ...oma.fehler, ...familie.fehler], []);
   // Die Familie kommt nicht in Omas Biko
   assert.equal((await familie.evaluate(() => fetch('/api/gespraeche').then((r) => r.status))), 403);
+});
+
+test('Antippen zeigt sich sofort: das Wort über dem Eingabefeld sagt, was Biko gerade tut', async (t) => {
+  // die Stimme des Browsers liest hier endlos vor, bis man Stopp tippt
+  const p = await angemeldet(t, { ohneDienst: true, vorher: () => Object.defineProperty(window, 'speechSynthesis', { value: { speak() {}, cancel() {} } }) });
+  assert.equal(await p.isVisible('#zustand'), false);
+  await p.click('#chat-knopf');
+  assert.equal((await p.textContent('#zustand')).trim(), 'Ich höre zu');
+  await p.click('#chat-knopf'); // fertig gesprochen, ohne etwas zu sagen
+  await p.fill('#chat-text', 'Gibt es Angebote für Kaffee?');
+  await p.click('#chat-knopf');
+  assert.equal((await p.textContent('#zustand')).trim(), 'Ich denke nach');
+  await p.waitForSelector('.blase.biko-sagt');
+  await p.waitForSelector('#zustand', { state: 'hidden' });
+  // Vorlesen: Biko bewegt den Schnabel und das Wort steht da
+  await p.click('.blase.biko-sagt .vorlesen');
+  assert.equal(await stimmung(p), 'spricht');
+  assert.equal((await p.textContent('#zustand')).trim(), 'Ich spreche');
+  await p.click('.blase.biko-sagt .vorlesen');
+  assert.equal(await stimmung(p), 'da');
+  assert.equal(await p.isVisible('#zustand'), false);
+  await p.click('#sprache-knopf');
+  await p.click('[data-sprache="zh"]');
+  await p.click('#chat-knopf');
+  assert.equal((await p.textContent('#zustand')).trim(), '我在听');
+  assert.deepEqual(p.fehler, []);
+});
+
+test('Tippflächen: alles, was man antippen kann, ist mindestens 52 px groß', async (t) => {
+  const p = await angemeldet(t);
+  await fragen(p, 'Erinnere mich an die Herztablette');
+  const zuKlein = () => p.evaluate(() => Array.from(document.querySelectorAll('button, a.knopf, a.link-knopf, select, input:not([type=file])'))
+    .filter((el) => el.getClientRects().length)
+    .map((el) => {
+      const r = el.getBoundingClientRect(), slop = el.classList.contains('slop') ? 16 : 0;
+      return { wer: el.id || el.className, b: Math.round(r.width + slop), h: Math.round(r.height + slop) };
+    })
+    .filter((m) => m.b < 52 || m.h < 52));
+  assert.deepEqual(await zuKlein(), []);
+  await zu(p, 'gespraeche');
+  assert.deepEqual(await zuKlein(), []);
+  await zu(p, 'einstellen');
+  assert.deepEqual(await zuKlein(), []);
 });
