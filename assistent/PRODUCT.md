@@ -39,10 +39,11 @@ Der Verlauf ist kein Formular, sondern nur die Liste früherer Gespräche zum Wi
 
 - **Eine Akzentfarbe:** Biko-Gelb. Rot nur für Löschen, Fehler und "Aufnahme läuft", Grün nur für "an" und "geschafft".
 - **Biko ist die Statusanzeige:** winkt, hört zu, tippt, freut sich, ist traurig bei einem Fehler. Kein zweiter Ladebalken daneben.
-- **Groß und klar:** Schrift ab 19 px (einstellbar bis 130 %), Tippflächen mindestens 48 px, Kontrast mindestens 4,5 zu 1 in Hell und Dunkel.
+- **Groß und klar:** Schrift ab 19 px (einstellbar bis 130 %), Tippflächen mindestens 52 px (kleine Knöpfe fangen Tipps auch 8 px daneben auf), Kontrast mindestens 4,5 zu 1 in Hell und Dunkel.
 - **Symbole immer mit Wort**, keine Emojis. Ausnahme: der Sprachknopf neben einem Titel zeigt nur sein Symbol.
 - **Zweisprachig denken:** Jeder Text steht in `web/texte.js` auf Deutsch und Chinesisch. Einfache Wörter, ganze Sätze, keine Fachbegriffe.
-- **Nichts geht still verloren:** Löschen fragt nach, ein fehlgeschlagener Text bleibt im Feld.
+- **Nichts geht still verloren:** Ein gelöschter Eintrag lässt sich ein paar Sekunden lang mit "Rückgängig" zurückholen (keine Nachfrage vorher), nur "Alle Gespräche vergessen" fragt nach. Ein fehlgeschlagener Text bleibt im Feld.
+- **Sofort eine Antwort aufs Antippen:** In unter 0,4 Sekunden ist zu sehen, dass der Tipp angekommen ist. Über dem Eingabefeld steht, was Biko gerade tut: "Ich höre zu", "Ich denke nach", "Ich spreche".
 - **Bewegung erklärt, woher etwas kommt und wohin es geht.** Die 20 Regeln stehen in der README.
 
 ## Leitplanken

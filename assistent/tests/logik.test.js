@@ -307,3 +307,11 @@ test('Medikament: die Wecker der Android-App fragen nach, heute nicht mehr, wenn
     ['10. 08:00 erinnerung', '10. 08:30 nachfrage']);
   assert.equal(L.naechsteMeldungen({ erinnerungen: [herz], jetzt: um('07:00'), stunden: 2 })[0].medikament, true);
 });
+
+test('zustandArt: Antippen zeigt sich sofort, am Telefon gehen Sprechen und Nachdenken vor dem Zuhören', () => {
+  assert.equal(L.zustandArt({}), '');
+  assert.equal(L.zustandArt({ startet: true, hoert: true }), 'startet');
+  assert.equal(L.zustandArt({ hoert: true }), 'hoert');
+  assert.equal(L.zustandArt({ hoert: true, denkt: true }), 'denkt');
+  assert.equal(L.zustandArt({ hoert: true, denkt: true, spricht: true }), 'spricht');
+});

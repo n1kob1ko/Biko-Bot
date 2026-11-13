@@ -21,7 +21,7 @@ wie in der Trading-App, das Programm hier ist aber komplett getrennt vom Trading
 Biko schreibt es sich im Hintergrund selbst auf und bestätigt in einem Satz. Unter seiner Antwort steht klein
 "Gemerkt" mit Tag und Uhrzeit, damit man sieht, dass es wirklich notiert ist. Zur Uhrzeit erscheint ein großer
 Hinweis mit Ton, bis "Erledigt" gedrückt wird. Fehlt die Uhrzeit, fragt Biko nach. In "Einstellen" steht nur
-eine Liste zum Nachsehen und Löschen (Löschen fragt zuerst nach).
+eine Liste zum Nachsehen und Löschen (Löschen geht mit einem Tipp, "Rückgängig" holt den Eintrag ein paar Sekunden lang zurück).
 
 **Biko merkt sich auch, was man über sich erzählt**, ohne Formular: "Ich hab Diabetes", "Mein Enkel heißt Niko",
 "Ich mag keinen Fisch". Unter der Antwort steht klein "Weiß ich jetzt: ...", und ab dann denkt Biko in jedem
@@ -124,7 +124,7 @@ Geschäfts ins Gespräch, damit man selbst schauen kann. Nur `https`-Adressen we
 
 **Gespräche:** Jede Sitzung ist ein eigenes Gespräch. Öffnet man die App am selben Tag wieder, steht das letzte
 Gespräch wieder da und man redet einfach weiter. An einem neuen Tag begrüßt Biko von vorn, das alte Gespräch steht
-dann im Bereich "Verlauf". Dort kann man jedes Gespräch wieder öffnen oder löschen (Löschen fragt zuerst nach).
+dann im Bereich "Verlauf". Dort kann man jedes Gespräch wieder öffnen oder löschen (Löschen geht mit einem Tipp, "Rückgängig" holt den Eintrag ein paar Sekunden lang zurück).
 "Neues Gespräch" gibt es im Verlauf und oben neben dem kleinen Biko. Es bleiben die letzten 40 Gespräche.
 
 Grundsatz für alles Weitere: **Funktionen laufen über das Gespräch, nicht über Formulare.**

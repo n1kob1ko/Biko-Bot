@@ -38,12 +38,13 @@
 <symbol id="i-plus" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"/></symbol>
 <symbol id="i-verlauf" viewBox="0 0 256 256"><path d="M140,80v41.21l34.17,20.5a12,12,0,1,1-12.34,20.58l-40-24A12,12,0,0,1,116,128V80a12,12,0,0,1,24,0ZM128,28A99.38,99.38,0,0,0,57.24,57.34c-4.69,4.74-9,9.37-13.24,14V64a12,12,0,0,0-24,0v40a12,12,0,0,0,12,12H72a12,12,0,0,0,0-24H57.77C63,86,68.37,80.22,74.26,74.26a76,76,0,1,1,1.58,109,12,12,0,0,0-16.48,17.46A100,100,0,1,0,128,28Z"/></symbol>
 <symbol id="i-warnung" viewBox="0 0 256 256"><path d="M236.8,188.09,149.35,36.22a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM215.46,200H40.55a.42.42,0,0,1-.35-.17.23.23,0,0,1,0-.2L127.62,48.22a.42.42,0,0,1,.76,0l87.45,151.41a.23.23,0,0,1,0,.2A.42.42,0,0,1,215.46,200ZM116,144V104a12,12,0,0,1,24,0v40a12,12,0,0,1-24,0Zm28,36a16,16,0,1,1-16-16A16,16,0,0,1,144,180Z"/></symbol>
+<symbol id="i-zurueck" viewBox="0 0 256 256"><g fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M84 100H36V52"/><path d="M36 100l30-30a88 88 0 1 1 3 122"/></g></symbol>
 <symbol id="i-pfeil" viewBox="0 0 256 256"><path d="M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z"/></symbol>
 </svg>
 
   <!-- Sprache: kleines Menü, das am Knopf aufgeht -->
   <div class="sprache">
-    <button type="button" id="sprache-knopf" class="druck" aria-haspopup="menu" aria-expanded="false" aria-controls="sprache-menue">
+    <button type="button" id="sprache-knopf" class="druck slop" aria-haspopup="menu" aria-expanded="false" aria-controls="sprache-menue">
       <svg class="icon " aria-hidden="true"><use href="#i-sprache"/></svg><span id="sprache-name"></span><svg class="icon pfeil" aria-hidden="true"><use href="#i-pfeil"/></svg>
     </button>
     <div id="sprache-menue" role="menu" data-t-label="sprache" hidden>
@@ -74,7 +75,7 @@
         <div>
           <h1 id="gruss"></h1>
         </div>
-        <button type="button" id="neu-im-kopf" class="pille druck"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neues_gespraech"></span></button>
+        <button type="button" id="neu-im-kopf" class="pille druck slop"><svg class="icon " aria-hidden="true"><use href="#i-plus"/></svg><span data-t="neues_gespraech"></span></button>
       </header>
       <div id="vorschlaege" class="vorschlaege"></div>
       <div id="verlauf" class="verlauf" aria-live="polite"></div>
@@ -82,11 +83,15 @@
         <div id="dolmetscher-leiste" class="dolmetscher-leiste" role="status" hidden>
           <svg class="icon" aria-hidden="true"><use href="#i-sprache"/></svg>
           <span data-t="dolmetscher_an"></span>
-          <button type="button" id="dolmetscher-aus" class="druck" data-t="dolmetscher_fertig"></button>
+          <button type="button" id="dolmetscher-aus" class="druck slop" data-t="dolmetscher_fertig"></button>
+        </div>
+        <!-- Was Biko gerade tut: hört zu, denkt nach oder spricht. Steht sofort da, gleich beim Antippen. -->
+        <div id="zustand" class="zustand" role="status" hidden>
+          <span class="zeichen" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="zustand-text"></span>
         </div>
         <p id="chat-hinweis" class="meldung klein" role="status"></p>
         <form id="chat-form" class="eingabe">
-          <button type="button" id="foto-knopf" class="druck" data-t-label="foto"><svg class="icon" aria-hidden="true"><use href="#i-kamera"/></svg></button>
+          <button type="button" id="foto-knopf" class="druck slop" data-t-label="foto"><svg class="icon" aria-hidden="true"><use href="#i-kamera"/></svg></button>
           <input type="file" id="foto-wahl" accept="image/*" capture="environment" hidden>
           <textarea id="chat-text" rows="1" data-t-ph="eingabe" data-t-label="eingabe" enterkeyhint="send"></textarea>
           <button type="submit" id="chat-knopf" class="druck" data-art="mikro">
@@ -145,7 +150,7 @@
       <div class="karte reihe">
         <div class="schalter-zeile">
           <span id="vorlesen-text" data-t="vorlesen_immer"></span>
-          <button type="button" id="vorlesen" class="schalter" role="switch" aria-checked="false" aria-labelledby="vorlesen-text">
+          <button type="button" id="vorlesen" class="schalter slop" role="switch" aria-checked="false" aria-labelledby="vorlesen-text">
             <span class="bahn"><span class="knauf"></span></span>
           </button>
         </div>
@@ -187,6 +192,13 @@
     <p id="alarm-text" class="alarm-text"></p>
     <button type="button" id="alarm-ok" class="knopf haupt druck"><svg class="icon " aria-hidden="true"><use href="#i-ok"/></svg><span data-t="erledigt"></span></button>
     <button type="button" id="alarm-spaeter" class="knopf druck" data-t="spaeter"></button>
+  </div>
+
+  <!-- Gelöscht? Ein Tipp holt es zurück. Steht kurz über der Leiste, statt vorher nachzufragen. -->
+  <div id="rueck" class="rueck" role="status" hidden>
+    <span id="rueck-text"></span>
+    <button type="button" id="rueck-knopf" class="druck"><svg class="icon" aria-hidden="true"><use href="#i-zurueck"/></svg><span data-t="rueckgaengig"></span></button>
+    <span class="rueck-zeit" aria-hidden="true"></span>
   </div>
 
   <script src="texte.js"></script>

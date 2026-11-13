@@ -57,9 +57,31 @@
     clearTimeout(ruheUhr);
     M.setMood(art);
     nativMelden(art);
+    zustandZeigen();
     if (zurueckNach) ruheUhr = setTimeout(() => M.setMood('da'), zurueckNach);
   }
   $('#biko-reden').addEventListener('click', () => M.fidget('boop'));
+  // Was Biko gerade tut, als kurzes Wort über dem Eingabefeld: sofort beim Antippen da, nicht erst wenn die Antwort kommt
+  function zustandZeigen() {
+    const el = $('#zustand');
+    const art = L.zustandArt({
+      startet: mikroStartet, hoert: !!hoert, denkt: sendet || versteht,
+      spricht: !!liest || !!(telefon && telefon.sprecher.spricht()),
+    });
+    const neuDa = el.hidden && !!art;
+    el.hidden = !art;
+    if (!art) return;
+    el.dataset.art = art;
+    $('#zustand-text').textContent = t('zustand_' + art);
+    // Das Wort braucht Platz über dem Eingabefeld: wer unten im Gespräch steht, sieht weiter die letzte Zeile
+    const d = document.documentElement;
+    if (neuDa && aktiv === 'reden' && verlauf.children.length && d.scrollHeight - window.scrollY - window.innerHeight < 80) window.scrollTo(0, d.scrollHeight);
+  }
+  // Ein kurzes Zucken im Handy bei jedem Knopf (nur Android): man spürt, dass der Tipp angekommen ist
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('button, a.knopf, a.link-knopf')) return;
+    try { if (navigator.vibrate) navigator.vibrate(8); } catch (err) { /* nicht erlaubt */ }
+  }, true);
 
   // ---------- Texte ----------
   function texteSetzen() {
@@ -80,6 +102,7 @@
     $$('.warnung-karte').forEach(warnungTexte);
     zustand($('#profil-speichern'), 'ruhe', 'speichern');
     knopfZeigen();
+    zustandZeigen();
     vorschlaegeZeigen();
     erinnerungenZeigen();
     wissenZeigen();
@@ -128,18 +151,19 @@
 
   // ---------- Server ----------
   // `daten`: nichts (lesen), ein Objekt (als JSON) oder eine Tonaufnahme (Blob, geht so wie sie ist)
-  const anfrage = (pfad, daten) => {
+  // `bleibt`: die Anfrage geht auch noch raus, wenn die Seite gerade zugeht (ein Löschen, das noch aussteht)
+  const anfrage = (pfad, daten, bleibt) => {
     const roh = daten instanceof Blob;
     return fetch(pfad, {
       method: daten === undefined ? 'GET' : 'POST',
       headers: { 'Content-Type': roh ? daten.type : 'application/json', 'X-Sprache': STIMME[sprache] },
       body: daten === undefined || roh ? daten : JSON.stringify(daten),
-      credentials: 'same-origin',
+      credentials: 'same-origin', keepalive: !!bleibt,
     });
   };
-  async function api(pfad, daten) {
+  async function api(pfad, daten, bleibt) {
     let r;
-    try { r = await anfrage(pfad, daten); } catch (e) { throw new Error(t('keine_verbindung')); }
+    try { r = await anfrage(pfad, daten, bleibt); } catch (e) { throw new Error(t('keine_verbindung')); }
     let j = {};
     try { j = await r.json(); } catch (e) { /* leer */ }
     if (r.status === 401 && pfad !== '/api/login') loginZeigen();
@@ -286,7 +310,7 @@
     wechseln(b.dataset.ziel);
   });
 
-  // Löschen fragt immer erst nach: ein falscher Tipp soll keine Erinnerung und kein Gespräch kosten.
+  // "Alle Gespräche vergessen" fragt erst nach: das lässt sich nicht zurückholen.
   // `sicher` enthält die Frage (p) und die Knöpfe .nein und .ja, `tun` löscht wirklich.
   function sicherVerdrahten(sicher, ausloeser, frage, tun) {
     const text = $('p', sicher), ja = $('.ja', sicher), nein = $('.nein', sicher);
@@ -308,18 +332,65 @@
     });
     return sicher;
   }
-  // Eine Zeile in einer Liste bekommt ihren Löschen-Knopf und die Nachfrage dazu
-  function loeschKnopf(name, frage, tun) {
-    const weg = neu('button', 'weg druck');
-    weg.type = 'button';
-    weg.innerHTML = icon('loeschen');
-    weg.setAttribute('aria-label', `${t('loeschen')}: ${name}`);
-    const sicher = neu('div', 'sicher');
-    const ja = neu('button', 'knopf druck ja', t('loeschen')), nein = neu('button', 'knopf druck nein', t('behalten'));
-    ja.type = nein.type = 'button';
-    sicher.append(neu('p'), nein, ja);
-    sicher.hidden = true;
-    return [weg, sicherVerdrahten(sicher, weg, () => t(frage), tun)];
+
+  // ---------- Rückgängig statt Nachfragen ----------
+  // Ein einzelner Eintrag ist mit einem Tipp weg, ohne Frage. Dafür steht ein paar Sekunden lang "Rückgängig" über der
+  // Leiste. Erst danach wird am Server wirklich gelöscht: bis dahin ist der Eintrag nur ausgeblendet.
+  const RUECK_MS = 7000;
+  const rueckEl = $('#rueck');
+  let rueck = null; // das Löschen, das gerade noch zurückgeholt werden kann: { zurueck, fest, uhr }
+  function rueckZu() {
+    const r = rueck;
+    rueck = null;
+    if (r) clearTimeout(r.uhr);
+    B.zuklappen(rueckEl);
+    return r;
+  }
+  function rueckFest() { const r = rueckZu(); if (r) r.fest(); }
+  function rueckZeigen(text, zurueck, fest) {
+    rueckFest(); // das vorige Löschen gilt jetzt
+    $('#rueck-text').textContent = text;
+    $('#rueck-knopf').hidden = !zurueck;
+    rueckEl.style.setProperty('--dauer', RUECK_MS + 'ms');
+    const strich = $('.rueck-zeit', rueckEl); // der Strich läuft jedes Mal von vorn ab
+    strich.style.animation = 'none';
+    void strich.offsetWidth;
+    strich.style.animation = '';
+    B.aufklappen(rueckEl);
+    rueck = { zurueck, fest: fest || (() => {}), uhr: setTimeout(rueckFest, zurueck ? RUECK_MS : 5000) };
+  }
+  $('#rueck-knopf').addEventListener('click', () => {
+    const r = rueckZu();
+    if (!r || !r.zurueck) return;
+    r.zurueck();
+    M.fidget('hop');
+  });
+  // Wer die App weglegt, bevor die Zeit um ist: dann gilt das Löschen
+  window.addEventListener('pagehide', rueckFest);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) rueckFest(); });
+
+  // Was gerade gelöscht, aber noch zurückholbar ist: steht noch in den Listen vom Server, wird aber nicht mehr gezeigt
+  const weg = { erinnerung: new Set(), wissen: new Set(), gespraech: new Set() };
+  const ohneWeg = (liste, art) => liste.filter((x) => !weg[art].has(x.id));
+  // `zeigen` baut die Liste neu, `tun` löscht am Server. Klappt das nicht, steht der Eintrag wieder da.
+  function loeschKnopf(art, id, name, zeile, zeigen, tun) {
+    const k = neu('button', 'weg druck slop');
+    k.type = 'button';
+    k.innerHTML = icon('loeschen');
+    k.setAttribute('aria-label', `${t('loeschen')}: ${name}`);
+    k.addEventListener('click', () => {
+      if (weg[art].has(id)) return;
+      weg[art].add(id);
+      verschwinden(zeile).then(zeigen);
+      rueckZeigen(t(art === 'wissen' ? 'vergessen_kurz' : 'geloescht'), () => { weg[art].delete(id); zeigen(); }, async () => {
+        let fehler = '';
+        try { await tun(); } catch (err) { fehler = err.message; }
+        weg[art].delete(id);
+        zeigen();
+        if (fehler) rueckZeigen(fehler);
+      });
+    });
+    return k;
   }
   const verschwinden = (el) => B.spiele(el, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.97)' }],
     { duration: L.ausgang(220), easing: 'ease', fill: 'forwards' });
@@ -342,11 +413,17 @@
     if (browserStimme) speechSynthesis.cancel();
     if (liest) zustand(liest, 'ruhe', 'vorlesen');
     liest = null;
+    sprichtAus();
+  }
+  // Beim Vorlesen bewegt Biko den Schnabel. Danach ist er wieder einfach da.
+  function sprichtAus() {
+    if (M.mood === 'spricht' && !(telefon && telefon.sprecher.spricht())) stimmung('da'); else zustandZeigen();
   }
   function vorlesenFertig(knopf) {
     if (!knopf || liest !== knopf) return;
     zustand(knopf, 'ruhe', 'vorlesen');
     liest = null;
+    sprichtAus();
   }
   function browserLiest(text, knopf) {
     if (!browserStimme) return vorlesenFertig(knopf);
@@ -377,6 +454,7 @@
     if (knopf) {
       liest = knopf;
       zustand(knopf, 'laeuft', 'stopp');
+      stimmung('spricht');
     }
     if (!sprachdienst) return browserLiest(text, knopf);
     stimmeWecken();
@@ -414,12 +492,15 @@
   let hoert = null;      // Biko hört gerade zu: Aufnahme oder Spracherkennung, mit stop()
   let versteht = false;  // die Aufnahme ist beim Sprachdienst, der Satz kommt gleich
   let telefon = null;     // läuft gerade ein Gespräch wie am Telefon (siehe unten)?
+  let mikroStartet = false; // angetippt, aber das Mikrofon ist noch nicht offen
 
   function knopfZeigen() {
     const art = L.knopfArt(feld.value, !!hoert);
     chatKnopf.dataset.art = art;
     chatKnopf.setAttribute('aria-label', t(telefon ? 'knopf_auflegen' : 'knopf_' + art));
     chatKnopf.disabled = (sendet || versteht) && art !== 'stopp';
+    chatKnopf.classList.toggle('startet', mikroStartet);
+    zustandZeigen();
     feld.placeholder = t(hoert ? 'eingabe_hoert' : versteht ? 'eingabe_versteht' : 'eingabe');
   }
   function feldAnpassen() {
@@ -436,7 +517,7 @@
     const d = neu('div', 'blase ' + art);
     d.appendChild(neu('span', '', text));
     if (art === 'biko-sagt' && kannVorlesen()) {
-      const k = neu('button', 'vorlesen druck');
+      const k = neu('button', 'vorlesen druck slop');
       k.type = 'button';
       k.dataset.zustand = 'ruhe';
       k.innerHTML = `<span class="wechsel">${icon('vorlesen', 'i-ruhe')}${icon('stopp', 'i-laeuft')}</span><span></span>`;
@@ -562,6 +643,10 @@
     const kop = $('.kopieren', el);
     kop.lastElementChild.textContent = t(kop.dataset.zustand === 'ok' ? 'kopiert' : 'kopieren');
   }
+  const spaeterTun = new Set(); // was noch aussteht, wenn die App weggelegt wird
+  const allesTun = () => Array.from(spaeterTun).forEach((tun) => tun());
+  window.addEventListener('pagehide', allesTun);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) allesTun(); });
   function listeKarte(k) {
     const el = neu('div', 'entwurf liste-karte');
     el._offen = k.eintraege.length;
@@ -576,19 +661,28 @@
       b.innerHTML = `<span class="haken">${icon('ok')}</span><span></span>`;
       b.lastElementChild.textContent = e.text;
       b.setAttribute('aria-pressed', 'false');
-      b.addEventListener('click', async () => {
-        if (b.classList.contains('erledigt')) return;
-        b.classList.add('erledigt');
-        b.setAttribute('aria-pressed', 'true');
-        el._offen--;
+      const setzen = (erledigt) => {
+        b.classList.toggle('erledigt', erledigt);
+        b.setAttribute('aria-pressed', String(erledigt));
+        el._offen += erledigt ? -1 : 1;
         listeTexte(el);
+      };
+      // Der Haken sitzt sofort. Am Server wird erst nach ein paar Sekunden gestrichen: bis dahin holt ein
+      // zweiter Tipp den Eintrag zurück (falsch getippt).
+      let posten = null;
+      b.addEventListener('click', () => {
+        if (posten) { clearTimeout(posten.uhr); spaeterTun.delete(posten.tun); posten = null; setzen(false); return; }
+        if (b.classList.contains('erledigt')) return; // schon gestrichen
+        setzen(true);
         if (!el._offen) M.fidget('hop');
-        try { await api('/api/liste/weg', { liste: k.name, id: e.id }); } catch (err) { // nicht angekommen: wieder offen
-          b.classList.remove('erledigt');
-          b.setAttribute('aria-pressed', 'false');
-          el._offen++;
-          listeTexte(el);
-        }
+        const tun = async () => {
+          clearTimeout(posten.uhr);
+          spaeterTun.delete(tun);
+          posten = null;
+          try { await api('/api/liste/weg', { liste: k.name, id: e.id }, true); } catch (err) { setzen(false); } // nicht angekommen: wieder offen
+        };
+        posten = { tun, uhr: setTimeout(tun, 4000) };
+        spaeterTun.add(tun);
       });
       li.appendChild(b);
       ul.appendChild(li);
@@ -875,21 +969,22 @@
   // Jede Sitzung ist am Server ein eigenes Gespräch. Hier stehen sie zum Wiederöffnen, das zuletzt benutzte oben.
   function gespraecheZeigen() {
     const ul = $('#gespraeche');
-    if (!gespraeche.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_gespraeche'))); return; }
-    ul.replaceChildren(...gespraeche.map((g) => {
+    const liste = ohneWeg(gespraeche, 'gespraech');
+    if (!liste.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_gespraeche'))); return; }
+    ul.replaceChildren(...liste.map((g) => {
       const li = neu('li', 'gespraech reihe');
       const auf = neu('button', 'oeffnen druck');
       auf.type = 'button';
       auf.append(neu('span', 'titel', g.titel), neu('span', 'wann', L.wannWar(g.zuletzt, new Date(), T[sprache])));
       if (g.id === gespraechNr) auf.setAttribute('aria-current', 'true');
-      auf.addEventListener('click', () => gespraechOeffnen(g.id));
-      const [weg, sicher] = loeschKnopf(g.titel, 'gespraech_loeschen_frage', async () => {
-        const liste = await api('/api/gespraech/loeschen', { id: g.id });
-        await verschwinden(li);
-        gespraeche = liste;
-        if (g.id === gespraechNr) startbild(); else gespraecheZeigen();
+      auf.addEventListener('click', () => {
+        auf.setAttribute('aria-current', 'true'); // sofort zu sehen, auch wenn das Gespräch erst noch lädt
+        gespraechOeffnen(g.id);
       });
-      li.append(auf, weg, sicher);
+      li.append(auf, loeschKnopf('gespraech', g.id, g.titel, li, gespraecheZeigen, async () => {
+        gespraeche = await api('/api/gespraech/loeschen', { id: g.id }, true);
+        if (g.id === gespraechNr) startbild(); // das offene Gespräch gibt es nicht mehr
+      }));
       return li;
     }));
   }
@@ -934,20 +1029,26 @@
   // ob Deutsch oder Chinesisch gesprochen wurde. Nach einer Pause hört Biko von selbst auf zuzuhören.
   const kannAufnehmen = () => sprachdienst && !!window.MediaRecorder && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   const AUFNAHME_ARTEN = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']; // iPhones nehmen als mp4 auf
-  let mikroStartet = false;
+  // Vom Antippen bis das Mikrofon wirklich offen ist, vergeht ein Moment: der Knopf und das Wort darüber zeigen es gleich
+  function mikroStart(an) {
+    mikroStartet = an;
+    if (an) M.fidget('boop');
+    knopfZeigen();
+    zustandZeigen();
+  }
   async function aufnehmen() {
     if (mikroStartet) return;
-    mikroStartet = true;
+    mikroStart(true);
     vorlesenStopp(); // sonst hört Biko sich selbst zu
     stimmeWecken();  // jetzt wird getippt: danach darf Biko die Antwort von selbst vorlesen
     const ac = tonKontext();
     let strom;
     try { strom = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (err) {
-      mikroStartet = false;
+      mikroStart(false);
       hinweis(t('mikro_verboten'));
       return;
     }
-    mikroStartet = false;
+    mikroStart(false);
     const stuecke = [];
     const aus = () => strom.getTracks().forEach((s) => s.stop());
     let rek;
@@ -1059,7 +1160,7 @@
 
   async function telefonieren() {
     if (telefon || mikroStartet) return;
-    mikroStartet = true;
+    mikroStart(true);
     vorlesenStopp();
     stimmeWecken();
     const ac = tonKontext(); // jetzt, solange das Antippen gilt: sonst bleibt das iPhone stumm
@@ -1070,18 +1171,18 @@
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sprache': STIMME[sprache] },
         body: JSON.stringify({ text, vorher }), credentials: 'same-origin', signal,
       }),
-      beimStart: () => { tel.zuletzt = Date.now(); messungSchicken(tel); if (telefon === tel) stimmung('da'); },
+      beimStart: () => { tel.zuletzt = Date.now(); messungSchicken(tel); if (telefon === tel) stimmung('spricht'); },
       beimEnde: () => { tel.zuletzt = Date.now(); if (telefon === tel && !sendet) stimmung('hoert'); },
       beimFehler: () => { if (telefon === tel) hinweis(t('stimme_weg')); },
     });
     try { await verbinden(tel, ac); } catch (e) {
-      mikroStartet = false;
+      mikroStart(false);
       if (e && e.art === 'mikro') { hinweis(t('mikro_verboten')); return; }
       liveGeht = false; // dann eben wie bisher: aufnehmen, nach der Pause verstehen lassen
       aufnehmen();
       return;
     }
-    mikroStartet = false;
+    mikroStart(false);
     telefon = tel;
     hoert = { stop: () => auflegen() };
     wachHalten(tel);
@@ -1341,9 +1442,9 @@
 
   function erinnerungenZeigen() {
     weckerStellen();
-    const ul = $('#erinnerungen');
-    if (!erinnerungen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_erinnerungen'))); return; }
-    ul.replaceChildren(...erinnerungen.map((er) => {
+    const ul = $('#erinnerungen'), liste = ohneWeg(erinnerungen, 'erinnerung');
+    if (!liste.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_erinnerungen'))); return; }
+    ul.replaceChildren(...liste.map((er) => {
       const li = neu('li', 'erinnerung reihe');
       const mitte = neu('div');
       let wann = L.wannText(er, T[sprache], new Date());
@@ -1352,13 +1453,9 @@
         if (er.melden && er.melden.length) wann += ', ' + t('medikament_melden').replace('{wer}', er.melden.map((k) => k.name).join(', '));
       }
       mitte.append(neu('div', '', er.text), neu('div', 'tage-text', wann));
-      const [weg, sicher] = loeschKnopf(er.text, 'loeschen_frage', async () => {
-        const liste = await api('/api/erinnerungen', { erinnerungen: erinnerungen.filter((x) => x.id !== er.id) });
-        await verschwinden(li);
-        erinnerungen = liste;
-        erinnerungenZeigen();
-      });
-      li.append(neu('span', 'zeit', er.zeit), mitte, weg, sicher);
+      li.append(neu('span', 'zeit', er.zeit), mitte, loeschKnopf('erinnerung', er.id, er.text, li, erinnerungenZeigen, async () => {
+        erinnerungen = await api('/api/erinnerungen', { erinnerungen: ohneWeg(erinnerungen, 'erinnerung') }, true);
+      }));
       return li;
     }));
   }
@@ -1366,16 +1463,13 @@
   // Was Biko über die Person weiß: entsteht im Gespräch, hier nur zum Nachsehen und Löschen
   function wissenZeigen() {
     const ul = $('#wissen');
-    if (!wissen.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_wissen'))); return; }
-    ul.replaceChildren(...wissen.map((w) => {
+    const liste = ohneWeg(wissen, 'wissen');
+    if (!liste.length) { ul.replaceChildren(neu('li', 'leer-zeile reihe', t('keine_wissen'))); return; }
+    ul.replaceChildren(...liste.map((w) => {
       const li = neu('li', 'erinnerung wissen-zeile reihe');
-      const [weg, sicher] = loeschKnopf(w.text, 'wissen_loeschen_frage', async () => {
-        const liste = await api('/api/wissen/loeschen', { id: w.id });
-        await verschwinden(li);
-        wissen = liste;
-        wissenZeigen();
-      });
-      li.append(neu('div', '', w.text), weg, sicher);
+      li.append(neu('div', '', w.text), loeschKnopf('wissen', w.id, w.text, li, wissenZeigen, async () => {
+        wissen = await api('/api/wissen/loeschen', { id: w.id }, true);
+      }));
       return li;
     }));
   }
@@ -1395,7 +1489,7 @@
     if (offen || !angemeldet || mini) return; // in der Blase meldet sich Biko über die Wecker der App
     morgenrundePruefen();
     const er = L.faelligeErinnerung({
-      erinnerungen, jetzt: new Date(),
+      erinnerungen: ohneWeg(erinnerungen, 'erinnerung'), jetzt: new Date(),
       gezeigt: new Set(speicherSchluessel().filter((k) => k.startsWith('gezeigt-'))),
       spaeter: spaeterLesen(),
     });
@@ -1408,7 +1502,7 @@
   // Die Wecker der Android-App für die nächsten zwei Tage. Sie werden jedes Mal ganz neu gestellt.
   function weckerStellen() {
     if (!wecker) return;
-    const liste = L.naechsteMeldungen({ erinnerungen, morgenrunde, geburtstage, checkin, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
+    const liste = L.naechsteMeldungen({ erinnerungen: ohneWeg(erinnerungen, 'erinnerung'), morgenrunde, geburtstage, checkin, jetzt: new Date() }).map((m) => (m.art === 'morgenrunde'
       ? { ...m, titel: t('morgen_titel'), text: t('morgen_text') }
       : m.art === 'geburtstag' ? { ...m, titel: 'Biko', text: geburtstagText(m) }
         : m.art === 'checkin' ? { ...m, titel: 'Biko', text: t('checkin_frage') }

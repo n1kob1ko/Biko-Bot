@@ -180,7 +180,7 @@
 @keyframes hop { 0%, 100% { transform: none; } 20% { transform: scale(1.05, .94); } 50% { transform: translateY(-14px) scale(.97, 1.04); } 80% { transform: scale(1.04, .96); } }
 @keyframes tilt { 0%, 100% { transform: rotate(0); } 30%, 65% { transform: rotate(-7deg); } }
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(4deg); } 40% { transform: rotate(-4deg); } 60% { transform: rotate(3deg); } 80% { transform: rotate(-2deg); } }
-@keyframes boop { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.08, .9); } 60% { transform: scale(.96, 1.05); } }
+@keyframes boop { 0%, 100% { transform: scale(1); } 28% { transform: scale(1.09, .89); } 58% { transform: scale(.95, 1.06); } 80% { transform: scale(1.02, .985); } }
 
 @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 @keyframes wobble { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
@@ -212,3 +212,13 @@
 .biko[data-mood="hoert"] .body-g { animation: lauschen 1.8s ease-in-out infinite; }
 .biko[data-mood="hoert"] .tuft { rotate: -10deg; animation-duration: 1.4s; }
 @keyframes lauschen { 0%, 100% { transform: rotate(3deg); } 50% { transform: rotate(5deg) scale(1.01, .99); } }
+
+/* ---------- Biko spricht: der Schnabel geht auf und zu, der Körper wippt im Takt mit ---------- */
+.biko[data-mood="spricht"] .beak-open { display: inline; transform-origin: 50% 0; animation: schnabel .34s ease-in-out infinite alternate; }
+.biko[data-mood="spricht"] .beak-top { animation: schnabel-oben .34s ease-in-out infinite alternate; }
+.biko[data-mood="spricht"] .mouth-open { display: inline; transform-origin: 50% 0; animation: schnabel .34s ease-in-out infinite alternate; }
+.biko[data-mood="spricht"] .body-g { animation: wippen .68s ease-in-out infinite; }
+.biko[data-mood="spricht"] .tuft { animation-duration: 1.4s; }
+@keyframes schnabel { from { transform: scaleY(.2); } to { transform: scaleY(1); } }
+@keyframes schnabel-oben { from { translate: 0 0; } to { translate: 0 -2px; } }
+@keyframes wippen { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.02, .975) translateY(1px); } }
