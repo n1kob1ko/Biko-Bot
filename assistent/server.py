@@ -80,6 +80,8 @@ from zoneinfo import ZoneInfo
 
 import anthropic
 
+import chef
+
 PORT = int(os.environ.get("PORT", "8092"))
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
 WEB = Path(os.environ.get("WEB_DIR", Path(__file__).parent / "web"))
@@ -2657,7 +2659,7 @@ class Handler(BaseHTTPRequestHandler):
             return 401, {"fehler": "Bitte anmelden."}
         if s["rolle"] == "familie" and pfad not in ("/api/familie", "/api/abmelden"):
             return 403, {"fehler": "Das ist nur für die Person selbst."}
-        if s["rolle"] != "verwalter" and pfad.startswith("/api/verwaltung"):
+        if s["rolle"] != "verwalter" and (pfad.startswith("/api/verwaltung") or pfad.startswith("/api/chef")):
             return 403, {"fehler": "Das ist nur für den Verwalter."}
         return None
 
@@ -2684,6 +2686,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(*nein)
             if pfad == "/api/familie":
                 return self.senden(200, self.familie_uebersicht())
+            if pfad.startswith("/api/chef"):
+                return self.chef_get(pfad)
             if pfad == "/api/profil":
                 return self.senden(200, profil())
             if pfad == "/api/erinnerungen":
@@ -2730,6 +2734,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.senden(200, {"ok": True}, extra=self.cookie_setzen("", tage=0))
             if pfad.startswith("/api/verwaltung/"):
                 return self.verwaltung(pfad, daten)
+            if pfad.startswith("/api/chef"):
+                return self.chef_post(pfad, daten)
             if pfad == "/api/chat":
                 text = str(daten.get("text", "")).strip()
                 if not text or len(text) > MAX_TEXT:
@@ -2916,11 +2922,53 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(200, {"ok": True})
         return self.senden(404, {"fehler": "Gibt es nicht."})
 
+    # --- Biko-Chef (nur für den Verwalter) ---
+    def chef_get(self, pfad):
+        frage = parse_qs(urlparse(self.path).query)
+        if pfad == "/api/chef":
+            return self.senden(200, chef.ansicht())
+        if pfad == "/api/chef/ergebnis":
+            try:
+                return self.senden(200, chef.ergebnis((frage.get("id") or [""])[0]))
+            except ValueError:
+                return self.senden(404, {"fehler": "Gibt es nicht."})
+        if pfad == "/api/chef/vorschau":
+            html = chef.vorschau_lesen((frage.get("id") or [""])[0])
+            if html is None:
+                return self.senden(404, {"fehler": "Gibt es nicht."})
+            # Die Seite vom Entwickler läuft abgeschottet: kein Zugriff auf Biko, keine Skripte, keine Formulare
+            body = html.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy",
+                             "sandbox; default-src 'none'; img-src https: data:; style-src 'unsafe-inline' https:; "
+                             "font-src https: data:; frame-ancestors 'none'")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        return self.senden(404, {"fehler": "Gibt es nicht."})
+
+    def chef_post(self, pfad, daten):
+        try:
+            if pfad == "/api/chef/chat":
+                return self.senden(200, chef.chat(daten.get("text")))
+            if pfad == "/api/chef/freigabe":
+                return self.senden(200, chef.freigabe(daten.get("projekt"), str(daten.get("frage") or ""),
+                                                      daten.get("ja") is True))
+        except RuntimeError as e:
+            return self.senden(502, {"fehler": str(e)})
+        return self.senden(404, {"fehler": "Gibt es nicht."})
+
     def datei(self, pfad):
         if pfad in ("", "/"):
             pfad = "/index.html"
         if pfad == "/familie":
             pfad = "/familie.html"
+        if pfad == "/chef":
+            pfad = "/chef.html"
         ziel = (WEB / pfad.lstrip("/")).resolve()
         if not str(ziel).startswith(str(WEB.resolve())) or not ziel.is_file():
             ziel = WEB / "index.html"
@@ -2934,4 +2982,5 @@ if __name__ == "__main__":
         print("Achtung: ANTHROPIC_API_KEY ist nicht gesetzt, Biko kann noch nicht antworten.", flush=True)
     print(f"Biko Assistent läuft auf Port {PORT}, Modell {MODELL}", flush=True)
     threading.Thread(target=hausmeister, daemon=True).start()
+    chef.starten()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

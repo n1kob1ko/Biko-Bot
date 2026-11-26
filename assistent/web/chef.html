@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F6F6F4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121116" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Biko-Chef</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="biko.css">
+  <link rel="stylesheet" href="chef.css">
+</head>
+<body>
+  <!-- Biko-Chef: Niko redet mit dem KI-Geschäftsführer, der Claude-Arbeiter für ihn steuert.
+       Nur mit dem Verwalter-Passwort. Projekte entstehen im Gespräch, die Karten zeigen nur den Stand. -->
+  <main class="chef">
+    <header class="kopf">
+      <div class="biko-platz" data-biko></div>
+      <div>
+        <h1>Biko-Chef</h1>
+        <p class="leise" id="zustand-text">Dein KI-Geschäftsführer</p>
+      </div>
+    </header>
+
+    <section id="login" hidden>
+      <form id="login-form" class="karte">
+        <label for="passwort">Verwalter-Passwort</label>
+        <input id="passwort" type="password" autocomplete="current-password" required aria-describedby="login-fehler">
+        <p id="login-fehler" class="meldung fehler" role="alert"></p>
+        <button type="submit" class="knopf haupt druck">Anmelden</button>
+      </form>
+    </section>
+
+    <section id="inhalt" hidden>
+      <p class="kosten-zeile" id="kosten"></p>
+      <div id="fragen" aria-live="polite"></div>
+      <div id="projekte"></div>
+
+      <h2 class="abschnitt">Gespräch</h2>
+      <div class="verlauf" id="verlauf" aria-live="polite"></div>
+      <form class="eingabe" id="chat-form">
+        <textarea id="chat-text" rows="1" maxlength="4000" placeholder="Was soll erledigt werden?" aria-label="Nachricht an Biko-Chef"></textarea>
+        <button type="submit" id="chat-knopf" aria-label="Senden">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+        </button>
+      </form>
+      <p class="meldung fehler" id="chat-fehler" role="alert"></p>
+      <p class="leise klein hinweis">Biko-Chef veröffentlicht nichts, gibt kein Geld aus und schreibt niemanden an, ohne dich zu fragen.</p>
+      <a class="knopf druck" href="/">Zurück zu Biko</a>
+    </section>
+  </main>
+
+  <dialog id="ergebnis" class="ergebnis-fenster">
+    <h2 id="ergebnis-titel"></h2>
+    <p class="leise klein" id="ergebnis-urteil"></p>
+    <div id="ergebnis-text" class="ergebnis-text"></div>
+    <form method="dialog"><button class="knopf haupt druck">Schließen</button></form>
+  </dialog>
+
+  <script src="biko.js"></script>
+  <script src="chef.js"></script>
+</body>
+</html>
