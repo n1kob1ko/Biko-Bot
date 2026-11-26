@@ -363,3 +363,23 @@ Der Entwickler liefert eine HTML-Seite, die unter `/api/chef/vorschau?id=` abges
 - Daten: `/data/chef/zustand.json`, Webseiten in `/data/chef/vorschau/`. Tests: `python -m unittest test_chef`.
 - Wege: `GET /api/chef`, `POST /api/chef/chat`, `POST /api/chef/freigabe`, `GET /api/chef/ergebnis?id=`,
   `GET /api/chef/vorschau?id=`.
+
+### Biko-Chef arbeitet für DreamStudy (`dreamstudy.py`)
+
+Biko holt alle 2 Minuten Aufträge aus DreamStudy (Nikos Nachhilfe-App) ab, erledigt jeden mit einer Claude-Anfrage
+(Sonnet 5.5) und schickt das Ergebnis zurück:
+
+- **Tagesbriefing**: ab 6 Uhr je Lehrkraft mit Terminen eines. Es steht in DreamStudy auf „Heute“ und unter Erweitert › Biko.
+- **Lernzettel aus einem Dokument**: eine Lehrkraft tippt in DreamStudy beim Material „An Biko geben“ (nur mit dem Haken
+  „kein Name auf dem Dokument“). Zurück kommen eine Zusammenfassung und ein Lernzettel, den die Lehrkraft liest und
+  für den Schüler übernimmt.
+
+Namen bekommt Biko nie: DreamStudy baut den Text selbst, Schüler heißen S1, S2 …, jeder bekannte Name ist durch [Name]
+ersetzt, die Zuordnung bleibt in DreamStudy. Biko speichert keinen Text, nur Nummer, Zeit und Kosten je Auftrag. Die
+Kosten zählen in die Tagesgrenze des Chefs (ist sie erreicht, holt Biko nichts ab) und in DreamStudy für die KI-Grenze
+des Schülers. Typisch: 2 bis 5 Cent je Briefing, 5 bis 15 Cent je Dokument.
+
+Einrichten: in DreamStudy `BIKO_TOKEN` und hier `DREAMSTUDY_TOKEN` auf **denselben** zufälligen Wert setzen (mindestens
+24 Zeichen, z. B. `openssl rand -hex 32`). Optional `DREAMSTUDY_URL` (Standard `https://dreamstudy.at`),
+`DREAMSTUDY_MODELL` (Standard `claude-sonnet-5-5`), `DREAMSTUDY_TAKT` (Sekunden, Standard 120). Der Chef hat dazu die
+Werkzeuge `dreamstudy_stand` und `dreamstudy_jetzt`. Tests: `python -m unittest test_dreamstudy`.

@@ -83,7 +83,9 @@
 
   function zeigen(z) {
     const alt = gesehen ? new Set(gesehen.projekte.map((p) => p.id)) : null;
-    $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv`;
+    const ds = z.dreamstudy && z.dreamstudy.an
+      ? ` · DreamStudy ${z.dreamstudy.fehler ? 'gestört' : 'verbunden'}${z.dreamstudy.heute ? `, heute ${z.dreamstudy.heute} erledigt` : ''}` : '';
+    $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv${ds}`;
     $('#fragen').replaceChildren(...z.projekte.flatMap((p) => p.fragen.map((f) => frageKarte(p, f))));
     $('#projekte').replaceChildren(...(z.projekte.length ? z.projekte.map((p) => projektKarte(p, alt && !alt.has(p.id)))
       : [el('p', { class: 'leer-zeile', text: 'Noch keine Projekte. Sag mir unten, was erledigt werden soll, zum Beispiel: „Bau eine Landingpage für meine Nachhilfe.“' })]));
