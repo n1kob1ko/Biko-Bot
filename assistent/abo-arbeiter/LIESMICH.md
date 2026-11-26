@@ -17,7 +17,7 @@ Abo auf dem eigenen Rechner zu nutzen, auch aus einem Skript. Für Kunden oder a
    ```
 2. **Anmelden**: `claude` einmal starten und mit deinem Abo anmelden (nicht mit einem API-Schlüssel).
    Dann `gh auth login` (GitHub.com, HTTPS, im Browser bestätigen).
-3. **Repo klonen**, falls noch nicht da: `git clone https://github.com/n1kob1ko/Biko-Bot C:\Users\niko\Projekte\Biko-Bot`
+3. **Repo**: Gibt es den Ordner aus `repos` noch nicht, klont der Biko-Arbeiter das Repo beim ersten Auftrag selbst.
 4. **Einstellungen**: `einstellungen.beispiel.json` nach `einstellungen.json` kopieren und eintragen:
    - `url`: die Adresse von Biko auf Railway
    - `token`: derselbe Wert wie `CHEF_ABO_TOKEN` in Railway
