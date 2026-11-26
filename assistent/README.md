@@ -364,6 +364,26 @@ Der Entwickler liefert eine HTML-Seite, die unter `/api/chef/vorschau?id=` abges
 - Wege: `GET /api/chef`, `POST /api/chef/chat`, `POST /api/chef/freigabe`, `GET /api/chef/ergebnis?id=`,
   `GET /api/chef/vorschau?id=`.
 
+### Biko-Chef programmiert mit Nikos Claude-Abo (`abo.py`, `abo-arbeiter/`)
+
+Code-Aufgaben (Rolle `programmierer`, immer mit `repo`) laufen nicht über die API, sondern mit **Claude Code auf
+Nikos PC und seinem Claude-Abo**. Der Biko-Arbeiter (`abo-arbeiter/biko_arbeiter.py`, Einrichten in
+`abo-arbeiter/LIESMICH.md`) fragt alle 30 Sekunden nach, arbeitet in einem eigenen Git-Arbeitsordner mit `claude -p`,
+schiebt den Zweig `biko/<aufgabe>-<versuch>` hoch und öffnet mit `gh` einen PR. Dann fragt Biko in `/chef`:
+„Soll ich ihn mergen?“. Erst nach Ja holt der PC einen Merge-Auftrag ab (`gh pr merge --squash`).
+
+- Kostet kein API-Geld, zählt aber gegen die Abo-Grenzen (5 Stunden und Woche). Höchstens 10 Läufe pro Tag
+  (`abo_einstellen`, bis 30), immer nur einer zur selben Zeit, höchstens 45 Minuten. Meldet Claude Code
+  „Grenze erreicht“, pausiert Biko die Abo-Aufgaben.
+- Claude Code darf lesen, ändern, testen, committen; pushen, `gh`, `curl` sind gesperrt. `ANTHROPIC_API_KEY` wird
+  für Claude Code entfernt, damit das Abo zählt.
+- Anthropic erlaubt das unveränderte Claude Code mit eigenem Abo auf dem eigenen Rechner, auch aus einem Skript.
+  Für Kunden oder andere Leute darf das Abo nicht laufen: dafür API-Schlüssel nehmen.
+- Railway: `CHEF_ABO_TOKEN` (mindestens 24 Zeichen, derselbe Wert in `einstellungen.json` auf dem PC). Ohne ihn aus.
+- Wege (nur mit `Authorization: Bearer <CHEF_ABO_TOKEN>`): `POST /api/abo/abholen`, `/api/abo/lebt`,
+  `/api/abo/fertig`, `/api/abo/gemergt`. Meldet sich der PC 10 Minuten nicht, wartet die Aufgabe wieder.
+- Tests: `python -m unittest test_abo` (mit Ende-zu-Ende-Test: echter Server, echter Arbeiter, falsches claude/gh).
+
 ### Biko-Chef arbeitet für DreamStudy (`dreamstudy.py`)
 
 Biko holt alle 2 Minuten Aufträge aus DreamStudy (Nikos Nachhilfe-App) ab, erledigt jeden mit einer Claude-Anfrage

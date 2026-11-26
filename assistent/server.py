@@ -2724,6 +2724,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.zuhoeren()
             if pfad == "/api/bildschirm":
                 return self.bildschirm()
+            if pfad.startswith("/api/abo/"):
+                return self.abo_post(pfad)
             daten = self.json_body()
             if pfad == "/api/login":
                 return self.login(daten)
@@ -2960,6 +2962,30 @@ class Handler(BaseHTTPRequestHandler):
                                                       daten.get("ja") is True))
         except RuntimeError as e:
             return self.senden(502, {"fehler": str(e)})
+        return self.senden(404, {"fehler": "Gibt es nicht."})
+
+    # --- PC-Arbeiter von Biko-Chef (Claude Code mit Nikos Abo), eigener Schlüssel statt Anmeldung ---
+    def abo_post(self, pfad):
+        if not chef.abo.token_passt(self.headers.get("Authorization")):
+            protokoll("PC-Arbeiter: falscher Schlüssel")
+            return self.senden(401, {"fehler": "Falscher Schlüssel."})
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > 100000:
+            return self.senden(413, {"fehler": "Zu groß."})
+        try:
+            daten = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            daten = None
+        if not isinstance(daten, dict):
+            return self.senden(400, {"fehler": "Das ist kein JSON."})
+        if pfad == "/api/abo/abholen":
+            return self.senden(200, {"auftrag": chef.abo.abholen(daten)})
+        if pfad == "/api/abo/lebt":
+            return self.senden(200, chef.abo.lebt(daten))
+        if pfad == "/api/abo/fertig":
+            return self.senden(200, chef.abo.fertig(daten))
+        if pfad == "/api/abo/gemergt":
+            return self.senden(200, chef.abo.gemergt(daten))
         return self.senden(404, {"fehler": "Gibt es nicht."})
 
     def datei(self, pfad):

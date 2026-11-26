@@ -1,0 +1,9 @@
+{
+  "url": "https://DEIN-BIKO.up.railway.app",
+  "token": "derselbe Wert wie CHEF_ABO_TOKEN in Railway",
+  "repos": {
+    "n1kob1ko/Biko-Bot": "C:/Users/niko/Projekte/Biko-Bot"
+  },
+  "max_minuten": 45,
+  "takt_sekunden": 30
+}
