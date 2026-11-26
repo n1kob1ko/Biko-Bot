@@ -192,8 +192,13 @@ def zusammenfassung(text):
 def code_aufgabe(e, job):
     repo, aid, zweig = job["repo"], job["id"], job["zweig"]
     ordner = e["repos"].get(repo) or next((v for k, v in e["repos"].items() if k.lower() == str(repo).lower()), None)
-    if not ordner or not Path(ordner).is_dir():
+    if not ordner:
         return {"id": aid, "ok": False, "fehler": f"Das Repo {repo} ist auf dem PC nicht eingerichtet."}
+    if not Path(ordner).is_dir():   # beim ersten Mal selbst klonen (mit der Anmeldung von gh)
+        print(f"  Klone {repo} nach {ordner} …", flush=True)
+        code, aus, fehler = lauf([programm("gh"), "repo", "clone", repo, ordner], str(HIER), 900)
+        if code != 0:
+            return {"id": aid, "ok": False, "fehler": f"Klonen von {repo} ging nicht: {(fehler or aus)[:250]}"}
     if not re.fullmatch(r"biko/[a-z0-9-]{1,40}", zweig):
         return {"id": aid, "ok": False, "fehler": "Ungültiger Zweigname."}
     arbeit = Path(ordner).parent / ".biko-arbeit" / zweig.replace("/", "-")
