@@ -90,6 +90,10 @@ ROLLEN = {
                    "etwas fehlt). Ein Formular schickt nirgendwohin, es zeigt nur, wie es aussehen wird. "
                    "Im Feld `ergebnis` beschreibst du kurz, was die Seite enthält.",
     },
+    "programmierer": {   # läuft nicht hier, sondern auf Nikos PC mit Claude Code und seinem Abo (abo.py)
+        "name": "Programmierer", "abo": True,
+        "auftrag": "Claude Code auf Nikos PC, mit seinem Abo: ändert Code in einem Repo, testet und öffnet einen PR.",
+    },
     "pruefer": {
         "name": "Prüfer", "modell": "claude-opus-5-5", "web": True, "max_tokens": 16000,
         "auftrag": "Du prüfst die bisherigen Ergebnisse des Projekts kritisch gegen das Ziel: Was fehlt, was ist falsch, "
@@ -129,6 +133,11 @@ So arbeitest du:
 - Veröffentlichen, Geld ausgeben, Verträge, Kunden oder andere Menschen anschreiben: Das kannst du nicht selbst. Frag
   Niko mit `freigabe_anfragen` und sag ihm, was er dann selbst tun muss. Echtes Trading mit Geld macht ihr nie ohne
   seine ausdrückliche Freigabe und ein hartes Limit.
+- Code in Nikos Repos ändern (Biko-Bot, DreamStudy …): Dafür gibt es die Rolle `programmierer`. Die Aufgabe läuft mit
+  Claude Code auf Nikos eigenem PC und seinem Claude-Abo, kostet also kein API-Geld, zählt aber gegen seine Abo-Grenzen.
+  Gib immer `repo` an (welche es gibt, steht im <stand>). Der Auftrag beschreibt das Ziel, nicht jede Zeile. Am Ende gibt
+  es einen PR, und Niko wird gefragt, ob er gemergt wird. Ist der PC nicht verbunden, wartet die Aufgabe, bis er wieder
+  da ist; sag Niko das. Nutze das Abo nur für Nikos eigene Arbeit, nie für Kunden (das erlaubt Anthropic nicht).
 - Kosten: Es gibt eine Tagesgrenze und ein Budget pro Projekt. Halte Projekte klein. Typisch: Recherche 0,10 bis
   0,40 $, Text 0,05 bis 0,20 $, Webseite 0,30 bis 1 $.
 
@@ -545,6 +554,8 @@ def takt_runde():
             if frei <= 0 or p["status"] != "aktiv":
                 continue
             for a in bereite_aufgaben(p):
+                if ROLLEN[a["rolle"]].get("abo"):
+                    continue   # holt der PC-Arbeiter selbst ab (abo.py), kostet kein API-Geld
                 if frei <= 0:
                     break
                 try:
@@ -565,6 +576,7 @@ def takt_runde():
                 _laufend[a["id"]] = faden
                 frei -= 1
                 geaendert = True
+        geaendert = abo.aufraeumen(z) or geaendert
         if jetzt().hour >= BERICHT_UM and z["bericht_tag"] != heute():
             z["bericht_tag"] = heute()
             bericht = tagesbericht(z)
@@ -618,7 +630,7 @@ def starten():
         z = laden()
         for p in z["projekte"]:
             for a in p["aufgaben"]:
-                if a["status"] == "laeuft":
+                if a["status"] == "laeuft" and not ROLLEN[a["rolle"]].get("abo"):   # der PC arbeitet weiter
                     a["status"] = "offen"
         speichern(z)
     threading.Thread(target=takt, daemon=True).start()
@@ -630,6 +642,7 @@ AUFGABE_SCHEMA = {"type": "object", "properties": {
     "rolle": {"type": "string", "enum": list(ROLLEN)},
     "auftrag": {"type": "string", "description": "Was genau zu tun ist und was am Ende abgegeben wird."},
     "gleichzeitig": {"type": "boolean", "description": "true: läuft parallel zur vorherigen Aufgabe."},
+    "repo": {"type": "string", "description": "Nur bei programmierer: das GitHub-Repo, z. B. 'n1kob1ko/Biko-Bot'."},
 }, "required": ["titel", "rolle", "auftrag"]}
 
 
@@ -645,9 +658,14 @@ def _aufgaben(liste, schon=0):
         titel, auftrag = str(e.get("titel") or "").strip()[:80], str(e.get("auftrag") or "").strip()[:4000]
         if not titel or not auftrag:
             raise ValueError("Jede Aufgabe braucht Titel und Auftrag.")
-        neu.append({"id": neue_id("a"), "titel": titel, "rolle": e["rolle"], "auftrag": auftrag,
-                    "gleichzeitig": e.get("gleichzeitig") is True and (schon + len(neu)) > 0,
-                    "status": "offen", "versuche": 0, "kosten": 0.0})
+        a = {"id": neue_id("a"), "titel": titel, "rolle": e["rolle"], "auftrag": auftrag,
+             "gleichzeitig": e.get("gleichzeitig") is True and (schon + len(neu)) > 0,
+             "status": "offen", "versuche": 0, "kosten": 0.0}
+        if ROLLEN[e["rolle"]].get("abo"):
+            if not abo.an():
+                raise ValueError("Der PC-Arbeiter ist noch nicht eingerichtet (CHEF_ABO_TOKEN fehlt).")
+            a["repo"] = abo.repo_pruefen(e.get("repo"))
+        neu.append(a)
     return neu
 
 
@@ -823,13 +841,15 @@ CHEF_WERKZEUGE = {
 
 def stand_text(z):
     zeilen = [f"Heute ausgegeben: {geld(heute_ausgegeben(z))} von {geld(z['grenzen']['tag'])}. "
-              f"Arbeiter gleichzeitig: {z['grenzen']['gleichzeitig']}. Jetzt: {jetzt().strftime('%A %d.%m.%Y %H:%M')}."]
+              f"Arbeiter gleichzeitig: {z['grenzen']['gleichzeitig']}. Jetzt: {jetzt().strftime('%A %d.%m.%Y %H:%M')}.",
+              abo.stand_text(z)]
     for p in z["projekte"][-12:]:
         zeilen.append(f"Projekt {p['id']} „{p['name']}“ ({p['status']}, {p.get('ausgegeben', 0):.2f} von "
                       f"{geld(p['budget'])}): {_kurz(p['ziel'], 200)}")
         for a in p["aufgaben"]:
-            zeilen.append(f"  Aufgabe {a['id']} [{a['rolle']}] {a['titel']}: {a['status']}"
-                          + (f" – {_kurz(a.get('zusammenfassung'), 200)}" if a.get("zusammenfassung") else ""))
+            zeilen.append(f"  Aufgabe {a['id']} [{a['rolle']}{', ' + a['repo'] if a.get('repo') else ''}] {a['titel']}: "
+                          f"{a['status']}" + (f" – {_kurz(a.get('zusammenfassung'), 200)}" if a.get("zusammenfassung") else "")
+                          + (f" PR: {a['pr']}" if a.get("pr") else ""))
         for f in p.get("fragen", []):
             if f["stand"] == "offen":
                 zeilen.append(f"  Offene Frage an Niko: {f['frage']}")
@@ -907,8 +927,10 @@ def freigabe(pid, fid, ja):
                 p["status"] = "aktiv"
             else:
                 p["status"] = "pausiert"
+        if f["art"] == "merge" and ja:
+            abo.merge_einreihen(z, p, f)
         speichern(z)
-    if f["art"] != "budget":   # bei einer eigenen Frage des Chefs reagiert er gleich darauf
+    if f["art"] not in ("budget", "merge"):   # bei einer eigenen Frage des Chefs reagiert er gleich darauf
         try:
             chef_antwort()
         except (anthropic.APIError, RuntimeError) as e:
@@ -928,12 +950,13 @@ def ansicht():
             "aufgaben": [{"id": a["id"], "titel": a["titel"], "rolle": a["rolle"], "rolle_name": ROLLEN[a["rolle"]]["name"],
                           "status": a["status"], "zusammenfassung": a.get("zusammenfassung", ""),
                           "vorschau": bool(a.get("vorschau")), "versuche": a.get("versuche", 0),
-                          "kosten": a.get("kosten", 0.0)} for a in p["aufgaben"]],
+                          "kosten": a.get("kosten", 0.0), "pr": a.get("pr", ""), "repo": a.get("repo", "")}
+                         for a in p["aufgaben"]],
             "fragen": [{"id": f["id"], "frage": f["frage"]} for f in p.get("fragen", []) if f["stand"] == "offen"],
         })
     return {"projekte": projekte, "gespraech": z["gespraech"][-80:], "grenzen": z["grenzen"],
             "heute": round(heute_ausgegeben(z), 4), "laufen": len(_laufend),
-            "protokoll": z["protokoll"][-30:], "dreamstudy": dreamstudy.ansicht()}
+            "protokoll": z["protokoll"][-30:], "dreamstudy": dreamstudy.ansicht(), "abo": abo.ansicht()}
 
 
 def ergebnis(aid):
@@ -941,7 +964,9 @@ def ergebnis(aid):
         z = laden()
         p, a = aufgabe_finden(z, aid)
     return {"titel": a["titel"], "rolle": ROLLEN[a["rolle"]]["name"], "status": a["status"],
-            "ergebnis": a.get("ergebnis", ""), "urteil": a.get("urteil", ""), "vorschau": bool(a.get("vorschau"))}
+            "ergebnis": a.get("ergebnis", ""), "urteil": a.get("urteil", ""), "vorschau": bool(a.get("vorschau")),
+            "pr": a.get("pr", "")}
 
 
+import abo  # noqa: E402  (Code-Aufgaben auf Nikos PC mit Claude Code und seinem Abo)
 import dreamstudy  # noqa: E402  (meldet seine Werkzeuge bei CHEF_WERKZEUGE an; braucht dieses Modul fertig geladen)

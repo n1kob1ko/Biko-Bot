@@ -34,19 +34,27 @@
   const dollar = (x) => (x || 0).toFixed(2).replace('.', ',') + ' $';
   const STAND = { aktiv: 'Läuft', fertig: 'Fertig', wartet: 'Wartet auf dich', pausiert: 'Pausiert' };
   const AUFGABE = { offen: 'Wartet', laeuft: 'Arbeitet gerade', fertig: 'Fertig', fehler: 'Fehler' };
-  let denkt = false, zuletztFertig = 0, gesehen = null;
+  let denkt = false, zuletztFertig = 0, gesehen = null, pc = null;
 
   // ---------- Anzeige ----------
   function aufgabeZeile(a) {
     const knoepfe = [];
     if (a.status === 'fertig' || a.zusammenfassung) knoepfe.push(el('button', { type: 'button', class: 'klein-knopf druck', text: 'Ergebnis ansehen', onclick: () => ergebnisZeigen(a.id) }));
+    if (a.pr) knoepfe.push(el('a', { class: 'klein-knopf druck', href: a.pr, target: '_blank', rel: 'noopener', text: 'PR ansehen' }));
     if (a.vorschau) knoepfe.push(el('a', { class: 'klein-knopf druck', href: `/api/chef/vorschau?id=${a.id}`, target: '_blank', rel: 'noopener', text: 'Webseite öffnen' }));
     return el('li', { class: 'aufgabe', 'data-s': a.status },
       el('span', { class: 'punkt', 'aria-hidden': 'true' }),
       el('strong', { text: a.titel }),
-      el('span', { class: 'rolle', text: `${a.rolle_name} · ${AUFGABE[a.status] || a.status}${a.versuche > 1 ? ` · ${a.versuche} Versuche` : ''}${a.kosten ? ' · ' + dollar(a.kosten) : ''}` }),
+      el('span', { class: 'rolle', text: `${a.rolle_name}${a.repo ? ' · ' + a.repo : ''} · ${aufgabeStand(a)}${a.versuche > 1 ? ` · ${a.versuche} Versuche` : ''}${a.kosten ? ' · ' + dollar(a.kosten) : ''}` }),
       a.zusammenfassung ? el('span', { class: 'zf', text: a.zusammenfassung }) : null,
       knoepfe.length ? el('div', { class: 'knoepfe' }, knoepfe) : null);
+  }
+
+  function aufgabeStand(a) {
+    if (!a.repo) return AUFGABE[a.status] || a.status;   // nur Programmierer-Aufgaben laufen auf Nikos PC
+    if (a.status === 'laeuft') return 'Arbeitet auf deinem PC';
+    if (a.status === 'offen' && pc && !pc.verbunden) return 'Wartet auf deinen PC';
+    return AUFGABE[a.status] || a.status;
   }
 
   function projektKarte(p, neu) {
@@ -85,7 +93,9 @@
     const alt = gesehen ? new Set(gesehen.projekte.map((p) => p.id)) : null;
     const ds = z.dreamstudy && z.dreamstudy.an
       ? ` · DreamStudy ${z.dreamstudy.fehler ? 'gestört' : 'verbunden'}${z.dreamstudy.heute ? `, heute ${z.dreamstudy.heute} erledigt` : ''}` : '';
-    $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv${ds}`;
+    pc = z.abo && z.abo.an ? z.abo : null;
+    const abo = pc ? ` · PC ${pc.verbunden ? 'verbunden' : 'nicht verbunden'}, ${pc.heute} von ${pc.max_tag} Abo-Läufen${pc.pause_bis && new Date(pc.pause_bis) > new Date() ? ', Pause bis ' + pc.pause_bis.slice(11, 16) : ''}` : '';
+    $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv${ds}${abo}`;
     $('#fragen').replaceChildren(...z.projekte.flatMap((p) => p.fragen.map((f) => frageKarte(p, f))));
     $('#projekte').replaceChildren(...(z.projekte.length ? z.projekte.map((p) => projektKarte(p, alt && !alt.has(p.id)))
       : [el('p', { class: 'leer-zeile', text: 'Noch keine Projekte. Sag mir unten, was erledigt werden soll, zum Beispiel: „Bau eine Landingpage für meine Nachhilfe.“' })]));
@@ -100,14 +110,16 @@
     if (gesehen && fertig > zuletztFertig) { stimmung('jubelt'); setTimeout(() => zustand(z), 2600); }
     else zustand(z);
     zuletztFertig = fertig;
-    $('#zustand-text').textContent = denkt ? 'Ich denke nach' : z.laufen ? `${z.laufen} ${z.laufen === 1 ? 'Arbeiter ist' : 'Arbeiter sind'} dran` : fragen ? 'Eine Frage wartet auf dich' : 'Dein KI-Geschäftsführer';
+    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
+    $('#zustand-text').textContent = denkt ? 'Ich denke nach' : amPc && !z.laufen ? 'Claude arbeitet auf deinem PC' : z.laufen ? `${z.laufen} ${z.laufen === 1 ? 'Arbeiter ist' : 'Arbeiter sind'} dran` : fragen ? 'Eine Frage wartet auf dich' : 'Dein KI-Geschäftsführer';
     gesehen = z;
   }
 
   function zustand(z) {
     const fragen = z.projekte.some((p) => p.fragen.length);
     const fehler = z.projekte.some((p) => p.aufgaben.some((a) => a.status === 'fehler'));
-    stimmung(denkt || z.laufen ? 'tippt' : fragen ? 'winkt' : fehler ? 'traurig' : 'da');
+    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
+    stimmung(denkt || z.laufen || amPc ? 'tippt' : fragen ? 'winkt' : fehler ? 'traurig' : 'da');
   }
 
   async function ergebnisZeigen(id) {
