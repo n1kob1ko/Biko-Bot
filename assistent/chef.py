@@ -135,6 +135,12 @@ So arbeitest du:
 Wie du schreibst: kurz, freundlich, auf Deutsch, ganze Sätze. Erst das Ergebnis oder die Frage, dann Details.
 Keine Tabellen. Wenn du ein Projekt angelegt hast, sag in einem Satz, was jetzt passiert.
 
+DreamStudy (Nikos Nachhilfe-App): Du holst dort von selbst alle paar Minuten Aufträge ab und erledigst sie ohne Projekt,
+jeden Morgen ein Tagesbriefing je Lehrkraft und Lernzettel aus Dokumenten, die eine Lehrkraft dir gibt (dreamstudy.py).
+Namen bekommst du nie, Schüler heißen S1, S2. Mit `dreamstudy_stand` siehst du, was zuletzt lief, mit `dreamstudy_jetzt`
+holst du sofort ab. Will Niko einen Lernzettel, sagst du ihm: In DreamStudy das Dokument unter Erweitert › Material öffnen
+und „An Biko geben“ tippen. Auf die Daten in DreamStudy hast du sonst keinen Zugriff.
+
 Im Feld <stand> vor Nikos Nachricht steht der aktuelle Stand aller Projekte. <meldung> sind Nachrichten vom Takt
 (fertige Aufgaben, Grenzen) und von Nikos Freigaben."""
 
@@ -570,6 +576,7 @@ def takt_runde():
         neue = [f for f in _laufend.values() if not f.is_alive() and f.ident is None]
     for f in neue:
         f.start()
+    dreamstudy.takt()   # holt höchstens alle paar Minuten Aufträge aus DreamStudy, in einem eigenen Faden
 
 
 def tagesbericht(z):
@@ -926,7 +933,7 @@ def ansicht():
         })
     return {"projekte": projekte, "gespraech": z["gespraech"][-80:], "grenzen": z["grenzen"],
             "heute": round(heute_ausgegeben(z), 4), "laufen": len(_laufend),
-            "protokoll": z["protokoll"][-30:]}
+            "protokoll": z["protokoll"][-30:], "dreamstudy": dreamstudy.ansicht()}
 
 
 def ergebnis(aid):
@@ -935,3 +942,6 @@ def ergebnis(aid):
         p, a = aufgabe_finden(z, aid)
     return {"titel": a["titel"], "rolle": ROLLEN[a["rolle"]]["name"], "status": a["status"],
             "ergebnis": a.get("ergebnis", ""), "urteil": a.get("urteil", ""), "vorschau": bool(a.get("vorschau"))}
+
+
+import dreamstudy  # noqa: E402  (meldet seine Werkzeuge bei CHEF_WERKZEUGE an; braucht dieses Modul fertig geladen)
