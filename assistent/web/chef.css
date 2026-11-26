@@ -1,0 +1,49 @@
+/* Biko-Chef: dieselben Farben und Knöpfe wie die App (style.css), dazu Projektkarten. */
+
+.chef { max-width: 640px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); }
+.chef .kopf { padding-right: 0; }
+.chef .kopf p { margin-right: 0; }
+.chef .hinweis { margin: 12px 0; }
+.kosten-zeile { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; margin: 0 0 14px; }
+
+.projekt { display: grid; gap: 12px; }
+.projekt-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.projekt h2 { font-size: 1.25rem; margin: 0; overflow-wrap: anywhere; }
+.projekt .ziel { color: var(--muted); margin: 0; font-size: .9375rem; }
+.stand { flex: none; font-size: .8125rem; font-weight: 800; padding: 4px 12px; border-radius: 999px; background: var(--feld); }
+.stand[data-s="aktiv"] { background: var(--blase); }
+.stand[data-s="fertig"] { background: var(--up-bg); color: var(--up); }
+.stand[data-s="wartet"], .stand[data-s="pausiert"] { background: var(--feld); color: var(--muted); }
+.balken { height: 8px; border-radius: 999px; background: var(--feld); overflow: hidden; }
+.balken span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 400ms var(--ease-out); }
+.projekt .geld { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; margin: -4px 0 0; }
+
+.aufgaben { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.aufgabe { display: grid; grid-template-columns: 22px 1fr; gap: 2px 10px; align-items: start; padding: 10px 12px; border-radius: var(--r-feld); background: var(--feld); }
+.aufgabe .punkt { width: 14px; height: 14px; margin-top: 5px; border-radius: 50%; background: var(--line); grid-row: span 3; }
+.aufgabe[data-s="laeuft"] .punkt { background: var(--accent-stark); animation: puls 1.2s ease-in-out infinite; }
+.aufgabe[data-s="fertig"] .punkt { background: var(--up); }
+.aufgabe[data-s="fehler"] .punkt { background: var(--down); }
+.aufgabe strong { overflow-wrap: anywhere; }
+.aufgabe .rolle { color: var(--muted); font-size: .8125rem; font-weight: 700; }
+.aufgabe .zf { font-size: .9375rem; overflow-wrap: anywhere; }
+.aufgabe .knoepfe { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.aufgabe .klein-knopf { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--card); color: var(--ink); font: inherit; font-weight: 700; font-size: .875rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; white-space: nowrap; }
+@keyframes puls { 50% { transform: scale(.7); opacity: .6; } }
+
+.frage-karte { display: grid; gap: 12px; border: 3px solid var(--accent); }
+.frage-karte p { margin: 0; font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; }
+.frage-karte .zwei { gap: 10px; }
+.frage-karte .knopf { margin: 0; }
+
+.blase.meldung-blase { align-self: stretch; max-width: none; background: var(--feld); color: var(--muted); font-size: .9375rem; padding: 10px 16px; border-radius: var(--r-feld); }
+.blase.bericht-blase { align-self: stretch; max-width: none; background: var(--blase); font-size: .9375rem; border-radius: var(--r-feld); }
+.blase.frage-blase { align-self: stretch; max-width: none; background: var(--blase); font-weight: 700; border-radius: var(--r-feld); }
+
+.ergebnis-fenster { width: min(680px, calc(100vw - 24px)); max-height: 86vh; border: 0; border-radius: var(--r-karte); padding: 20px; background: var(--card); color: var(--ink); box-shadow: var(--schatten-hoch); }
+.ergebnis-fenster::backdrop { background: rgba(0, 0, 0, .4); }
+.ergebnis-fenster h2 { margin: 0 0 6px; font-size: 1.2rem; }
+.ergebnis-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9375rem; line-height: 1.5; margin: 12px 0 16px; user-select: text; -webkit-user-select: text; }
+
+.projekt.kommt, .frage-karte.kommt { animation: kommt var(--t-ein) var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .aufgabe[data-s="laeuft"] .punkt { animation: none; } }

@@ -347,3 +347,19 @@ Die Oberfläche folgt 20 festen Regeln. Wer etwas ändert, hält sie bitte ein:
 | 20 | Dasselbe Element wandert, statt zwei zu tauschen | ein Kissen in der Leiste, ein Biko im Reden-Bereich |
 
 Bei "Bewegung reduzieren" am Handy bleibt von allem nur das Ein- und Ausblenden.
+
+## Biko-Chef (KI-Geschäftsführer für Niko)
+
+`/chef` – nur mit dem Verwalter-Passwort. Niko sagt dem Chef im Gespräch, was erledigt werden soll. Der Chef
+(Claude Opus 5.5, `chef.py`) legt ein Projekt mit Ziel, Budget und Aufgaben an. Für jede Aufgabe läuft eine eigene
+Claude-Sitzung mit einer Rolle (Recherche, Texter, Entwickler, Prüfer); bis zu 3 gleichzeitig, Aufgaben mit
+`gleichzeitig` laufen parallel zur vorherigen. Nach jeder Aufgabe prüft ein Prüfer, höchstens 3 Versuche.
+Der Entwickler liefert eine HTML-Seite, die unter `/api/chef/vorschau?id=` abgeschottet (CSP sandbox) zu sehen ist.
+
+- Grenzen: 3 $ pro Tag (höchstens 20), 1 $ pro Projekt (höchstens 10). Ist ein Projektbudget weg, hält es an und
+  fragt mit Ja/Nein nach mehr. Das Gespräch mit dem Chef hat 0,50 $ Reserve über der Tagesgrenze.
+- Kein Werkzeug zum Veröffentlichen, Bezahlen oder Anschreiben: der Chef kann dafür nur um Freigabe fragen.
+- Takt alle 5 Sekunden ohne KI (startet, was starten darf), Tagesbericht um 19 Uhr ohne KI.
+- Daten: `/data/chef/zustand.json`, Webseiten in `/data/chef/vorschau/`. Tests: `python -m unittest test_chef`.
+- Wege: `GET /api/chef`, `POST /api/chef/chat`, `POST /api/chef/freigabe`, `GET /api/chef/ergebnis?id=`,
+  `GET /api/chef/vorschau?id=`.
