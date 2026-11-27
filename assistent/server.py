@@ -2988,6 +2988,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(200, chef.abo.fertig(daten))
         if pfad == "/api/abo/chef":
             return self.senden(200, chef.abo.chef_fertig(daten))
+        if pfad == "/api/abo/text":
+            return self.senden(200, chef.abo.text_fertig(daten))
         if pfad == "/api/abo/gemergt":
             return self.senden(200, chef.abo.gemergt(daten))
         return self.senden(404, {"fehler": "Gibt es nicht."})

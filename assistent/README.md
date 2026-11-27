@@ -382,6 +382,11 @@ schiebt den Zweig `biko/<aufgabe>-<versuch>` hoch und öffnet mit `gh` einen PR.
 - Railway: `CHEF_ABO_TOKEN` (mindestens 24 Zeichen, derselbe Wert in `einstellungen.json` auf dem PC). Ohne ihn aus.
 - Wege (nur mit `Authorization: Bearer <CHEF_ABO_TOKEN>`): `POST /api/abo/abholen`, `/api/abo/lebt`,
   `/api/abo/fertig`, `/api/abo/gemergt`. Meldet sich der PC 10 Minuten nicht, wartet die Aufgabe wieder.
+- **Abo-Modus (Standard, sobald `CHEF_ABO_TOKEN` gesetzt ist): alle Arbeiter laufen auf dem PC.** Recherche, Texter,
+  Entwickler und Prüfer holt der PC als `art: text` ab (bis zu 2 gleichzeitig neben einer Code-Aufgabe), `claude -p`
+  nur mit WebSearch/WebFetch in einem leeren Ordner, Ergebnis per `--json-schema` wie beim Werkzeug `abgeben`
+  (`POST /api/abo/text`). Kein API-Geld; ist der PC aus, warten die Aufgaben. Ausschalten im Gespräch
+  (`abo_einstellen` mit `alles_ueber_abo: false`), dann laufen nur Programmierer über das Abo.
 - **Auch das Gespräch mit dem Chef läuft übers Abo**, solange der PC verbunden ist: `/api/chef/chat` reiht die Antwort
   ein, der PC holt sie ab (alle 3 Sekunden, auch während einer Code-Aufgabe), `claude -p` ohne eigene Werkzeuge mit
   `--json-schema` liefert `{text, werkzeuge}`, Biko führt die Werkzeuge aus (`POST /api/abo/chef`). Brauchen sie ein
