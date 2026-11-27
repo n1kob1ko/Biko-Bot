@@ -34,7 +34,8 @@
   const dollar = (x) => (x || 0).toFixed(2).replace('.', ',') + ' $';
   const STAND = { aktiv: 'Läuft', fertig: 'Fertig', wartet: 'Wartet auf dich', pausiert: 'Pausiert' };
   const AUFGABE = { offen: 'Wartet', laeuft: 'Arbeitet gerade', fertig: 'Fertig', fehler: 'Fehler' };
-  let denkt = false, zuletztFertig = 0, gesehen = null, pc = null;
+  // pcDenkt: der Chef antwortet gerade über Nikos Abo auf dem PC, die Antwort kommt beim nächsten Abfragen
+  let denkt = false, pcDenkt = false, zuletztFertig = 0, gesehen = null, pc = null, zuletztGeladen = 0;
 
   // ---------- Anzeige ----------
   function aufgabeZeile(a) {
@@ -94,6 +95,8 @@
     const ds = z.dreamstudy && z.dreamstudy.an
       ? ` · DreamStudy ${z.dreamstudy.fehler ? 'gestört' : 'verbunden'}${z.dreamstudy.heute ? `, heute ${z.dreamstudy.heute} erledigt` : ''}` : '';
     pc = z.abo && z.abo.an ? z.abo : null;
+    pcDenkt = !!(z.abo && z.abo.chef_denkt);
+    const nachdenken = denkt || pcDenkt;
     const abo = pc ? ` · PC ${pc.verbunden ? 'verbunden' : 'nicht verbunden'}, ${pc.heute} von ${pc.max_tag} Abo-Läufen${pc.pause_bis && new Date(pc.pause_bis) > new Date() ? ', Pause bis ' + pc.pause_bis.slice(11, 16) : ''}` : '';
     $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv${ds}${abo}`;
     $('#fragen').replaceChildren(...z.projekte.flatMap((p) => p.fragen.map((f) => frageKarte(p, f))));
@@ -102,7 +105,7 @@
     const v = $('#verlauf');
     const unten = v.childElementCount === 0 || window.innerHeight + window.scrollY > document.body.scrollHeight - 120;
     v.replaceChildren(...z.gespraech.map(blase));
-    if (denkt) v.append(el('div', { class: 'blase denkt', text: 'Ich denke nach …' }));
+    if (nachdenken) v.append(el('div', { class: 'blase denkt', text: 'Ich denke nach …' }));
     if (unten && gesehen && z.gespraech.length !== gesehen.gespraech.length) v.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
 
     const fertig = z.projekte.reduce((n, p) => n + p.aufgaben.filter((a) => a.status === 'fertig').length, 0);
@@ -111,7 +114,7 @@
     else zustand(z);
     zuletztFertig = fertig;
     const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
-    $('#zustand-text').textContent = denkt ? 'Ich denke nach' : amPc && !z.laufen ? 'Claude arbeitet auf deinem PC' : z.laufen ? `${z.laufen} ${z.laufen === 1 ? 'Arbeiter ist' : 'Arbeiter sind'} dran` : fragen ? 'Eine Frage wartet auf dich' : 'Dein KI-Geschäftsführer';
+    $('#zustand-text').textContent = nachdenken ? 'Ich denke nach' : amPc && !z.laufen ? 'Claude arbeitet auf deinem PC' : z.laufen ? `${z.laufen} ${z.laufen === 1 ? 'Arbeiter ist' : 'Arbeiter sind'} dran` : fragen ? 'Eine Frage wartet auf dich' : 'Dein KI-Geschäftsführer';
     gesehen = z;
   }
 
@@ -119,7 +122,7 @@
     const fragen = z.projekte.some((p) => p.fragen.length);
     const fehler = z.projekte.some((p) => p.aufgaben.some((a) => a.status === 'fehler'));
     const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
-    stimmung(denkt || z.laufen || amPc ? 'tippt' : fragen ? 'winkt' : fehler ? 'traurig' : 'da');
+    stimmung(denkt || pcDenkt || z.laufen || amPc ? 'tippt' : fragen ? 'winkt' : fehler ? 'traurig' : 'da');
   }
 
   async function ergebnisZeigen(id) {
@@ -169,5 +172,9 @@
   });
 
   laden();
-  setInterval(() => { if (document.visibilityState === 'visible' && !denkt && !$('#inhalt').hidden && !$('#ergebnis').open) laden(); }, 5000);
+  // Alle 5 Sekunden nachsehen, schneller, solange die Antwort vom PC unterwegs ist
+  setInterval(() => {
+    if (document.visibilityState !== 'visible' || denkt || $('#inhalt').hidden || $('#ergebnis').open) return;
+    if (pcDenkt || Date.now() - zuletztGeladen > 5000) { zuletztGeladen = Date.now(); laden(); }
+  }, 1000);
 })();
