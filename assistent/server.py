@@ -2559,6 +2559,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Keine Inhalte loggen (Privatsphäre), nur Methode, Pfad und Status
+        if self.path.startswith(("/api/abo/abholen", "/api/abo/lebt")) and len(args) > 1 and str(args[1]) == "200":
+            return   # der PC fragt alle paar Sekunden nach, das würde das Log füllen
         if "/api/" in self.path:
             print(f"{self.command} {self.path.split('?')[0]} {args[1] if len(args) > 1 else ''}", flush=True)
 
@@ -2984,6 +2986,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.senden(200, chef.abo.lebt(daten))
         if pfad == "/api/abo/fertig":
             return self.senden(200, chef.abo.fertig(daten))
+        if pfad == "/api/abo/chef":
+            return self.senden(200, chef.abo.chef_fertig(daten))
         if pfad == "/api/abo/gemergt":
             return self.senden(200, chef.abo.gemergt(daten))
         return self.senden(404, {"fehler": "Gibt es nicht."})

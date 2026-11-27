@@ -382,6 +382,12 @@ schiebt den Zweig `biko/<aufgabe>-<versuch>` hoch und öffnet mit `gh` einen PR.
 - Railway: `CHEF_ABO_TOKEN` (mindestens 24 Zeichen, derselbe Wert in `einstellungen.json` auf dem PC). Ohne ihn aus.
 - Wege (nur mit `Authorization: Bearer <CHEF_ABO_TOKEN>`): `POST /api/abo/abholen`, `/api/abo/lebt`,
   `/api/abo/fertig`, `/api/abo/gemergt`. Meldet sich der PC 10 Minuten nicht, wartet die Aufgabe wieder.
+- **Auch das Gespräch mit dem Chef läuft übers Abo**, solange der PC verbunden ist: `/api/chef/chat` reiht die Antwort
+  ein, der PC holt sie ab (alle 3 Sekunden, auch während einer Code-Aufgabe), `claude -p` ohne eigene Werkzeuge mit
+  `--json-schema` liefert `{text, werkzeuge}`, Biko führt die Werkzeuge aus (`POST /api/abo/chef`). Brauchen sie ein
+  Ergebnis (`ergebnis_lesen`, `dreamstudy_stand`, Fehler), geht es mit `--resume` in die nächste Runde (höchstens 4).
+  Ersatz über die API, wenn der PC nicht da ist, 20 Sekunden nicht abholt, 150 Sekunden braucht, einen Fehler meldet
+  oder das Abo an der Grenze ist. Die Seite zeigt „Ich denke nach“ und fragt dann jede Sekunde nach.
 - Tests: `python -m unittest test_abo` (mit Ende-zu-Ende-Test: echter Server, echter Arbeiter, falsches claude/gh).
 
 ### Biko-Chef arbeitet für DreamStudy (`dreamstudy.py`)

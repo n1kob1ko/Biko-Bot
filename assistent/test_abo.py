@@ -11,8 +11,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from datetime import timedelta
+from types import SimpleNamespace
 from pathlib import Path
 
 os.environ["DATA_DIR"] = tempfile.mkdtemp()
@@ -35,9 +37,15 @@ def code_projekt(**mehr):
     return chef.laden()["projekte"][0]
 
 
+def tearDownModule():
+    abo._pc["gesehen"] = 0.0   # andere Testmodule sollen keinen verbundenen „PC“ sehen
+
+
 class AboTest(unittest.TestCase):
     def setUp(self):
         leeren()
+        abo._pc["gesehen"] = 0.0
+        self.addCleanup(abo._pc.update, gesehen=0.0)   # sonst ginge in anderen Tests der Chef an den „PC“
         chef.claude_anfrage = lambda **kw: self.fail("Abo-Aufgaben dürfen keine API-Anfrage machen")
         chef.BERICHT_UM = 25
 
@@ -146,6 +154,115 @@ class AboTest(unittest.TestCase):
         self.assertEqual(chef.laden()["projekte"][0]["aufgaben"][0]["status"], "offen")
         self.assertEqual(abo.abholen({})["id"], job["id"])
 
+    # ---------- das Gespräch mit dem Chef über das Abo ----------
+    def api_chef(self, text="Über die API."):
+        anfragen = []
+
+        def ki(**kw):
+            anfragen.append(kw)
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)],
+                                   model="claude-opus-5-5", usage=None)
+        chef.claude_anfrage = ki
+        return anfragen
+
+    def test_chef_antwortet_ueber_den_pc(self):
+        abo.gesehen()
+        z = chef.chat("Hallo Biko")
+        self.assertTrue(z["abo"]["chef_denkt"])
+        self.assertEqual(z["gespraech"][-1]["wer"], "niko")
+        job = abo.abholen({"chef_frei": True, "code_frei": True})
+        self.assertEqual(job["art"], "chef")
+        self.assertIn("Hallo Biko", job["eingabe"])
+        self.assertIn("<stand>", job["eingabe"])
+        self.assertIn("projekt_anlegen", job["system"])
+        self.assertEqual(job["modell"], chef.CHEF_MODELL)
+        self.assertIsNone(abo.abholen({}), "nur eine Chef-Antwort zur selben Zeit")
+        abo.chef_fertig({"id": job["id"], "ok": True, "antwort": {"text": "Hallo Niko!", "werkzeuge": []}})
+        z = chef.ansicht()
+        self.assertEqual((z["gespraech"][-1]["wer"], z["gespraech"][-1]["text"]), ("chef", "Hallo Niko!"))
+        self.assertFalse(z["abo"]["chef_denkt"])
+        self.assertEqual(chef.laden()["kosten"], {}, "kein API-Geld")
+
+    def test_chef_werkzeuge_vom_pc_werden_ausgefuehrt(self):
+        abo.gesehen()
+        chef.chat("Bau mir was")
+        job = abo.abholen({})
+        abo.chef_fertig({"id": job["id"], "ok": True, "session": "s1", "antwort": {"text": "Ich lege es an.", "werkzeuge": [
+            {"name": "projekt_anlegen", "eingabe": {"name": "Seite", "ziel": "Z", "aufgaben": [
+                {"titel": "T", "rolle": "programmierer", "repo": "n1kob1ko/Biko-Bot", "auftrag": "A"}]}}]}})
+        z = chef.laden()
+        self.assertEqual(z["projekte"][0]["name"], "Seite")
+        self.assertEqual(z["gespraech"][-1]["text"], "Ich lege es an.")
+        self.assertNotIn("chef", z["abo"])
+
+    def test_chef_bekommt_ergebnisse_und_fehler_zurueck(self):
+        abo.gesehen()
+        chef.chat("Was kam raus?")
+        job = abo.abholen({})
+        abo.chef_fertig({"id": job["id"], "ok": True, "session": "s1", "antwort": {"text": "Ich schau nach.", "werkzeuge": [
+            {"name": "ergebnis_lesen", "eingabe": {"aufgabe": "a000000"}}]}})
+        self.assertNotEqual(chef.laden()["gespraech"][-1]["wer"], "chef", "Zwischentext kommt nicht zu Niko")
+        weiter = abo.abholen({})
+        self.assertEqual((weiter["art"], weiter["resume"]), ("chef", "s1"))
+        self.assertIn("<werkzeug_ergebnisse>", weiter["eingabe"])
+        self.assertIn("Fehler", weiter["eingabe"])
+        abo.chef_fertig({"id": weiter["id"], "ok": True, "antwort": {"text": "Die Aufgabe gibt es nicht.", "werkzeuge": []}})
+        self.assertEqual(chef.laden()["gespraech"][-1]["text"], "Die Aufgabe gibt es nicht.")
+
+    def test_ohne_pc_antwortet_der_chef_ueber_die_api(self):
+        anfragen = self.api_chef()
+        chef.chat("Hallo")
+        self.assertEqual(len(anfragen), 1)
+        self.assertEqual(chef.laden()["gespraech"][-1]["text"], "Über die API.")
+
+    def test_pc_holt_nicht_ab_dann_api(self):
+        anfragen = self.api_chef()
+        abo.gesehen()
+        chef.chat("Hallo")
+        self.assertEqual(anfragen, [])
+        z = chef.laden()
+        z["abo"]["chef"]["zeit"] = (chef.jetzt() - timedelta(seconds=60)).isoformat(timespec="seconds")
+        chef.speichern(z)
+        chef.takt_runde()
+        for _ in range(100):
+            if chef.laden()["gespraech"][-1]["wer"] == "chef":
+                break
+            time.sleep(0.02)
+        self.assertEqual(chef.laden()["gespraech"][-1]["text"], "Über die API.")
+        self.assertNotIn("chef", chef.laden()["abo"])
+
+    def test_pc_fehler_oder_grenze_dann_api(self):
+        anfragen = self.api_chef()
+        abo.gesehen()
+        chef.chat("Hallo")
+        job = abo.abholen({})
+        abo.chef_fertig({"id": job["id"], "grenze": True})
+        for _ in range(100):
+            if anfragen:
+                break
+            time.sleep(0.02)
+        self.assertEqual(len(anfragen), 1)
+        self.assertTrue(abo.pausiert(chef.laden()["abo"]))
+        time.sleep(0.1)
+        chef.chat("Und jetzt?")   # während der Pause gleich über die API
+        self.assertEqual(len(anfragen), 2)
+
+    def test_nachgeschoben_waehrend_der_pc_denkt(self):
+        abo.gesehen()
+        chef.chat("Eins")
+        job = abo.abholen({})
+        chef.chat("Zwei")
+        abo.chef_fertig({"id": job["id"], "ok": True, "antwort": {"text": "Zu eins.", "werkzeuge": []}})
+        weiter = abo.abholen({})
+        self.assertEqual(weiter["art"], "chef")
+        self.assertIn("Zwei", weiter["eingabe"])
+
+    def test_code_frei_false_gibt_nur_chef(self):
+        abo.gesehen()
+        code_projekt()
+        self.assertIsNone(abo.abholen({"code_frei": False}))
+        self.assertEqual(abo.abholen({"code_frei": True})["art"], "code")
+
     def test_stand_fuer_den_chef(self):
         code_projekt()
         text = chef.stand_text(chef.laden())
@@ -163,7 +280,9 @@ class EndeZuEndeTest(unittest.TestCase):
         bin_ = self.tmp / "bin"
         bin_.mkdir()
         (bin_ / "claude").write_text(
-            "#!/bin/sh\ncat > \"$PWD/../claude-eingabe.txt\"\n"
+            "#!/bin/sh\ncase \"$*\" in *json-schema*) cat > /dev/null; printf '%s' "
+            "'{\"result\":\"x\",\"session_id\":\"s1\",\"structured_output\":{\"text\":\"Hallo Niko\",\"werkzeuge\":[]}}'; exit 0;; esac\n"
+            "cat > \"$PWD/../claude-eingabe.txt\"\n"
             "echo 'neu' > neu.txt && git add neu.txt && git -c user.name=t -c user.email=t@t commit -qm 'X gebaut'\n"
             "printf '%s' '{\"type\":\"result\",\"is_error\":false,\"num_turns\":3,"
             "\"result\":\"ZUSAMMENFASSUNG: X ist gebaut.\\nTests laufen.\"}'\n")
@@ -223,6 +342,13 @@ class EndeZuEndeTest(unittest.TestCase):
         r = ba.mergen(m)
         self.assertTrue(r["ok"], r)
         self.assertIn("pr merge https://github.com/n1kob1ko/Biko-Bot/pull/123 --squash", (self.tmp / "gh.log").read_text())
+
+    def test_chef_antwort_vom_pc(self):
+        spec = importlib.util.spec_from_file_location("biko_arbeiter", HIER / "abo-arbeiter" / "biko_arbeiter.py")
+        ba = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ba)
+        r = ba.chef_antworten({"id": "c1", "system": "S", "schema": {}, "modell": "opus", "eingabe": "Hallo"})
+        self.assertEqual(r, {"id": "c1", "ok": True, "antwort": {"text": "Hallo Niko", "werkzeuge": []}, "session": "s1"})
 
     def test_claude_env_ohne_api_schluessel(self):
         spec = importlib.util.spec_from_file_location("biko_arbeiter", HIER / "abo-arbeiter" / "biko_arbeiter.py")

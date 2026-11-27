@@ -898,6 +898,8 @@ def chat(text):
         z = laden()
         eintrag(z, "niko", text)
         speichern(z)
+    if abo.chef_ueber_pc():   # der PC ist da: der Chef antwortet über Nikos Abo, die Seite wartet darauf
+        return ansicht()
     try:
         chef_antwort()
     except anthropic.AuthenticationError:
@@ -930,7 +932,7 @@ def freigabe(pid, fid, ja):
         if f["art"] == "merge" and ja:
             abo.merge_einreihen(z, p, f)
         speichern(z)
-    if f["art"] not in ("budget", "merge"):   # bei einer eigenen Frage des Chefs reagiert er gleich darauf
+    if f["art"] not in ("budget", "merge") and not abo.chef_ueber_pc():   # der Chef reagiert gleich darauf
         try:
             chef_antwort()
         except (anthropic.APIError, RuntimeError) as e:

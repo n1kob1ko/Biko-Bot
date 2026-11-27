@@ -21,13 +21,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-VERSION = "1.0"
+VERSION = "1.1"
 HIER = Path(__file__).resolve().parent
 AGENT = f"Biko-Arbeiter/{VERSION}"
 
@@ -81,7 +82,7 @@ def einstellungen():
         sys.exit("In einstellungen.json fehlt \"repos\", z. B. {\"n1kob1ko/Biko-Bot\": \"C:/Users/niko/Projekte/Biko-Bot\"}.")
     e["repos"] = {k: str(Path(v).expanduser()) for k, v in repos.items()}
     e["minuten"] = int(e.get("max_minuten") or 45)
-    e["takt"] = max(10, int(e.get("takt_sekunden") or 30))
+    e["takt"] = max(2, int(e.get("takt_sekunden") or 3))   # kurz, damit der Chef schnell antwortet
     return e
 
 
@@ -127,7 +128,8 @@ class Lebenszeichen(threading.Thread):
 
 # ---------- Git und Claude ----------
 def lauf(befehl, cwd, timeout=600, eingabe=None, env=None):
-    r = subprocess.run(befehl, cwd=cwd, input=eingabe, capture_output=True, text=True, encoding="utf-8",
+    # Ohne Eingabe bekommt das Programm eine leere statt der Konsole: nichts soll still auf eine Antwort warten
+    r = subprocess.run(befehl, cwd=cwd, input=eingabe if eingabe is not None else "", capture_output=True, text=True, encoding="utf-8",
                        errors="replace", timeout=timeout, env=env)
     return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
 
@@ -247,6 +249,46 @@ def code_aufgabe(e, job):
             lauf([programm("git"), "worktree", "remove", "--force", str(arbeit)], ordner)
 
 
+def chef_antworten(job):
+    """Eine Antwort des Chefs (Biko-Chef im Gespräch mit Niko), ohne Werkzeuge von Claude Code: Biko führt die
+    Werkzeuge selbst aus, die in der JSON-Antwort stehen."""
+    fd, datei = tempfile.mkstemp(suffix=".txt", prefix="biko-chef-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(str(job.get("system") or ""))
+        befehl = [programm("claude"), "-p", "--output-format", "json", "--tools", "", "--max-turns", "4",
+                  "--system-prompt-file", datei, "--json-schema", json.dumps(job.get("schema") or {}),
+                  "--model", str(job.get("modell") or "opus")]
+        if job.get("resume"):
+            befehl += ["--resume", str(job["resume"])]
+        code, aus, fehler = lauf(befehl, str(HIER), 170, eingabe=str(job.get("eingabe") or ""), env=claude_env())
+    except subprocess.TimeoutExpired:
+        return {"id": job["id"], "ok": False, "fehler": "Zeit abgelaufen"}
+    finally:
+        try:
+            os.remove(datei)
+        except OSError:
+            pass
+    j = {}
+    try:
+        j = json.loads(aus)
+    except ValueError:
+        pass
+    j = j if isinstance(j, dict) else {}
+    text = str(j.get("result") or aus or fehler)
+    if GRENZE.search(text) and (code != 0 or j.get("is_error")):
+        return {"id": job["id"], "grenze": True}
+    antwort = j.get("structured_output")
+    if not isinstance(antwort, dict):
+        try:
+            antwort = json.loads(j.get("result") or "")
+        except (TypeError, ValueError):
+            antwort = None
+    if not isinstance(antwort, dict):
+        return {"id": job["id"], "ok": False, "fehler": text[:300]}
+    return {"id": job["id"], "ok": True, "antwort": antwort, "session": j.get("session_id")}
+
+
 def mergen(job):
     pr = str(job.get("pr") or "")
     if not re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+", pr):
@@ -264,9 +306,15 @@ def main():
         print("Hinweis: ANTHROPIC_API_KEY ist gesetzt. Für Claude Code nehme ich ihn weg, damit dein Abo zählt.")
     print(f"Biko-Arbeiter {VERSION} läuft. Repos: {', '.join(e['repos'])}. Beenden mit Strg+C.", flush=True)
     fehler_gemeldet = False
+    faeden = {"chef": None, "code": None}   # Chef-Antworten laufen neben einer Code-Aufgabe
+
+    def frei(art):
+        return not (faeden[art] and faeden[art].is_alive())
+
     while True:
         try:
-            job = biko(e, "/api/abo/abholen", {"repos": list(e["repos"]), "version": VERSION}).get("auftrag")
+            job = biko(e, "/api/abo/abholen", {"repos": list(e["repos"]), "version": VERSION,
+                                               "chef_frei": frei("chef"), "code_frei": frei("code")}).get("auftrag")
             fehler_gemeldet = False
         except urllib.error.HTTPError as f:
             if f.code == 401:
@@ -283,18 +331,30 @@ def main():
         if not job:
             time.sleep(e["takt"])
             continue
-        if job.get("art") == "mergen":
-            print(f"Mergen: {job.get('pr')}", flush=True)
-            melden(e, "/api/abo/gemergt", mergen(job))
-            continue
-        print(f"Aufgabe: {job.get('titel')} ({job.get('repo')})", flush=True)
-        ergebnis = code_aufgabe(e, job)
-        print("  " + ("Abo-Grenze erreicht, Pause." if ergebnis.get("grenze") else
-                      f"PR: {ergebnis['pr']}" if ergebnis.get("pr") else
-                      "Fertig, ohne Änderung am Code." if ergebnis.get("ok") else f"Fehler: {ergebnis.get('fehler')}"),
-              flush=True)
-        melden(e, "/api/abo/fertig", ergebnis)
+        art = "chef" if job.get("art") == "chef" else "code"
+        faeden[art] = threading.Thread(target=erledigen, args=(e, job), daemon=True)
+        faeden[art].start()
 
+
+def erledigen(e, job):
+    if job.get("art") == "chef":
+        start = time.time()
+        ergebnis = chef_antworten(job)
+        print(f"Chef hat geantwortet ({time.time() - start:.0f} s)" if ergebnis.get("ok") else
+              f"Chef-Antwort ging nicht: {ergebnis.get('fehler', 'Abo-Grenze')}", flush=True)
+        melden(e, "/api/abo/chef", ergebnis)
+        return
+    if job.get("art") == "mergen":
+        print(f"Mergen: {job.get('pr')}", flush=True)
+        melden(e, "/api/abo/gemergt", mergen(job))
+        return
+    print(f"Aufgabe: {job.get('titel')} ({job.get('repo')})", flush=True)
+    ergebnis = code_aufgabe(e, job)
+    print("  " + ("Abo-Grenze erreicht, Pause." if ergebnis.get("grenze") else
+                  f"PR: {ergebnis['pr']}" if ergebnis.get("pr") else
+                  "Fertig, ohne Änderung am Code." if ergebnis.get("ok") else f"Fehler: {ergebnis.get('fehler')}"),
+          flush=True)
+    melden(e, "/api/abo/fertig", ergebnis)
 
 if __name__ == "__main__":
     try:
