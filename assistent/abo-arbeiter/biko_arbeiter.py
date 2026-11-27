@@ -86,8 +86,18 @@ def einstellungen():
     return e
 
 
+# Wo die Installer unter Windows hinlegen, falls ein Fenster den neuen PATH noch nicht kennt
+WINDOWS_ORTE = {
+    "claude": [r"%USERPROFILE%\.local\bin\claude.exe"],
+    "gh": [r"%ProgramFiles%\GitHub CLI\gh.exe", r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"],
+    "git": [r"%ProgramFiles%\Git\cmd\git.exe", r"%LOCALAPPDATA%\Programs\Git\cmd\git.exe"],
+}
+
+
 def programm(name):
     pfad = shutil.which(name)
+    if not pfad and os.name == "nt":
+        pfad = next((p for p in map(os.path.expandvars, WINDOWS_ORTE.get(name, [])) if os.path.isfile(p)), None)
     if not pfad:
         sys.exit(f"„{name}“ ist nicht installiert oder nicht im PATH. Siehe LIESMICH.md.")
     return pfad
