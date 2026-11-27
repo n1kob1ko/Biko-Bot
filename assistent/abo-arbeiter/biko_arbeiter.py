@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-VERSION = "1.1"
+VERSION = "1.2"
 HIER = Path(__file__).resolve().parent
 AGENT = f"Biko-Arbeiter/{VERSION}"
 
@@ -259,26 +259,35 @@ def code_aufgabe(e, job):
             lauf([programm("git"), "worktree", "remove", "--force", str(arbeit)], ordner)
 
 
-def chef_antworten(job):
-    """Eine Antwort des Chefs (Biko-Chef im Gespräch mit Niko), ohne Werkzeuge von Claude Code: Biko führt die
-    Werkzeuge selbst aus, die in der JSON-Antwort stehen."""
-    fd, datei = tempfile.mkstemp(suffix=".txt", prefix="biko-chef-")
+TEXT_GLEICHZEITIG = 2
+
+
+def strukturiert(job, werkzeuge, max_runden, sekunden, ordner=None):
+    """`claude -p` mit Anleitung, Eingabe und JSON-Schema; liefert (antwort, session, fehler, grenze).
+    Ohne `ordner` in einem leeren Ordner auf Zeit: Claude sieht keine Dateien von dir."""
+    fd, datei = tempfile.mkstemp(suffix=".txt", prefix="biko-")
+    weg_damit = ordner is None
+    ordner = ordner or tempfile.mkdtemp(prefix="biko-arbeit-")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(str(job.get("system") or ""))
-        befehl = [programm("claude"), "-p", "--output-format", "json", "--tools", "", "--max-turns", "4",
-                  "--system-prompt-file", datei, "--json-schema", json.dumps(job.get("schema") or {}),
-                  "--model", str(job.get("modell") or "opus")]
+        befehl = [programm("claude"), "-p", "--output-format", "json", "--tools", *(werkzeuge or [""]),
+                  "--max-turns", str(max_runden), "--system-prompt-file", datei,
+                  "--json-schema", json.dumps(job.get("schema") or {}), "--model", str(job.get("modell") or "opus")]
+        if werkzeuge:
+            befehl += ["--allowedTools", *werkzeuge]
         if job.get("resume"):
             befehl += ["--resume", str(job["resume"])]
-        code, aus, fehler = lauf(befehl, str(HIER), 170, eingabe=str(job.get("eingabe") or ""), env=claude_env())
+        code, aus, fehler = lauf(befehl, ordner, sekunden, eingabe=str(job.get("eingabe") or ""), env=claude_env())
     except subprocess.TimeoutExpired:
-        return {"id": job["id"], "ok": False, "fehler": "Zeit abgelaufen"}
+        return None, None, "Zeit abgelaufen", False
     finally:
         try:
             os.remove(datei)
         except OSError:
             pass
+        if weg_damit:
+            shutil.rmtree(ordner, ignore_errors=True)
     j = {}
     try:
         j = json.loads(aus)
@@ -287,7 +296,7 @@ def chef_antworten(job):
     j = j if isinstance(j, dict) else {}
     text = str(j.get("result") or aus or fehler)
     if GRENZE.search(text) and (code != 0 or j.get("is_error")):
-        return {"id": job["id"], "grenze": True}
+        return None, None, text[:300], True
     antwort = j.get("structured_output")
     if not isinstance(antwort, dict):
         try:
@@ -295,8 +304,37 @@ def chef_antworten(job):
         except (TypeError, ValueError):
             antwort = None
     if not isinstance(antwort, dict):
-        return {"id": job["id"], "ok": False, "fehler": text[:300]}
-    return {"id": job["id"], "ok": True, "antwort": antwort, "session": j.get("session_id")}
+        return None, j.get("session_id"), text[:300], False
+    return antwort, j.get("session_id"), "", False
+
+
+def text_aufgabe(e, job):
+    """Recherche, Texte, Webseiten, Prüfen: nur Websuche als Werkzeug, Ergebnis als JSON."""
+    leben = Lebenszeichen(e, job["id"])
+    leben.start()
+    try:
+        antwort, _, fehler, grenze = strukturiert(job, ["WebSearch", "WebFetch"] if job.get("web") else [], 40,
+                                                  int(e.get("text_minuten") or 20) * 60)
+    finally:
+        leben.stopp.set()
+    if grenze:
+        return {"id": job["id"], "grenze": True}
+    if antwort is None:
+        return {"id": job["id"], "ok": False, "fehler": fehler}
+    return {"id": job["id"], "ok": True, "antwort": antwort}
+
+
+def chef_antworten(job):
+    """Eine Antwort des Chefs (Biko-Chef im Gespräch mit Niko), ohne Werkzeuge von Claude Code: Biko führt die
+    Werkzeuge selbst aus, die in der JSON-Antwort stehen."""
+    ordner = HIER / ".chef"   # immer derselbe Ordner, sonst findet --resume die Sitzung nicht
+    ordner.mkdir(exist_ok=True)
+    antwort, session, fehler, grenze = strukturiert(job, [], 4, 170, str(ordner))
+    if grenze:
+        return {"id": job["id"], "grenze": True}
+    if antwort is None:
+        return {"id": job["id"], "ok": False, "fehler": fehler}
+    return {"id": job["id"], "ok": True, "antwort": antwort, "session": session}
 
 
 def mergen(job):
@@ -316,15 +354,19 @@ def main():
         print("Hinweis: ANTHROPIC_API_KEY ist gesetzt. Für Claude Code nehme ich ihn weg, damit dein Abo zählt.")
     print(f"Biko-Arbeiter {VERSION} läuft. Repos: {', '.join(e['repos'])}. Beenden mit Strg+C.", flush=True)
     fehler_gemeldet = False
-    faeden = {"chef": None, "code": None}   # Chef-Antworten laufen neben einer Code-Aufgabe
+    # Chef-Antworten, eine Code-Aufgabe und bis zu TEXT_GLEICHZEITIG andere Aufgaben laufen nebeneinander
+    faeden = {"chef": [], "code": [], "text": []}
+    grenze = {"chef": 1, "code": 1, "text": int(e.get("gleichzeitig") or TEXT_GLEICHZEITIG)}
 
     def frei(art):
-        return not (faeden[art] and faeden[art].is_alive())
+        faeden[art] = [f for f in faeden[art] if f.is_alive()]
+        return len(faeden[art]) < grenze[art]
 
     while True:
         try:
             job = biko(e, "/api/abo/abholen", {"repos": list(e["repos"]), "version": VERSION,
-                                               "chef_frei": frei("chef"), "code_frei": frei("code")}).get("auftrag")
+                                               "chef_frei": frei("chef"), "code_frei": frei("code"),
+                                               "text_frei": frei("text")}).get("auftrag")
             fehler_gemeldet = False
         except urllib.error.HTTPError as f:
             if f.code == 401:
@@ -341,9 +383,10 @@ def main():
         if not job:
             time.sleep(e["takt"])
             continue
-        art = "chef" if job.get("art") == "chef" else "code"
-        faeden[art] = threading.Thread(target=erledigen, args=(e, job), daemon=True)
-        faeden[art].start()
+        art = job.get("art") if job.get("art") in ("chef", "text") else "code"
+        f = threading.Thread(target=erledigen, args=(e, job), daemon=True)
+        faeden[art].append(f)
+        f.start()
 
 
 def erledigen(e, job):
@@ -353,6 +396,14 @@ def erledigen(e, job):
         print(f"Chef hat geantwortet ({time.time() - start:.0f} s)" if ergebnis.get("ok") else
               f"Chef-Antwort ging nicht: {ergebnis.get('fehler', 'Abo-Grenze')}", flush=True)
         melden(e, "/api/abo/chef", ergebnis)
+        return
+    if job.get("art") == "text":
+        start = time.time()
+        print(f"Aufgabe: {job.get('titel')}", flush=True)
+        ergebnis = text_aufgabe(e, job)
+        print(f"  fertig ({time.time() - start:.0f} s)" if ergebnis.get("ok") else
+              f"  ging nicht: {ergebnis.get('fehler', 'Abo-Grenze')}", flush=True)
+        melden(e, "/api/abo/text", ergebnis)
         return
     if job.get("art") == "mergen":
         print(f"Mergen: {job.get('pr')}", flush=True)

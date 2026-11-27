@@ -52,8 +52,9 @@
   }
 
   function aufgabeStand(a) {
-    if (!a.repo) return AUFGABE[a.status] || a.status;   // nur Programmierer-Aufgaben laufen auf Nikos PC
-    if (a.status === 'laeuft') return 'Arbeitet auf deinem PC';
+    const amPc = a.repo || a.am_pc || (pc && pc.alles);   // Programmierer und im Abo-Modus alle laufen auf Nikos PC
+    if (!amPc) return AUFGABE[a.status] || a.status;
+    if (a.status === 'laeuft') return a.am_pc || a.repo ? 'Arbeitet auf deinem PC' : AUFGABE.laeuft;
     if (a.status === 'offen' && pc && !pc.verbunden) return 'Wartet auf deinen PC';
     return AUFGABE[a.status] || a.status;
   }
@@ -97,7 +98,7 @@
     pc = z.abo && z.abo.an ? z.abo : null;
     pcDenkt = !!(z.abo && z.abo.chef_denkt);
     const nachdenken = denkt || pcDenkt;
-    const abo = pc ? ` · PC ${pc.verbunden ? 'verbunden' : 'nicht verbunden'}, ${pc.heute} von ${pc.max_tag} Abo-Läufen${pc.pause_bis && new Date(pc.pause_bis) > new Date() ? ', Pause bis ' + pc.pause_bis.slice(11, 16) : ''}` : '';
+    const abo = pc ? ` · ${pc.alles ? 'Alles über dein Abo' : 'Code über dein Abo'}, PC ${pc.verbunden ? 'verbunden' : 'nicht verbunden'}, ${pc.heute} von ${pc.max_tag} Code-Läufen${pc.pause_bis && new Date(pc.pause_bis) > new Date() ? ', Pause bis ' + pc.pause_bis.slice(11, 16) : ''}` : '';
     $('#kosten').textContent = `Heute ${dollar(z.heute)} von ${dollar(z.grenzen.tag)} · ${z.laufen} von ${z.grenzen.gleichzeitig} Arbeitern aktiv${ds}${abo}`;
     $('#fragen').replaceChildren(...z.projekte.flatMap((p) => p.fragen.map((f) => frageKarte(p, f))));
     $('#projekte').replaceChildren(...(z.projekte.length ? z.projekte.map((p) => projektKarte(p, alt && !alt.has(p.id)))
@@ -113,7 +114,7 @@
     if (gesehen && fertig > zuletztFertig) { stimmung('jubelt'); setTimeout(() => zustand(z), 2600); }
     else zustand(z);
     zuletztFertig = fertig;
-    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
+    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => (a.repo || a.am_pc) && a.status === 'laeuft'));
     $('#zustand-text').textContent = nachdenken ? 'Ich denke nach' : amPc && !z.laufen ? 'Claude arbeitet auf deinem PC' : z.laufen ? `${z.laufen} ${z.laufen === 1 ? 'Arbeiter ist' : 'Arbeiter sind'} dran` : fragen ? 'Eine Frage wartet auf dich' : 'Dein KI-Geschäftsführer';
     gesehen = z;
   }
@@ -121,7 +122,7 @@
   function zustand(z) {
     const fragen = z.projekte.some((p) => p.fragen.length);
     const fehler = z.projekte.some((p) => p.aufgaben.some((a) => a.status === 'fehler'));
-    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => a.repo && a.status === 'laeuft'));
+    const amPc = z.projekte.some((p) => p.aufgaben.some((a) => (a.repo || a.am_pc) && a.status === 'laeuft'));
     stimmung(denkt || pcDenkt || z.laufen || amPc ? 'tippt' : fragen ? 'winkt' : fehler ? 'traurig' : 'da');
   }
 

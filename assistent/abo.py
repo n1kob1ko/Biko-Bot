@@ -131,36 +131,119 @@ def abholen(daten):
             chef.speichern(z)
             return {"art": "chef", "id": c["id"], "system": chef_system(), "schema": CHEF_SCHEMA,
                     "modell": chef.CHEF_MODELL, "eingabe": eingabe, "resume": c.get("session")}
-        if daten.get("code_frei", True) is False:
-            return None
-        for m in s["merges"]:
-            if m["stand"] == "wartet":
-                m.update(stand="laeuft", seit=_iso())
-                chef.speichern(z)
-                return {"art": "mergen", "id": m["id"], "pr": m["pr"], "repo": m["repo"]}
-        if any(ist_abo(a) and a["status"] == "laeuft" for p in z["projekte"] for a in p["aufgaben"]):
-            return None   # immer nur eine Code-Aufgabe zur selben Zeit
-        for p in z["projekte"]:
-            if p["status"] != "aktiv":
-                continue
-            for a in chef.bereite_aufgaben(p):
-                if not ist_abo(a):
-                    continue
-                if heute_laeufe(s) >= s["max_tag"]:
-                    if z["gemeldet"].get("abo") != chef.heute():
-                        z["gemeldet"]["abo"] = chef.heute()
-                        chef.eintrag(z, "meldung", f"Heute sind schon {s['max_tag']} Abo-Läufe auf deinem PC gelaufen. "
-                                                   "Morgen geht es weiter, oder du stellst mehr ein.")
-                    chef.speichern(z)
-                    return None
-                a.update(status="laeuft", gestartet=_iso(), abo_lebt=_iso())
-                s["laeufe"][chef.heute()] = heute_laeufe(s) + 1
-                s["laeufe"] = {k: s["laeufe"][k] for k in sorted(s["laeufe"])[-31:]}
-                chef.protokoll_zeile(z, f"Start auf deinem PC: {a['titel']} ({a.get('repo')})", p["id"])
-                chef.speichern(z)
-                return {"art": "code", "id": a["id"], "repo": a.get("repo"), "titel": a["titel"],
-                        "zweig": f"biko/{a['id']}-{a.get('versuche', 0) + 1}", "auftrag": chef.arbeiter_eingabe(p, a)}
+        if daten.get("code_frei", True) is not False:
+            job = _code_job(z, s)
+            if job:
+                return job
+        if daten.get("text_frei") is True and alles_ueber_pc(z):
+            return _text_job(z)
     return None
+
+
+def _code_job(z, s):
+    for m in s["merges"]:
+        if m["stand"] == "wartet":
+            m.update(stand="laeuft", seit=_iso())
+            chef.speichern(z)
+            return {"art": "mergen", "id": m["id"], "pr": m["pr"], "repo": m["repo"]}
+    if any(ist_abo(a) and a["status"] == "laeuft" for p in z["projekte"] for a in p["aufgaben"]):
+        return None   # immer nur eine Code-Aufgabe zur selben Zeit
+    for p in z["projekte"]:
+        if p["status"] != "aktiv":
+            continue
+        for a in chef.bereite_aufgaben(p):
+            if not ist_abo(a):
+                continue
+            if heute_laeufe(s) >= s["max_tag"]:
+                if z["gemeldet"].get("abo") != chef.heute():
+                    z["gemeldet"]["abo"] = chef.heute()
+                    chef.eintrag(z, "meldung", f"Heute sind schon {s['max_tag']} Code-Läufe auf deinem PC gelaufen. "
+                                               "Morgen geht es weiter, oder du stellst mehr ein.")
+                    chef.speichern(z)
+                return None
+            a.update(status="laeuft", gestartet=_iso(), abo_lebt=_iso())
+            s["laeufe"][chef.heute()] = heute_laeufe(s) + 1
+            s["laeufe"] = {k: s["laeufe"][k] for k in sorted(s["laeufe"])[-31:]}
+            chef.protokoll_zeile(z, f"Start auf deinem PC: {a['titel']} ({a.get('repo')})", p["id"])
+            chef.speichern(z)
+            return {"art": "code", "id": a["id"], "repo": a.get("repo"), "titel": a["titel"],
+                    "zweig": f"biko/{a['id']}-{a.get('versuche', 0) + 1}", "auftrag": chef.arbeiter_eingabe(p, a)}
+    return None
+
+
+def _text_job(z):
+    """Recherche, Texter, Entwickler, Prüfer im Abo-Modus: `claude -p` auf dem PC statt der API."""
+    for p in z["projekte"]:
+        if p["status"] != "aktiv":
+            continue
+        for a in chef.bereite_aufgaben(p):
+            if ist_abo(a) or a["status"] != "offen":
+                continue
+            rolle = chef.ROLLEN[a["rolle"]]
+            a.update(status="laeuft", gestartet=_iso(), abo_lebt=_iso(), am_pc=True)
+            chef.protokoll_zeile(z, f"Start auf deinem PC: {a['titel']} ({rolle['name']})", p["id"])
+            chef.speichern(z)
+            return {"art": "text", "id": a["id"], "titel": a["titel"], "modell": rolle["modell"], "web": rolle["web"],
+                    "system": chef.ARBEITER_SYSTEM.format(rolle=rolle["name"], auftrag=rolle["auftrag"])
+                    + "\n\nStatt das Werkzeug `abgeben` aufzurufen, antwortest du am Ende im vorgegebenen JSON.",
+                    "schema": chef.abgeben_schema(a["rolle"])["input_schema"], "eingabe": chef.arbeiter_eingabe(p, a)}
+    return None
+
+
+def alles_ueber_pc(z):
+    """Abo-Modus: alle Arbeiter laufen auf Nikos PC, nichts über die API (Standard, sobald der PC eingerichtet ist)."""
+    return an() and z.get("grenzen", {}).get("nur_abo", True) is not False
+
+
+def am_pc(a):
+    return ist_abo(a) or a.get("am_pc") is True
+
+
+def text_fertig(daten):
+    """Der PC liefert das Ergebnis einer Recherche-, Text-, Webseiten- oder Prüfer-Aufgabe."""
+    gesehen()
+    with chef._lock:
+        z = chef.laden()
+        s = _stand(z)
+        p, a = chef.aufgabe_finden(z, daten.get("id"))
+        if not a.get("am_pc") or a["status"] != "laeuft":
+            return {"ok": True}
+        a.pop("abo_lebt", None)
+        if daten.get("grenze") is True:
+            bis = chef.jetzt() + timedelta(minutes=PAUSE_STANDARD)
+            s["pause_bis"] = _iso(bis)
+            a["status"] = "offen"
+            chef.eintrag(z, "meldung", f"Dein Claude-Abo ist gerade an seiner Grenze. Ich mache um "
+                                       f"{bis.strftime('%H:%M')} Uhr mit „{a['titel']}“ weiter.", projekt=p["id"])
+            chef.speichern(z)
+            return {"ok": True}
+        antwort = daten.get("antwort") if isinstance(daten.get("antwort"), dict) else {}
+        a["versuche"] = a.get("versuche", 0) + 1
+        if daten.get("ok") is not True or not antwort.get("ergebnis"):
+            a["status"] = "fehler"
+            a["urteil"] = "Auf dem PC hat es nicht geklappt: " + chef._kurz(daten.get("fehler"), 300)
+            chef.protokoll_zeile(z, f"Fehler auf dem PC: {a['titel']}", p["id"])
+            chef.eintrag(z, "meldung", f"„{a['titel']}“ hat auf deinem PC nicht geklappt. Sag mir, ob ich es nochmal "
+                                       "versuchen soll.", projekt=p["id"], aufgabe=a["id"])
+            chef.speichern(z)
+            return {"ok": True}
+        a["zusammenfassung"] = chef._kurz(antwort.get("zusammenfassung"), 400)
+        a["ergebnis"] = str(antwort.get("ergebnis"))[:60000]
+        if antwort.get("html"):
+            chef.vorschau_datei(a["id"]).write_text(str(antwort["html"])[:500000], encoding="utf-8")
+            a["vorschau"] = True
+        a["status"] = "fertig"
+        a["urteil"] = ""
+        a.pop("hinweis", None)
+        chef.protokoll_zeile(z, f"Fertig auf deinem PC: {a['titel']} ({chef.ROLLEN[a['rolle']]['name']})", p["id"])
+        chef.eintrag(z, "meldung", f"Fertig in „{p['name']}“: {a['titel']}. {a['zusammenfassung']}",
+                     projekt=p["id"], aufgabe=a["id"])
+        if all(b["status"] == "fertig" for b in p["aufgaben"]):
+            p["status"] = "fertig"
+            chef.eintrag(z, "meldung", f"Alle Aufgaben von „{p['name']}“ sind fertig, über dein Abo. API-Kosten: "
+                                       f"{chef.geld(p.get('ausgegeben', 0))}.", projekt=p["id"])
+        chef.speichern(z)
+    return {"ok": True}
 
 
 def lebt(daten):
@@ -372,7 +455,7 @@ def aufraeumen(z):
     geaendert = False
     for p in z["projekte"]:
         for a in p["aufgaben"]:
-            if ist_abo(a) and a["status"] == "laeuft" and _seit(a.get("abo_lebt")) > TOT_SEKUNDEN:
+            if am_pc(a) and a["status"] == "laeuft" and _seit(a.get("abo_lebt")) > TOT_SEKUNDEN:
                 a["status"] = "offen"
                 a.pop("abo_lebt", None)
                 chef.protokoll_zeile(z, f"PC meldet sich nicht mehr, „{a['titel']}“ wartet wieder", p["id"])
@@ -397,9 +480,10 @@ def verbunden(_s=None):
 
 def ansicht():
     with chef._lock:
-        s = _stand(chef.laden())
+        z = chef.laden()
+        s = _stand(z)
     return {"an": an(), "verbunden": verbunden(), "repos": s["repos"], "heute": heute_laeufe(s), "max_tag": s["max_tag"],
-            "pause_bis": s.get("pause_bis"), "chef_denkt": bool(s.get("chef"))}
+            "pause_bis": s.get("pause_bis"), "chef_denkt": bool(s.get("chef")), "alles": alles_ueber_pc(z)}
 
 
 def stand_text(z):
@@ -407,7 +491,9 @@ def stand_text(z):
     if not an():
         return "PC-Arbeiter (Claude Code mit Nikos Abo): aus, CHEF_ABO_TOKEN fehlt."
     teile = [f"PC-Arbeiter (Claude Code mit Nikos Abo): {'verbunden' if verbunden() else 'nicht verbunden'}, "
-             f"heute {heute_laeufe(s)} von {s['max_tag']} Läufen"]
+             f"heute {heute_laeufe(s)} von {s['max_tag']} Code-Läufen"]
+    teile.append("Abo-Modus an: alle Arbeiter laufen auf dem PC, nichts über die API (warten, wenn der PC aus ist)"
+                 if alles_ueber_pc(z) else "Abo-Modus aus: nur Programmierer laufen auf dem PC, der Rest über die API")
     if s["repos"]:
         teile.append("Repos: " + ", ".join(s["repos"]))
     if s.get("pause_bis") and _seit(s["pause_bis"]) < 0:
@@ -416,24 +502,35 @@ def stand_text(z):
 
 
 def abo_einstellen(e):
-    try:
-        n = int(e.get("laeufe_pro_tag"))
-    except (TypeError, ValueError):
-        raise ValueError("Bitte eine Zahl.")
-    if not 1 <= n <= LAEUFE_HOECHSTENS:
-        raise ValueError(f"Zwischen 1 und {LAEUFE_HOECHSTENS} Läufen pro Tag.")
+    teile = []
     with chef._lock:
         z = chef.laden()
-        _stand(z)["max_tag"] = n
-        z["gemeldet"].pop("abo", None)
-        chef.protokoll_zeile(z, f"Abo-Läufe pro Tag: {n}")
+        if e.get("laeufe_pro_tag") is not None:
+            try:
+                n = int(e.get("laeufe_pro_tag"))
+            except (TypeError, ValueError):
+                raise ValueError("Bitte eine Zahl.")
+            if not 1 <= n <= LAEUFE_HOECHSTENS:
+                raise ValueError(f"Zwischen 1 und {LAEUFE_HOECHSTENS} Läufen pro Tag.")
+            _stand(z)["max_tag"] = n
+            z["gemeldet"].pop("abo", None)
+            teile.append(f"höchstens {n} Code-Läufe pro Tag")
+        if isinstance(e.get("alles_ueber_abo"), bool):
+            z["grenzen"]["nur_abo"] = e["alles_ueber_abo"]
+            teile.append("alle Arbeiter über dein Abo" if e["alles_ueber_abo"] else "nur Programmierer über dein Abo, "
+                         "der Rest über die API")
+        if not teile:
+            raise ValueError("Nichts zu ändern.")
+        chef.protokoll_zeile(z, "Abo: " + ", ".join(teile))
         chef.speichern(z)
-    return f"Eingestellt: höchstens {n} Abo-Läufe pro Tag."
+    return "Eingestellt: " + ", ".join(teile) + "."
 
 
 chef.CHEF_WERKZEUGE["abo_einstellen"] = (
-    {"name": "abo_einstellen", "description": "Stellt ein, wie viele Code-Aufgaben pro Tag auf Nikos PC mit seinem "
-     "Claude-Abo laufen dürfen. Nur wenn Niko das ausdrücklich will.",
+    {"name": "abo_einstellen", "description": "Stellt den Abo-Modus ein: ob alle Arbeiter auf Nikos PC mit seinem "
+     "Claude-Abo laufen (Standard, kein API-Geld, sie warten, wenn der PC aus ist) oder nur Programmierer, und wie viele "
+     "Code-Läufe pro Tag. Nur wenn Niko das ausdrücklich will.",
      "input_schema": {"type": "object", "properties": {
-         "laeufe_pro_tag": {"type": "integer", "description": f"1 bis {LAEUFE_HOECHSTENS}."}},
-         "required": ["laeufe_pro_tag"]}}, abo_einstellen)
+         "alles_ueber_abo": {"type": "boolean", "description": "true: alle Arbeiter über das Abo."},
+         "laeufe_pro_tag": {"type": "integer", "description": f"Code-Läufe pro Tag, 1 bis {LAEUFE_HOECHSTENS}."}}}},
+    abo_einstellen)

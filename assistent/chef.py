@@ -138,6 +138,9 @@ So arbeitest du:
   Gib immer `repo` an (welche es gibt, steht im <stand>). Der Auftrag beschreibt das Ziel, nicht jede Zeile. Am Ende gibt
   es einen PR, und Niko wird gefragt, ob er gemergt wird. Ist der PC nicht verbunden, wartet die Aufgabe, bis er wieder
   da ist; sag Niko das. Nutze das Abo nur für Nikos eigene Arbeit, nie für Kunden (das erlaubt Anthropic nicht).
+- Abo-Modus (Standard, steht im <stand>): Dann laufen ALLE Arbeiter auf Nikos PC mit seinem Abo, nicht über die
+  API, und kosten kein API-Geld. Ist der PC aus, warten sie, bis er wieder da ist. Nenne dann kein Dollar-Budget als
+  Kosten, sag, dass es über sein Abo läuft. Umstellen nur auf Nikos Wunsch mit `abo_einstellen`.
 - Kosten: Es gibt eine Tagesgrenze und ein Budget pro Projekt. Halte Projekte klein. Typisch: Recherche 0,10 bis
   0,40 $, Text 0,05 bis 0,20 $, Webseite 0,30 bis 1 $.
 
@@ -554,7 +557,7 @@ def takt_runde():
             if frei <= 0 or p["status"] != "aktiv":
                 continue
             for a in bereite_aufgaben(p):
-                if ROLLEN[a["rolle"]].get("abo"):
+                if ROLLEN[a["rolle"]].get("abo") or abo.alles_ueber_pc(z):
                     continue   # holt der PC-Arbeiter selbst ab (abo.py), kostet kein API-Geld
                 if frei <= 0:
                     break
@@ -630,7 +633,7 @@ def starten():
         z = laden()
         for p in z["projekte"]:
             for a in p["aufgaben"]:
-                if a["status"] == "laeuft" and not ROLLEN[a["rolle"]].get("abo"):   # der PC arbeitet weiter
+                if a["status"] == "laeuft" and not abo.am_pc(a):   # der PC arbeitet weiter
                     a["status"] = "offen"
         speichern(z)
     threading.Thread(target=takt, daemon=True).start()
@@ -952,7 +955,8 @@ def ansicht():
             "aufgaben": [{"id": a["id"], "titel": a["titel"], "rolle": a["rolle"], "rolle_name": ROLLEN[a["rolle"]]["name"],
                           "status": a["status"], "zusammenfassung": a.get("zusammenfassung", ""),
                           "vorschau": bool(a.get("vorschau")), "versuche": a.get("versuche", 0),
-                          "kosten": a.get("kosten", 0.0), "pr": a.get("pr", ""), "repo": a.get("repo", "")}
+                          "kosten": a.get("kosten", 0.0), "pr": a.get("pr", ""), "repo": a.get("repo", ""),
+                          "am_pc": abo.am_pc(a)}
                          for a in p["aufgaben"]],
             "fragen": [{"id": f["id"], "frage": f["frage"]} for f in p.get("fragen", []) if f["stand"] == "offen"],
         })

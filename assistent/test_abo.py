@@ -39,6 +39,7 @@ def code_projekt(**mehr):
 
 def tearDownModule():
     abo._pc["gesehen"] = 0.0   # andere Testmodule sollen keinen verbundenen „PC“ sehen
+    os.environ.pop("CHEF_ABO_TOKEN", None)   # und keinen Abo-Modus
 
 
 class AboTest(unittest.TestCase):
@@ -140,7 +141,7 @@ class AboTest(unittest.TestCase):
         job = abo.abholen({})
         abo.fertig({"id": job["id"], "ok": True, "pr": ""})
         self.assertIsNone(abo.abholen({}))
-        self.assertEqual(len([e for e in chef.laden()["gespraech"] if "Abo-Läufe" in e["text"]]), 1)
+        self.assertEqual(len([e for e in chef.laden()["gespraech"] if "Code-Läufe" in e["text"]]), 1)
         with self.assertRaises(ValueError):
             abo.abo_einstellen({"laeufe_pro_tag": 99})
 
@@ -263,6 +264,69 @@ class AboTest(unittest.TestCase):
         self.assertIsNone(abo.abholen({"code_frei": False}))
         self.assertEqual(abo.abholen({"code_frei": True})["art"], "code")
 
+    # ---------- Abo-Modus: alle Arbeiter auf dem PC ----------
+    def text_projekt(self):
+        chef.projekt_anlegen({"name": "Daten", "ziel": "Analyse", "aufgaben": [
+            {"titel": "Quellen", "rolle": "recherche", "auftrag": "Such Daten"},
+            {"titel": "Werkzeug", "rolle": "entwickler", "auftrag": "Bau HTML", "gleichzeitig": True}]})
+
+    def test_abo_modus_alle_arbeiter_auf_dem_pc(self):
+        self.text_projekt()
+        for _ in range(3):
+            chef.takt_runde()   # nichts über die API (claude_anfrage würde den Test scheitern lassen)
+        self.assertEqual(chef._laufend, {})
+        self.assertIsNone(abo.abholen({}), "ohne text_frei bekommt ein alter PC-Arbeiter keine Textaufgaben")
+        r = abo.abholen({"text_frei": True})
+        self.assertEqual((r["art"], r["titel"], r["web"]), ("text", "Quellen", True))
+        self.assertIn("Such Daten", r["eingabe"])
+        self.assertIn("zusammenfassung", r["schema"]["properties"])
+        e = abo.abholen({"text_frei": True})
+        self.assertEqual((e["titel"], e["web"]), ("Werkzeug", False), "gleichzeitig: beide auf einmal")
+        self.assertIn("html", e["schema"]["required"])
+        z = chef.ansicht()
+        self.assertTrue(z["abo"]["alles"])
+        self.assertTrue(all(a["am_pc"] for a in z["projekte"][0]["aufgaben"]))
+        abo.text_fertig({"id": r["id"], "ok": True, "antwort": {"zusammenfassung": "5 Quellen.", "ergebnis": "# Quellen"}})
+        abo.text_fertig({"id": e["id"], "ok": True, "antwort": {"zusammenfassung": "Werkzeug da.", "ergebnis": "x",
+                                                                 "html": "<!doctype html><h1>Analyse</h1>"}})
+        p = chef.laden()["projekte"][0]
+        self.assertEqual(p["status"], "fertig")
+        self.assertIn("Analyse", chef.vorschau_lesen(e["id"]))
+        self.assertEqual(chef.laden()["kosten"], {})
+
+    def test_abo_modus_wartet_auf_pc_statt_api(self):
+        self.text_projekt()
+        z = chef.laden()
+        z["projekte"][0]["aufgaben"][0].update(status="laeuft", am_pc=True,
+                                               abo_lebt=(chef.jetzt() - timedelta(minutes=20)).isoformat(timespec="seconds"))
+        chef.speichern(z)
+        chef.takt_runde()
+        a = chef.laden()["projekte"][0]["aufgaben"][0]
+        self.assertEqual(a["status"], "offen", "PC weg: Aufgabe wartet wieder, startet aber nicht über die API")
+        self.assertEqual(chef._laufend, {})
+
+    def test_abo_modus_aus_nimmt_die_api(self):
+        self.assertIn("alle Arbeiter über dein Abo", abo.abo_einstellen({"alles_ueber_abo": True}))
+        abo.abo_einstellen({"alles_ueber_abo": False})
+        self.assertFalse(abo.alles_ueber_pc(chef.laden()))
+        self.text_projekt()
+        self.assertIsNone(abo.abholen({"text_frei": True}))
+        with self.assertRaises(ValueError):
+            abo.abo_einstellen({})
+
+    def test_text_fehler_und_grenze(self):
+        self.text_projekt()
+        r = abo.abholen({"text_frei": True})
+        abo.text_fertig({"id": r["id"], "grenze": True})
+        z = chef.laden()
+        self.assertEqual(z["projekte"][0]["aufgaben"][0]["status"], "offen")
+        self.assertTrue(abo.pausiert(z["abo"]))
+        z["abo"].pop("pause_bis")
+        chef.speichern(z)
+        r = abo.abholen({"text_frei": True})
+        abo.text_fertig({"id": r["id"], "ok": False, "fehler": "kaputt"})
+        self.assertEqual(chef.laden()["projekte"][0]["aufgaben"][0]["status"], "fehler")
+
     def test_stand_fuer_den_chef(self):
         code_projekt()
         text = chef.stand_text(chef.laden())
@@ -342,6 +406,14 @@ class EndeZuEndeTest(unittest.TestCase):
         r = ba.mergen(m)
         self.assertTrue(r["ok"], r)
         self.assertIn("pr merge https://github.com/n1kob1ko/Biko-Bot/pull/123 --squash", (self.tmp / "gh.log").read_text())
+
+    def test_text_aufgabe_vom_pc(self):
+        spec = importlib.util.spec_from_file_location("biko_arbeiter", HIER / "abo-arbeiter" / "biko_arbeiter.py")
+        ba = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ba)
+        e = {"url": "http://localhost:1", "token": "t" * 32}
+        r = ba.text_aufgabe(e, {"id": "a1", "system": "S", "schema": {}, "modell": "sonnet", "eingabe": "x", "web": True})
+        self.assertEqual(r, {"id": "a1", "ok": True, "antwort": {"text": "Hallo Niko", "werkzeuge": []}})
 
     def test_chef_antwort_vom_pc(self):
         spec = importlib.util.spec_from_file_location("biko_arbeiter", HIER / "abo-arbeiter" / "biko_arbeiter.py")
